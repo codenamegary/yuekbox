@@ -1,0 +1,26 @@
+{
+  "name": "contracts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./http/primitives": "./src/http/primitives.ts",
+    "./http/error": "./src/http/error.ts",
+    "./http/collection": "./src/http/collection.ts",
+    "./http/status": "./src/http/status.ts",
+    "./http/songs": "./src/http/songs.ts"
+  },
+  "scripts": {
+    "lint": "oxlint --deny-warnings",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "oxlint": "catalog:",
+    "typescript": "catalog:"
+  }
+}
