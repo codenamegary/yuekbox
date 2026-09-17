@@ -79,7 +79,7 @@ export const SongForm: React.FC<SongFormProps> = ({
             value={style}
             onChange={(event) => onStyleChange(event.target.value)}
             placeholder="genre, voice, instruments, tempo"
-            className="w-full min-h-[4lh] border-0 bg-transparent p-0 text-sm text-slate-100 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15 md:text-sm"
+            className="w-full min-h-[4lh] max-h-[8lh] overflow-y-auto border-0 bg-transparent p-0 text-sm text-slate-100 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15 md:text-sm"
           />
         </div>
       </div>
@@ -98,7 +98,7 @@ export const SongForm: React.FC<SongFormProps> = ({
             value={lyrics}
             onChange={(event) => onLyricsChange(event.target.value)}
             placeholder="[Verse]\nwrite the words here\n\n[Chorus]\n..."
-            className="w-full min-h-[4lh] border-0 bg-transparent p-0 text-xs font-mono text-slate-200 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15"
+            className="w-full min-h-[4lh] max-h-[8lh] overflow-y-auto border-0 bg-transparent p-0 text-xs font-mono text-slate-200 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15"
           />
         </div>
       </div>

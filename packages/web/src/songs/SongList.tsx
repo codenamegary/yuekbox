@@ -2,6 +2,7 @@ import * as React from "react"
 import { Song } from "contracts/http/songs"
 import { Status } from "contracts/http/status"
 import { cn } from "@/lib/cn"
+import { mp3FileName, songDownloadHref } from "./songs.download"
 import { formatDuration, statusLabels } from "./songs.stages"
 
 type SongListProps = Readonly<{
@@ -76,43 +77,58 @@ export const SongList: React.FC<SongListProps> = ({
               <div className="flex items-start justify-between gap-2">
                 <div className="text-xs font-medium text-white truncate">{song.style}</div>
 
-                {confirmId === song.id ? (
-                  <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
+                  {song.status === "complete" ? (
+                    <a
+                      href={songDownloadHref(song.id)}
+                      download={mp3FileName(song.id)}
+                      onClick={(event) => event.stopPropagation()}
+                      className="text-3xs font-mono text-slate-500 hover:text-cyan-300 transition-colors"
+                      title="Download MP3"
+                      aria-label={`Download MP3 for ${song.id}`}
+                    >
+                      ↓
+                    </a>
+                  ) : null}
+
+                  {confirmId === song.id ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onDelete(song.id)
+                          setConfirmId(null)
+                        }}
+                        className="text-3xs font-mono text-rose-300 hover:text-rose-200"
+                      >
+                        delete
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setConfirmId(null)
+                        }}
+                        className="text-3xs font-mono text-slate-400 hover:text-white"
+                      >
+                        keep
+                      </button>
+                    </>
+                  ) : (
                     <button
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation()
-                        onDelete(song.id)
-                        setConfirmId(null)
+                        setConfirmId(song.id)
                       }}
-                      className="text-3xs font-mono text-rose-300 hover:text-rose-200"
+                      className="text-3xs font-mono text-slate-500 hover:text-rose-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Delete song"
                     >
-                      delete
+                      ✕
                     </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        setConfirmId(null)
-                      }}
-                      className="text-3xs font-mono text-slate-400 hover:text-white"
-                    >
-                      keep
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      setConfirmId(song.id)
-                    }}
-                    className="text-3xs font-mono text-slate-500 hover:text-rose-300 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                    title="Delete song"
-                  >
-                    ✕
-                  </button>
-                )}
+                  )}
+                </div>
               </div>
 
               <div className="flex justify-between items-center text-3xs font-mono text-slate-400 mt-1">
