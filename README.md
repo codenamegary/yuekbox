@@ -2,11 +2,9 @@
 
 # 🌀 YUEKBOX 🌀
 
-### Type words. Twist knobs. Blast a song out of your own GPU.
+### Because apparently GPUs are musicians now.
 
-A local, single-user web app that turns **a style + some lyrics** into a **full song** with
-[YuE2](https://github.com/multimodal-art-projection/YuE) running on your machine.
-No cloud. No login. No telemetry. Just you, a graphics card, and increasingly questionable lyrics.
+A local, single-user web app that turns **a style + some lyrics** into a **full song** with [YuE2](https://github.com/multimodal-art-projection/YuE) running on your machine. Just you, a graphics card, and increasingly questionable lyrics.
 
 ![Yuekbox](docs/hero.png)
 
@@ -14,14 +12,19 @@ No cloud. No login. No telemetry. Just you, a graphics card, and increasingly qu
 
 ---
 
-## ✨ What is this thing?
+## ✨ WTF
 
-Yuekbox is what happens when a music model, a Winamp-era screensaver, and a lava lamp
-have a baby. You type a vibe and some words, hit the sparkle button, and watch a
-cybernetic orb grow while a GPU in your house turns text into 48 kHz stereo audio.
+I don't know man, nostalgia? Do you remember winamp? I do! Yuekbox harkens back
+to those epic audio visualizer days, when you'd pop open ICQ and chat with somebody
+half way around the world with your fire hazard of a lava lamp casting a dangerous glow
+across your room, winamp blasting with some sick new visualizer on your CRT monitor
+and Kazaa ripping viruses and REAL_NEW_EMINEM_FREE_NOT_FAKE.mp3 straight on to your
+5400 RPM 10GB harddrive. So anyway I made this UI for Yue2, you type a vibe and some
+words, hit the sparkle button, and watch a cybernetic orb grow while a GPU in your house
+lights on fire.
 
-It is a **real app**, not a mockup. Under the glow it's a Fastify server, a SQLite
-queue, a single worker, and the real YuE2 CLI. The orb is just here to make the wait fun.
+It is a **real app**, not a mockup. Under the AI skullduggery it's a Fastify server, a SQLite
+queue, a worker, and the real YuE2 CLI. The orb is just here to make the wait fun.
 
 ## 🎛️ What it does (v1)
 
@@ -36,19 +39,19 @@ queue, a single worker, and the real YuE2 CLI. The orb is just here to make the 
 
 ## 🖼️ Gallery
 
-**Live progress** — pips light up per stage, and the bar tracks real step counts from YuE2's stderr.
+**Live progress**: pips light up per stage, and the bar tracks real step counts from YuE2's stderr.
 
 ![Generating](docs/generating.png)
 
-**Playing** — the orb dances, the spectrum pulses, the scrubber obeys. Trip mode: Quantum Stardust Vortex.
+**Playing**: the orb dances, the spectrum pulses, the scrubber obeys. Trip mode: Quantum Stardust Vortex.
 
 ![Playing](docs/playing.png)
 
-**History** — every song, its status, its duration, one click away.
+**History**: every song, its status, its duration, one click away.
 
 ![History](docs/history.png)
 
-**A considerate robot** — loading a song over a dirty editor asks first.
+**A considerate robot**: loading a song over a dirty editor asks first.
 
 ![Overwrite prompt](docs/overwrite-prompt.png)
 
@@ -256,8 +259,10 @@ If a PR needs work, a maintainer will say so warmly and specifically.
 
 ## 📜 License
 
-The app code in this repository follows the licenses of its dependencies. YuE2 model
-weights and the Python runtime carry their own licenses from the
+Yuekbox is released under the [MIT License](LICENSE). Take it, fork it, remix it, ship it.
+
+YuE2 model weights and the Python runtime are separate projects and are **not** covered by
+this license; they carry their own from the
 [YuE project](https://github.com/multimodal-art-projection/YuE).
 
 ---
