@@ -36,3 +36,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # yuekbox local data
 packages/server/data
 .evidence
+
+# agent worktrees
+.worktrees/
