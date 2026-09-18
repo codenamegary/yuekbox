@@ -28,3 +28,14 @@ export const songAudioTable = sqliteTable("song_audio", {
   byteLength: integer("byte_length").notNull(),
   contentType: text("content_type").notNull(),
 })
+
+export const referencesTable = sqliteTable("references", {
+  id: text("id").primaryKey(),
+  songId: text("song_id").references(() => songsTable.id, { onDelete: "cascade" }),
+  filename: text("filename").notNull(),
+  contentType: text("content_type").notNull(),
+  byteLength: integer("byte_length").notNull(),
+  audio: blob("audio", { mode: "buffer" }).notNull(),
+  scoreAbc: text("score_abc"),
+  createdAt: text("created_at").notNull(),
+})

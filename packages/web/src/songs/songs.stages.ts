@@ -1,6 +1,7 @@
 import { SongStage, SongStatus } from "contracts/http/songs"
 
 export const stageLabels: Readonly<Record<SongStage, string>> = {
+  transcribe: "Transcribing reference",
   plan: "Writing score",
   semantic: "Writing music",
   synthesize: "Synthesizing",
@@ -8,13 +9,24 @@ export const stageLabels: Readonly<Record<SongStage, string>> = {
   encode: "Encoding mp3",
 }
 
-export const stageOrder: readonly SongStage[] = [
+export const baseStageOrder: readonly SongStage[] = [
   "plan",
   "semantic",
   "synthesize",
   "decode",
   "encode",
 ]
+
+export const coverStageOrder: readonly SongStage[] = [
+  "transcribe",
+  "semantic",
+  "synthesize",
+  "decode",
+  "encode",
+]
+
+export const stageOrderFor = (hasReference: boolean): readonly SongStage[] =>
+  hasReference ? coverStageOrder : baseStageOrder
 
 export const statusLabels: Readonly<Record<SongStatus, string>> = {
   queued: "Queued",

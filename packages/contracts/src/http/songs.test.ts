@@ -186,3 +186,40 @@ test("parses a songs collection fixture", () => {
   }
   expect(SongsCollectionSchema.parse(fixture)).toEqual(fixture)
 })
+
+test("create body accepts an optional reference id", () => {
+  const parsed = CreateSongBodySchema.parse({
+    lyrics: "hi",
+    style: "jazz",
+    referenceId: ulid,
+  })
+  expect(parsed.referenceId).toBe(ulid)
+  expect(
+    CreateSongBodySchema.safeParse({ lyrics: "hi", style: "jazz", referenceId: "nope" }).success,
+  ).toBe(false)
+})
+
+test("a cover song carries its reference summary and a transcribe stage", () => {
+  const cover: Song = {
+    ...completeSong,
+    reference: { id: ulid, filename: "demo-song.mp3" },
+  }
+  expect(SongSchema.parse(cover)).toEqual(cover)
+
+  const running: Song = {
+    id: ulid,
+    status: "running",
+    stage: "transcribe",
+    lyrics: "hi",
+    style: "jazz",
+    seed: 1,
+    createdAt,
+    updatedAt: createdAt,
+  }
+  expect(SongSchema.parse(running)).toEqual(running)
+})
+
+test("rejects a reference summary without a filename", () => {
+  const result = SongSchema.safeParse({ ...completeSong, reference: { id: ulid } })
+  expect(result.success).toBe(false)
+})

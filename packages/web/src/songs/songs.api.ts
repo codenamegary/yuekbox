@@ -9,6 +9,7 @@ import {
   songPath,
 } from "contracts/http/songs"
 import { Status, StatusSchema, statusPath } from "contracts/http/status"
+import { Reference, ReferenceSchema, referencesPath } from "contracts/http/references"
 import { ProblemDetailsSchema } from "contracts/http/error"
 
 const toErrorMessage = async (response: Response): Promise<string> => {
@@ -62,3 +63,15 @@ export const fetchStatus = async (): Promise<Status> => {
 }
 
 export const songAudioSource = songAudioPath
+
+export const referenceUploadUrl = (filename: string): string =>
+  `${referencesPath}?${new URLSearchParams({ filename }).toString()}`
+
+export const uploadReference = async (file: File): Promise<Reference> => {
+  const response = await fetch(referenceUploadUrl(file.name), {
+    method: "POST",
+    headers: { "content-type": file.type === "" ? "application/octet-stream" : file.type },
+    body: file,
+  })
+  return parseJson(response, (value) => ReferenceSchema.parse(value))
+}

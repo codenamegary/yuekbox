@@ -15,6 +15,13 @@
       "when": 1789622672205,
       "tag": "0001_add_stage_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789693106644,
+      "tag": "0002_add_references",
+      "breakpoints": true
     }
   ]
 }

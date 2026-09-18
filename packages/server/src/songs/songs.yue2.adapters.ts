@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { SongStage } from "contracts/http/songs"
 import { z } from "zod"
+import { runProcess } from "../shared/process"
 import { err, ok, Result } from "../shared/result"
 import { GenerateSongError, TruncatedFlags } from "./songs.models"
 import { RunYue2Generate, RunYue2GenerateInput, RunYue2GenerateOutput } from "./songs.ports"
@@ -60,48 +61,6 @@ export const checkYue2 = (env: Pick<Yue2AdapterEnv, "kitRoot" | "pythonBin">): "
     ? "ok"
     : "missing"
 
-type ProcessOutcome = Readonly<{
-  exitCode: number
-  stdout: string
-  stderrTail: string
-}>
-
-const stderrTailLimit = 4000
-
-const runProcess = async (
-  command: readonly string[],
-  cwd: string,
-  onStderrLine: (line: string) => void,
-): Promise<ProcessOutcome> => {
-  const proc = Bun.spawn([...command], {
-    cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-
-  const decoder = new TextDecoder()
-  let tail = ""
-  let pending = ""
-
-  const consumeStderr = (async () => {
-    for await (const chunk of proc.stderr) {
-      const text = decoder.decode(chunk, { stream: true })
-      tail = (tail + text).slice(-stderrTailLimit)
-      pending += text
-      const lines = pending.split("\n")
-      pending = lines.pop() ?? ""
-      for (const line of lines) onStderrLine(line)
-    }
-    if (pending.length > 0) onStderrLine(pending)
-  })()
-
-  const stdoutPromise = new Response(proc.stdout).text()
-  const [stdout] = await Promise.all([stdoutPromise, consumeStderr])
-  const exitCode = await proc.exited
-
-  return { exitCode, stdout, stderrTail: tail }
-}
-
 const generateArgs = (env: Yue2AdapterEnv, input: RunYue2GenerateInput, requestPath: string) => [
   "generate",
   "--request",
@@ -130,8 +89,9 @@ export const makeRunYue2Generate =
           id: input.songId,
           style: input.style,
           lyrics: input.lyrics,
-          cot: "full",
+          cot: input.cot,
           seed: input.seed,
+          ...(input.abc !== null ? { abc: input.abc } : {}),
         },
         null,
         2,

@@ -3,10 +3,14 @@ import { Result } from "../shared/result"
 import {
   EncodeSongError,
   GenerateSongError,
+  NewReference,
   NewSong,
+  Reference,
   Song,
+  SongCot,
   SongsPage,
   StageProgressUpdate,
+  TranscribeError,
   TruncatedFlags,
 } from "./songs.models"
 import { ListCursor } from "./songs.cursor"
@@ -14,6 +18,18 @@ import { ListCursor } from "./songs.cursor"
 export type InsertSong = (song: NewSong) => Promise<Song>
 
 export type FindSongById = (songId: string) => Promise<Song | null>
+
+export type InsertReference = (reference: NewReference) => Promise<Reference>
+
+export type FindReferenceById = (referenceId: string) => Promise<Reference | null>
+
+export type FindReferenceBySongId = (songId: string) => Promise<Reference | null>
+
+export type AttachReferenceToSong = (referenceId: string, songId: string) => Promise<boolean>
+
+export type SaveReferenceScore = (referenceId: string, scoreAbc: string) => Promise<void>
+
+export type DeleteStaleReferences = (createdBefore: string) => Promise<number>
 
 export type ListSongsQuery = Readonly<{
   limit: number
@@ -61,6 +77,8 @@ export type RunYue2GenerateInput = Readonly<{
   lyrics: string
   style: string
   seed: number
+  cot: SongCot
+  abc: string | null
   outputDir: string
   onStage: (stage: SongStage) => void
   onProgress: (progress: StageProgressUpdate) => void
@@ -77,6 +95,20 @@ export type RunYue2GenerateOutput = Readonly<{
 export type RunYue2Generate = (
   input: RunYue2GenerateInput,
 ) => Promise<Result<RunYue2GenerateOutput, GenerateSongError>>
+
+export type RunTranscribeInput = Readonly<{
+  audio: Uint8Array
+  filename: string
+  outputDir: string
+}>
+
+export type RunTranscribeOutput = Readonly<{
+  scoreAbc: string
+}>
+
+export type RunTranscribe = (
+  input: RunTranscribeInput,
+) => Promise<Result<RunTranscribeOutput, TranscribeError>>
 
 export type CreateTempDir = () => Promise<string>
 
