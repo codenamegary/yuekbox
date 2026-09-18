@@ -35,6 +35,7 @@ queue, a worker, and the real YuE2 CLI. The orb is just here to make the wait fu
 - 🔊 **Plays the MP3** when the Song lands, with a real spectrum fed by an `AnalyserNode`. The orb dances to it. Yes, really.
 - 🗂️ **History drawer.** Newest first. Click to play. Click to delete. Loading a song offers to replace the editor text before it stomps your draft.
 - 🧪 **Keeps the score.** Every successful Song stores the ABC lead sheet for future features. v1 doesn't show it. Yet.
+- ⌁ **Reference covers.** Attach a song file and SheetSage2 transcribes its melody first, then YuE2 sings your lyrics over that tune. Optional — without it you get the usual freeform generation.
 - 🌈 **Four trip modes** for the background visualizer. More on that below.
 
 ## 🖼️ Gallery
@@ -55,6 +56,10 @@ queue, a worker, and the real YuE2 CLI. The orb is just here to make the wait fu
 
 ![Overwrite prompt](docs/overwrite-prompt.png)
 
+**Reference covers**: attach a song file and SheetSage2 transcribes its melody before YuE2 sings your lyrics over it.
+
+![Reference](docs/reference.png)
+
 ## 🚀 Quick start
 
 You need:
@@ -64,6 +69,7 @@ You need:
 - 🎧 **ffmpeg** with `libmp3lame`
 - 🥟 **[Bun](https://bun.sh) 1.4+**
 - 🧠 A **YuE2 kit**: a checkout of the [YuE repo](https://github.com/multimodal-art-projection/YuE) that has `models/YuE2-3B`, `models/YuE2-Vae`, and `.venv/`
+- 🎼 **Optional: SheetSage2** only if you want reference covers — a `.venv-sheetsage2` and `models/SheetSage2` inside the YuE kit
 
 ```bash
 # inside the YuE checkout that has models/ and .venv/
@@ -82,6 +88,26 @@ curl -s http://127.0.0.1:3000/v1/status
 ```
 
 If your YuE kit lives somewhere else, point `YUE2_KIT` at it when starting the server.
+
+### 🎼 Reference covers (optional)
+
+Reference covers need [SheetSage2](https://huggingface.co/m-a-p/SheetSage2) to turn your uploaded
+audio into a melody. Without it the app works fine; a reference upload fails cleanly on the first
+generate. Install it inside the YuE kit with Python 3.10 or 3.11:
+
+```bash
+python3.11 -m venv .venv-sheetsage2
+.venv-sheetsage2/bin/python -m pip install huggingface-hub==0.36.0
+.venv-sheetsage2/bin/huggingface-cli download m-a-p/SheetSage2 --local-dir models/SheetSage2
+.venv-sheetsage2/bin/python -m pip install torch==2.8.0 torchaudio==2.8.0 \
+  --index-url https://download.pytorch.org/whl/cu126
+.venv-sheetsage2/bin/python -m pip install -r models/SheetSage2/requirements.txt
+```
+
+The app finds that layout by default. Override with `SHEETSAGE2_PYTHON`, `SHEETSAGE2_SCRIPT`,
+`SHEETSAGE2_MODEL`, or `SHEETSAGE2_BASE_MODEL` if yours differs. `SHEETSAGE2_OFFLINE=0` allows
+first-run downloads through the Hugging Face cache. Uploads are capped at 25 MB
+(`REFERENCE_MAX_BYTES`).
 
 ## 🤖 The "just make it work" prompt
 

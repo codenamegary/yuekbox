@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { ok } from "../shared/result"
-import { Song } from "./songs.models"
+import { Reference, Song } from "./songs.models"
 import { makeSongWorker, SongWorkerDeps } from "./songs.worker"
 
 const songId = "01J8K3R4P9ABCDEFGHJKMNPQRS"
@@ -15,6 +15,7 @@ const queuedSong: Song = Object.freeze({
   style: "warm piano pop",
   seed: 831001,
   cot: "full",
+  reference: null,
   scoreAbc: null,
   durationSeconds: null,
   truncatedAbc: null,
@@ -70,7 +71,7 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
       artifacts.savedContentType = input.contentType
     },
     runYue2Generate: async (input) => {
-      calls.push("generate")
+      calls.push(`generate:${input.cot}:${input.abc === null ? "no-abc" : "abc"}`)
       input.onStage("plan")
       input.onStage("semantic")
       return ok({
@@ -84,6 +85,14 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
     encodeFlacToMp3: async () => {
       calls.push("encode")
       return ok(new Uint8Array([1, 2, 3, 4]))
+    },
+    findReferenceBySongId: async () => null,
+    runTranscribe: async () => {
+      calls.push("transcribe")
+      return ok({ scoreAbc: "X:1\nK:C\nC D E|" })
+    },
+    saveReferenceScore: async (referenceId) => {
+      calls.push(`save-score:${referenceId}`)
     },
     createTempDir: async () => "/tmp/yuekbox-test",
     removeTempDir: async () => {
@@ -112,7 +121,7 @@ test("complete path saves the mp3 blob and marks the song complete", async () =>
 
   expect(harness.calls).toEqual([
     "running",
-    "generate",
+    "generate:full:no-abc",
     "stage:plan",
     "stage:semantic",
     "stage:encode",
@@ -199,4 +208,63 @@ test("a claim failure is logged, not swallowed", async () => {
 
   expect(harness.calls.some((call) => call.startsWith("log:worker loop failed"))).toBe(true)
   expect(harness.calls).not.toContain("cleanup")
+})
+
+test("reference songs transcribe first and generate from the melody ABC", async () => {
+  const reference: Reference = {
+    id: "01J8K3R4P9ABCDEFGHJKMNPQRT",
+    songId: songId,
+    filename: "demo-song.mp3",
+    contentType: "audio/mpeg",
+    byteLength: 3,
+    audio: new Uint8Array([1, 2, 3]),
+    scoreAbc: null,
+    createdAt: "2026-09-17T04:00:00.000Z",
+  }
+  const harness = makeHarness({ findReferenceBySongId: async () => reference })
+
+  await harness.run()
+
+  expect(harness.calls).toEqual([
+    "running",
+    "stage:transcribe",
+    "transcribe",
+    "save-score:01J8K3R4P9ABCDEFGHJKMNPQRT",
+    "generate:melody:abc",
+    "stage:plan",
+    "stage:semantic",
+    "stage:encode",
+    "encode",
+    "save-audio",
+    "complete",
+    "cleanup",
+  ])
+})
+
+test("a transcription failure marks the song failed without generating", async () => {
+  const reference: Reference = {
+    id: "01J8K3R4P9ABCDEFGHJKMNPQRT",
+    songId: songId,
+    filename: "demo-song.mp3",
+    contentType: "audio/mpeg",
+    byteLength: 3,
+    audio: new Uint8Array([1, 2, 3]),
+    scoreAbc: null,
+    createdAt: "2026-09-17T04:00:00.000Z",
+  }
+  const harness = makeHarness({
+    findReferenceBySongId: async () => reference,
+    runTranscribe: async () => ({
+      ok: false,
+      error: { kind: "transcribe_failed", detail: "SheetSage2 exploded" },
+    }),
+  })
+
+  await harness.run()
+
+  expect(harness.calls).toContain("stage:transcribe")
+  expect(harness.calls).toContain("failed:SheetSage2 exploded")
+  expect(harness.calls).not.toContain("generate:melody:abc")
+  expect(harness.calls).not.toContain("complete")
+  expect(harness.calls).toContain("cleanup")
 })

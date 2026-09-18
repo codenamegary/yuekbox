@@ -20,6 +20,7 @@ const queuedSong: Song = Object.freeze({
   style: "pop",
   seed: 1,
   cot: "full",
+  reference: null,
   scoreAbc: null,
   durationSeconds: null,
   truncatedAbc: null,
@@ -35,6 +36,7 @@ const statusFixture: Status = Object.freeze({
   state: "online",
   ffmpeg: "ok",
   yue2: "ok",
+  sheetsage2: "ok",
   queueDepth: 0,
   gpuBusy: false,
   startedAt: "2026-09-17T04:00:00.000Z",
@@ -42,6 +44,11 @@ const statusFixture: Status = Object.freeze({
 
 const makeSlice = (overrides: Partial<SongsSlice> = {}, kicks: number[] = []): SongsSlice => ({
   createSong: async () => ok(queuedSong),
+  createReference: async () => ({
+    ok: false,
+    error: { kind: "validation_error", pointer: "/", code: "invalid" },
+  }),
+  purgeStaleReferences: async () => 0,
   listSongs: async () =>
     ok({ items: [queuedSong], limit: 20, nextCursor: null, previousCursor: null, count: 1 }),
   getSong: async () => ok(queuedSong),
@@ -59,7 +66,8 @@ const makeSlice = (overrides: Partial<SongsSlice> = {}, kicks: number[] = []): S
   ...overrides,
 })
 
-const makeApp = (slice: SongsSlice) => buildApp({ songs: slice, status: async () => statusFixture })
+const makeApp = (slice: SongsSlice) =>
+  buildApp({ songs: slice, referenceMaxBytes: 1024, status: async () => statusFixture })
 
 test("create returns a queued song and only kicks the worker", async () => {
   const kicks: number[] = []

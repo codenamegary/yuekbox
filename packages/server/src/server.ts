@@ -1,11 +1,15 @@
+import { existsSync } from "node:fs"
 import { resolve } from "node:path"
 import { ServiceState } from "contracts/http/status"
 import { buildApp } from "./app"
 import { openDatabase } from "./db/client"
 import { assembleSongsSlice } from "./songs/songs.assembly"
 import { checkFfmpeg } from "./songs/songs.ffmpeg.adapters"
+import { checkSheetsage2 } from "./songs/songs.sheetsage2.adapters"
 import { checkYue2, yue2ModelPath, yue2VaePath } from "./songs/songs.yue2.adapters"
 import { version } from "./version"
+
+const referencePurgeAgeMs = 24 * 60 * 60 * 1000
 
 const readEnv = () => {
   const kitRoot = process.env.YUE2_KIT ?? resolve(import.meta.dir, "../../../..")
@@ -18,6 +22,15 @@ const readEnv = () => {
     scriptBin: resolve(kitRoot, ".venv/bin/yue2"),
     gpuBudget: Number(process.env.YUE2_GPU_BUDGET ?? 16),
     ffmpegBin: process.env.FFMPEG_BIN ?? "ffmpeg",
+    sheetsage2Python:
+      process.env.SHEETSAGE2_PYTHON ?? resolve(kitRoot, ".venv-sheetsage2/bin/python"),
+    sheetsage2Script:
+      process.env.SHEETSAGE2_SCRIPT ?? resolve(kitRoot, "skills/yue2-music/scripts/transcribe.py"),
+    sheetsage2Model: process.env.SHEETSAGE2_MODEL ?? resolve(kitRoot, "models/SheetSage2"),
+    sheetsage2BaseModel: process.env.SHEETSAGE2_BASE_MODEL ?? null,
+    sheetsage2Device: process.env.SHEETSAGE2_DEVICE ?? "cuda",
+    sheetsage2Offline: process.env.SHEETSAGE2_OFFLINE !== "0",
+    referenceMaxBytes: Number(process.env.REFERENCE_MAX_BYTES ?? 26214400),
   }
 }
 
@@ -31,6 +44,15 @@ const songs = assembleSongsSlice({
     scriptBin: env.scriptBin,
     gpuBudget: env.gpuBudget,
   },
+  sheetsage2: {
+    pythonBin: env.sheetsage2Python,
+    scriptPath: env.sheetsage2Script,
+    model: env.sheetsage2Model,
+    baseModel: env.sheetsage2BaseModel,
+    device: env.sheetsage2Device,
+    offline: env.sheetsage2Offline,
+    cwd: env.kitRoot,
+  },
   ffmpeg: { ffmpegBin: env.ffmpegBin },
 })
 
@@ -39,8 +61,19 @@ if (recoveredCount > 0) {
   console.warn(`marked ${recoveredCount} interrupted song(s) as failed`)
 }
 
+const purgedReferences = await songs.purgeStaleReferences(
+  new Date(Date.now() - referencePurgeAgeMs).toISOString(),
+)
+if (purgedReferences > 0) {
+  console.warn(`purged ${purgedReferences} unattached reference upload(s)`)
+}
+
 const ffmpegState = await checkFfmpeg(env.ffmpegBin)
 const yue2State = checkYue2({ kitRoot: env.kitRoot, pythonBin: env.pythonBin })
+const sheetsage2State = checkSheetsage2({
+  pythonBin: env.sheetsage2Python,
+  scriptPath: env.sheetsage2Script,
+})
 if (ffmpegState === "missing") {
   console.warn(
     `ffmpeg with libmp3lame not found (FFMPEG_BIN=${env.ffmpegBin}); generates will fail`,
@@ -51,17 +84,28 @@ if (yue2State === "missing") {
     `yue2 not found (python=${env.pythonBin}, model=${yue2ModelPath(env.kitRoot)}, vae=${yue2VaePath(env.kitRoot)}); generates will fail`,
   )
 }
+if (sheetsage2State === "missing") {
+  console.warn(
+    `sheetsage2 not found (python=${env.sheetsage2Python}, script=${env.sheetsage2Script}, model=${env.sheetsage2Model}); reference covers will fail`,
+  )
+} else if (!existsSync(env.sheetsage2Model)) {
+  console.warn(
+    `sheetsage2 model not found at ${env.sheetsage2Model}; reference covers will fail until it is downloaded`,
+  )
+}
 
 const startedAt = new Date().toISOString()
 const serviceState: { value: ServiceState } = { value: "starting" }
 
 const app = buildApp({
   songs,
+  referenceMaxBytes: env.referenceMaxBytes,
   status: async () => ({
     version,
     state: serviceState.value,
     ffmpeg: ffmpegState,
     yue2: yue2State,
+    sheetsage2: sheetsage2State,
     queueDepth: await songs.queueDepth(),
     gpuBusy: songs.worker.isBusy(),
     startedAt,

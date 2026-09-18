@@ -1,5 +1,12 @@
 import { SongStage, SongStatus } from "contracts/http/songs"
 
+export type SongCot = "full" | "melody" | "off"
+
+export type SongReference = Readonly<{
+  id: string
+  filename: string
+}>
+
 export type Song = Readonly<{
   id: string
   status: SongStatus
@@ -10,6 +17,7 @@ export type Song = Readonly<{
   style: string
   seed: number
   cot: string
+  reference: SongReference | null
   scoreAbc: string | null
   durationSeconds: number | null
   truncatedAbc: boolean | null
@@ -25,10 +33,46 @@ export type NewSong = Readonly<{
   lyrics: string
   style: string
   seed: number
-  cot: string
+  cot: SongCot
+  referenceId: string | null
   createdAt: string
   updatedAt: string
 }>
+
+export type Reference = Readonly<{
+  id: string
+  songId: string | null
+  filename: string
+  contentType: string
+  byteLength: number
+  audio: Uint8Array
+  scoreAbc: string | null
+  createdAt: string
+}>
+
+export type NewReference = Readonly<{
+  id: string
+  filename: string
+  contentType: string
+  audio: Uint8Array
+  createdAt: string
+}>
+
+export type CreateReferenceInput = Readonly<{
+  filename: string
+  contentType: string
+  audio: Uint8Array
+}>
+
+export type CreateReferenceError = Readonly<{
+  kind: "validation_error"
+  pointer: string
+  code: string
+}>
+
+export type TranscribeError = Readonly<{ kind: "transcribe_failed"; detail: string }>
+
+export const referenceUnavailableCode = "reference_unavailable"
 
 export type TruncatedFlags = Readonly<{
   abc: boolean

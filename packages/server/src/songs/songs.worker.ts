@@ -1,15 +1,18 @@
-import { Song, StageProgressUpdate } from "./songs.models"
+import { Song, SongCot, StageProgressUpdate } from "./songs.models"
 import {
   ClaimNextQueuedSong,
   CreateTempDir,
   EncodeFlacToMp3,
+  FindReferenceBySongId,
   MarkSongComplete,
   MarkSongFailed,
   MarkSongProgress,
   MarkSongRunning,
   MarkSongStage,
   RemoveTempDir,
+  RunTranscribe,
   RunYue2Generate,
+  SaveReferenceScore,
   SaveSongAudio,
 } from "./songs.ports"
 
@@ -21,6 +24,9 @@ export type SongWorkerDeps = Readonly<{
   markSongComplete: MarkSongComplete
   markSongFailed: MarkSongFailed
   saveSongAudio: SaveSongAudio
+  findReferenceBySongId: FindReferenceBySongId
+  runTranscribe: RunTranscribe
+  saveReferenceScore: SaveReferenceScore
   runYue2Generate: RunYue2Generate
   encodeFlacToMp3: EncodeFlacToMp3
   createTempDir: CreateTempDir
@@ -59,11 +65,33 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
     }
 
     try {
+      const reference = await deps.findReferenceBySongId(song.id)
+      let cot: SongCot = "full"
+      let abc: string | null = null
+
+      if (reference !== null) {
+        await deps.markSongStage(song.id, "transcribe")
+        const transcribed = await deps.runTranscribe({
+          audio: reference.audio,
+          filename: reference.filename,
+          outputDir: tempDir,
+        })
+        if (!transcribed.ok) {
+          await deps.markSongFailed(song.id, toErrorDetail(transcribed.error.detail))
+          return
+        }
+        await deps.saveReferenceScore(reference.id, transcribed.value.scoreAbc)
+        cot = "melody"
+        abc = transcribed.value.scoreAbc
+      }
+
       const generated = await deps.runYue2Generate({
         songId: song.id,
         lyrics: song.lyrics,
         style: song.style,
         seed: song.seed,
+        cot,
+        abc,
         outputDir: tempDir,
         onStage: noteStage,
         onProgress: noteProgress,

@@ -1,5 +1,4 @@
-import { FastifyPluginAsync, FastifyReply } from "fastify"
-import { PROBLEM_TYPES, ProblemError } from "contracts/http/error"
+import { FastifyPluginAsync } from "fastify"
 import {
   CreateSongBodySchema,
   SongSchema,
@@ -9,48 +8,19 @@ import {
   songsPath,
 } from "contracts/http/songs"
 import { UlidSchema } from "contracts/http/primitives"
+import {
+  conflictProblem,
+  issuePointer,
+  notFoundProblem,
+  sendProblem,
+  validationProblem,
+} from "../shared/problems"
 import { SongsSlice } from "./songs.assembly"
 import { Song } from "./songs.models"
 
 export type SongsRoutesOptions = Readonly<{
   songs: SongsSlice
 }>
-
-type ProblemBody = Readonly<{
-  type: string
-  title: string
-  status: number
-  detail: string
-  errors?: readonly ProblemError[]
-}>
-
-const validationProblem = (errors: readonly ProblemError[], detail: string): ProblemBody => ({
-  type: PROBLEM_TYPES.validationError,
-  title: "Validation Error",
-  status: 400,
-  detail,
-  errors: errors.length > 0 ? errors : [{ pointer: "/", code: "invalid" }],
-})
-
-const notFoundProblem = (detail: string): ProblemBody => ({
-  type: PROBLEM_TYPES.notFound,
-  title: "Not Found",
-  status: 404,
-  detail,
-})
-
-const conflictProblem = (detail: string): ProblemBody => ({
-  type: PROBLEM_TYPES.conflict,
-  title: "Conflict",
-  status: 409,
-  detail,
-})
-
-const sendProblem = (reply: FastifyReply, problem: ProblemBody) =>
-  reply.status(problem.status).type("application/problem+json").send(problem)
-
-const issuePointer = (path: readonly PropertyKey[]): string =>
-  path.length === 0 ? "/" : `/${path.map((segment) => String(segment)).join("/")}`
 
 type ByteRange = Readonly<{ start: number; end: number }>
 
@@ -91,6 +61,7 @@ const toSongResponse = (song: Song) =>
     lyrics: song.lyrics,
     style: song.style,
     seed: song.seed,
+    ...(song.reference !== null ? { reference: song.reference } : {}),
     ...(song.durationSeconds !== null ? { durationSeconds: song.durationSeconds } : {}),
     ...(song.truncatedAbc !== null && song.truncatedSemantic !== null
       ? { truncated: { abc: song.truncatedAbc, semantic: song.truncatedSemantic } }

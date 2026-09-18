@@ -12,6 +12,7 @@ export const StatusSchema = z.strictObject({
   state: ServiceStateSchema,
   ffmpeg: DependencyStateSchema,
   yue2: DependencyStateSchema,
+  sheetsage2: DependencyStateSchema,
   queueDepth: z.number().int().nonnegative(),
   gpuBusy: z.boolean(),
   startedAt: TimestampSchema,

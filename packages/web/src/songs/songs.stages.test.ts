@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test"
-import { formatDuration, stageOrder, statusLabels } from "./songs.stages"
+import {
+  baseStageOrder,
+  coverStageOrder,
+  formatDuration,
+  stageLabels,
+  stageOrderFor,
+  statusLabels,
+} from "./songs.stages"
 
 test("formatDuration pads minutes and seconds", () => {
   expect(formatDuration(0)).toBe("00:00")
@@ -8,7 +15,17 @@ test("formatDuration pads minutes and seconds", () => {
 })
 
 test("stage order covers the five spec stages", () => {
-  expect(stageOrder).toEqual(["plan", "semantic", "synthesize", "decode", "encode"])
+  expect(baseStageOrder).toEqual(["plan", "semantic", "synthesize", "decode", "encode"])
+})
+
+test("cover stage order transcribes instead of planning", () => {
+  expect(stageOrderFor(false)).toEqual(baseStageOrder)
+  expect(stageOrderFor(true)).toEqual(coverStageOrder)
+  expect(coverStageOrder).toEqual(["transcribe", "semantic", "synthesize", "decode", "encode"])
+})
+
+test("every stage has a label", () => {
+  expect(Object.keys(stageLabels).sort()).toEqual([...baseStageOrder, "transcribe"].sort())
 })
 
 test("status labels cover every status", () => {

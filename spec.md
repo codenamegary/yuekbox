@@ -2,7 +2,7 @@
 
 Local web app. User types lyrics and a style, hits Generate, and hears a song.
 
-This is v1 only. Later score editing, covers, and agent edits stay out of the product surface. The database still keeps the score text so those features can turn on later without a new generator.
+This is v1 plus reference covers. Later score editing and agent edits stay out of the product surface. The database still keeps the score text so those features can turn on later without a new generator.
 
 ## Language
 
@@ -26,26 +26,36 @@ _Avoid_: Batch
 Process-side loop that claims the next queued Song, runs YuE2, encodes MP3, and writes the result.
 _Avoid_: Job runner, daemon (in domain talk)
 
+**Reference**:
+Optional audio the user uploads with a Song. SheetSage2 transcribes it to a melody-only ABC, and the Song generates against that melody with `cot = melody`.
+_Avoid_: Sample, source track, input audio
+
+**Cover**:
+A Song generated from a Reference instead of the symbolic planner.
+_Avoid_: Remix, transfer
+
 Status values: `queued`, `running`, `complete`, `failed`.
 
-Stage values while `running`: `plan`, `semantic`, `synthesize`, `decode`, `encode`. Omit `stage` when not running.
+Stage values while `running`: `transcribe`, `plan`, `semantic`, `synthesize`, `decode`, `encode`. Omit `stage` when not running. Covers start at `transcribe`; freeform Songs start at `plan`.
 
 ## Goal
 
 v1 does this and nothing else:
 
 1. User enters style and lyrics.
-2. User hits Generate.
-3. UI shows progress.
-4. UI plays the MP3 when the Song is complete.
-5. UI lists earlier Songs and plays them.
+2. User may attach a Reference audio file.
+3. User hits Generate.
+4. UI shows progress.
+5. UI plays the MP3 when the Song is complete.
+6. UI lists earlier Songs and plays them.
 
 No login. Single user on this machine.
 
 ## Non-goals (v1)
 
 - ABC editor, piano roll, or score display
-- Covers, SheetSage2, ASR
+- ASR, source separation, lyric recognition, or score editing UI
+- Reference playback in the UI (the upload only feeds transcription)
 - `cot` picker (`full` only)
 - CFG, sampling, VAE picker
 - Concurrent GPU generates
@@ -323,6 +333,22 @@ byte_length       integer not null
 content_type      text not null   -- always audio/mpeg in v1
 ```
 
+**references**
+
+```text
+id                text pk
+song_id           text null references songs(id) on delete cascade
+filename          text not null
+content_type      text not null
+byte_length       integer not null
+audio             blob not null
+score_abc         text null       -- melody-only ABC after transcription
+created_at        text not null
+```
+
+Uploads start unattached (`song_id` null). Creating a Song with `referenceId` attaches it.
+Unattached References older than 24 hours are purged on boot.
+
 Drizzle schema plus SQL migrations. `db:generate` requires `--name`.
 
 On process start: any row with `status = running` becomes `failed` with `errorDetail = "interrupted"`. The GPU job does not resume.
@@ -347,10 +373,11 @@ On process start: any row with `status = running` becomes `failed` with `errorDe
 
 CLI flags must match the installed `yue2` parser. If the module form fails, call the venv `yue2` script with the same flags.
 
-5. Worker updates `stage` when stderr progress names a known stage. If parsing fails, leave `stage = plan` until done. Status stays `running`.
-6. On success, read `audio.flac`. Encode MP3. Insert `song_audio`. Set `score_abc` from `score.abc` if present. Mark `complete`. Delete the temp dir (FLAC does not stay on disk).
-7. On failure, mark `failed`, store a short `errorDetail`, delete the temp dir.
-8. Claim the next queued Song.
+5. Worker updates `stage` when stderr progress names a known stage. If parsing fails, leave the stage until done. Status stays `running`.
+6. If the Song has a Reference, transcribe it before generation. Write the audio to the temp dir, run `<sheetsage2-python> <kit>/skills/yue2-music/scripts/transcribe.py <audio> --output <tmp>/transcribe --task melody-full --device cuda --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`, read `score.abc`, store it on the Reference, then generate with `cot = melody` and the ABC in the request JSON. A transcription failure fails the Song.
+7. On success, read `audio.flac`. Encode MP3. Insert `song_audio`. Set `score_abc` from `score.abc` if present. Mark `complete`. Delete the temp dir (FLAC does not stay on disk).
+8. On failure, mark `failed`, store a short `errorDetail`, delete the temp dir.
+9. Claim the next queued Song.
 
 One Worker in the process. Claim uses a SQLite transaction so two loops cannot double-run.
 
@@ -378,6 +405,13 @@ YUE2_KIT                default ../../ (repo root that holds models/ and .venv)
 YUE2_PYTHON             default $YUE2_KIT/.venv/bin/python
 YUE2_GPU_BUDGET         default 16
 FFMPEG_BIN              default ffmpeg
+SHEETSAGE2_PYTHON       default $YUE2_KIT/.venv-sheetsage2/bin/python
+SHEETSAGE2_SCRIPT       default $YUE2_KIT/skills/yue2-music/scripts/transcribe.py
+SHEETSAGE2_MODEL        default $YUE2_KIT/models/SheetSage2
+SHEETSAGE2_BASE_MODEL   default unset (let the snapshot resolve its MERT-v2 parent)
+SHEETSAGE2_DEVICE       default cuda
+SHEETSAGE2_OFFLINE      default 1; set 0 to allow the Hugging Face cache to resolve
+REFERENCE_MAX_BYTES     default 26214400 (25 MiB)
 ```
 
 Bind localhost by default. This app talks to a local GPU.

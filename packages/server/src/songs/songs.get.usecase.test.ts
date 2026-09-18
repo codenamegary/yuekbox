@@ -12,6 +12,7 @@ const song: Song = Object.freeze({
   style: "pop",
   seed: 1,
   cot: "full",
+  reference: null,
   scoreAbc: null,
   durationSeconds: null,
   truncatedAbc: null,

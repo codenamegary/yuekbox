@@ -1,11 +1,12 @@
 import * as React from "react"
-import { Song } from "contracts/http/songs"
+import { Reference } from "contracts/http/references"
+import { Song, SongStage } from "contracts/http/songs"
 import { cn } from "@/lib/cn"
 import { Button } from "@/components/ui/Button"
 import { Label } from "@/components/ui/Label"
 import { Textarea } from "@/components/ui/Textarea"
-import { useCreateSongMutation } from "./songs.mutations"
-import { stageLabels, stageOrder } from "./songs.stages"
+import { useCreateSongMutation, useUploadReferenceMutation } from "./songs.mutations"
+import { stageLabels, stageOrderFor } from "./songs.stages"
 
 type SongFormProps = Readonly<{
   activeSong: Song | null
@@ -17,14 +18,14 @@ type SongFormProps = Readonly<{
   onCreated: (song: Song) => void
 }>
 
-const pipClassName = (song: Song | null, index: number): string => {
+const pipClassName = (song: Song | null, stages: readonly SongStage[], index: number): string => {
   if (song === null) return "w-2 h-2 rounded-full bg-white/20"
   if (song.status === "failed") return "w-2 h-2 rounded-full bg-destructive/70"
   if (song.status === "complete") {
     return "w-2 h-2 rounded-full bg-cyan-300 shadow-[0_0_10px_#00f0ff]"
   }
   if (song.status === "running" && song.stage !== undefined) {
-    const stageIndex = stageOrder.indexOf(song.stage)
+    const stageIndex = stages.indexOf(song.stage)
     if (index === stageIndex) {
       return "w-2.5 h-2.5 rounded-full bg-cyan-300 shadow-[0_0_14px_#00f0ff] scale-125"
     }
@@ -45,14 +46,62 @@ export const SongForm: React.FC<SongFormProps> = ({
   onCreated,
 }) => {
   const createSong = useCreateSongMutation()
+  const uploadReference = useUploadReferenceMutation()
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null)
+  const [reference, setReference] = React.useState<Reference | null>(null)
+  const [uploadFailed, setUploadFailed] = React.useState(false)
 
-  const canGenerate = style.trim().length > 0 && lyrics.trim().length > 0 && !createSong.isPending
+  const canGenerate =
+    style.trim().length > 0 &&
+    lyrics.trim().length > 0 &&
+    !createSong.isPending &&
+    !uploadReference.isPending
+
+  const stages = stageOrderFor(reference !== null || activeSong?.reference !== undefined)
+
+  const pickFile = () => {
+    fileInputRef.current?.click()
+  }
+
+  const onFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (fileInputRef.current !== null) fileInputRef.current.value = ""
+    if (file === undefined) return
+
+    setUploadFailed(false)
+    uploadReference.mutate(file, {
+      onSuccess: (uploaded) => {
+        setReference(uploaded)
+        setUploadFailed(false)
+      },
+      onError: () => {
+        setReference(null)
+        setUploadFailed(true)
+      },
+    })
+  }
+
+  const clearReference = () => {
+    setReference(null)
+    setUploadFailed(false)
+    uploadReference.reset()
+  }
 
   const submit = () => {
     if (!canGenerate) return
     createSong.mutate(
-      { style: style.trim(), lyrics: lyrics.trim() },
-      { onSuccess: (song) => onCreated(song) },
+      {
+        style: style.trim(),
+        lyrics: lyrics.trim(),
+        ...(reference !== null ? { referenceId: reference.id } : {}),
+      },
+      {
+        onSuccess: (song) => {
+          setReference(null)
+          uploadReference.reset()
+          onCreated(song)
+        },
+      },
     )
   }
 
@@ -103,6 +152,52 @@ export const SongForm: React.FC<SongFormProps> = ({
         </div>
       </div>
 
+      <div className="flex items-center gap-3 min-h-[1.75rem]">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="audio/*"
+          onChange={onFileChange}
+          className="hidden"
+          aria-label="Upload a reference song"
+        />
+        {reference === null ? (
+          <button
+            type="button"
+            onClick={pickFile}
+            disabled={uploadReference.isPending}
+            title="Upload a reference song; its melody guides the cover"
+            className={cn(
+              "inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1",
+              "font-mono text-3xs tracking-[0.3em] uppercase text-cyan-300/70 transition-colors",
+              "hover:border-cyan-400/60 hover:text-cyan-200 disabled:opacity-40",
+              uploadFailed && "border-rose-400/40 text-rose-300/80",
+            )}
+          >
+            <span>{uploadReference.isPending ? "◌" : "＋"}</span>
+            {uploadReference.isPending ? "uploading…" : "reference song"}
+          </button>
+        ) : (
+          <span className="inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-500/10 px-3 py-1 font-mono text-3xs tracking-[0.2em] uppercase text-cyan-200">
+            <span title="Melody reference attached">⌁</span>
+            <span className="max-w-[16rem] truncate">{reference.filename}</span>
+            <button
+              type="button"
+              onClick={clearReference}
+              title="Remove reference"
+              className="text-cyan-200/60 hover:text-white transition-colors"
+            >
+              ✕
+            </button>
+          </span>
+        )}
+        {uploadFailed ? (
+          <span className="font-mono text-3xs tracking-widest text-rose-300/90 uppercase">
+            reference upload failed
+          </span>
+        ) : null}
+      </div>
+
       <div className="flex items-center gap-4 pt-1">
         <Button
           type="button"
@@ -124,10 +219,10 @@ export const SongForm: React.FC<SongFormProps> = ({
           )}
         >
           <div id="stages-pips" className="flex items-center gap-2.5">
-            {stageOrder.map((stage, index) => (
+            {stages.map((stage, index) => (
               <span
                 key={stage}
-                className={pipClassName(activeSong, index)}
+                className={pipClassName(activeSong, stages, index)}
                 title={stageLabels[stage]}
               />
             ))}

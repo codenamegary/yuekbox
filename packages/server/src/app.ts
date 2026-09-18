@@ -1,16 +1,28 @@
 import Fastify, { FastifyInstance } from "fastify"
 import { PROBLEM_TYPES } from "contracts/http/error"
 import { Status, StatusSchema, statusPath } from "contracts/http/status"
+import { referencesRoutes } from "./songs/references.routes"
 import { SongsSlice } from "./songs/songs.assembly"
 import { songsRoutes } from "./songs/songs.routes"
 
 export type AppDeps = Readonly<{
   songs: SongsSlice
+  referenceMaxBytes: number
   status: () => Promise<Status>
 }>
 
+const referenceContentTypes = /^(audio\/|application\/octet-stream)/
+
 export const buildApp = (deps: AppDeps): FastifyInstance => {
   const app = Fastify({ logger: false })
+
+  app.addContentTypeParser(
+    referenceContentTypes,
+    { parseAs: "buffer", bodyLimit: deps.referenceMaxBytes },
+    (_request, body, done) => {
+      done(null, body)
+    },
+  )
 
   app.setErrorHandler((error, _request, reply) => {
     const statusCode =
@@ -65,6 +77,7 @@ export const buildApp = (deps: AppDeps): FastifyInstance => {
   )
 
   app.register(songsRoutes, { songs: deps.songs })
+  app.register(referencesRoutes, { songs: deps.songs })
 
   app.get(statusPath, async (_request, reply) => {
     const status = await deps.status()

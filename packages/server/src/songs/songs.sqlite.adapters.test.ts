@@ -24,6 +24,7 @@ const newSong = (songId: string, createdAt: string): NewSong => ({
   style: "pop",
   seed: 1,
   cot: "full",
+  referenceId: null,
   createdAt,
   updatedAt: createdAt,
 })

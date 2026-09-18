@@ -1,14 +1,31 @@
-import { and, asc, count, desc, eq, inArray, lt, or, SQL } from "drizzle-orm"
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  inArray,
+  isNull,
+  lt,
+  or,
+  SQL,
+} from "drizzle-orm"
 import { SongStageSchema, SongStatusSchema } from "contracts/http/songs"
 import { Db } from "../db/client"
-import { songAudioTable, songsTable } from "../db/db.schema"
+import { referencesTable, songAudioTable, songsTable } from "../db/db.schema"
 import { encodeCursor } from "./songs.cursor"
-import { interruptedErrorDetail, NewSong, Song } from "./songs.models"
+import { interruptedErrorDetail, NewReference, NewSong, Reference, Song } from "./songs.models"
 import {
+  AttachReferenceToSong,
   ClaimNextQueuedSong,
   DeleteSong,
+  DeleteStaleReferences,
+  FindReferenceById,
+  FindReferenceBySongId,
   FindSongAudio,
   FindSongById,
+  InsertReference,
   InsertSong,
   ListSongs,
   MarkSongComplete,
@@ -17,11 +34,40 @@ import {
   MarkSongRunning,
   MarkSongStage,
   RecoverInterruptedSongs,
+  SaveReferenceScore,
   SaveSongAudio,
 } from "./songs.ports"
 
-const toSong = (row: typeof songsTable.$inferSelect): Song =>
+const songColumns = {
+  ...getTableColumns(songsTable),
+  referenceId: referencesTable.id,
+  referenceFileName: referencesTable.filename,
+}
+
+type SongRow = typeof songsTable.$inferSelect
+type SongJoinRow = SongRow &
+  Readonly<{ referenceId: string | null; referenceFileName: string | null }>
+
+const toReference = (row: typeof referencesTable.$inferSelect): Reference =>
   Object.freeze({
+    id: row.id,
+    songId: row.songId,
+    filename: row.filename,
+    contentType: row.contentType,
+    byteLength: row.byteLength,
+    audio: new Uint8Array(row.audio),
+    scoreAbc: row.scoreAbc,
+    createdAt: row.createdAt,
+  })
+
+const toSong = (row: SongJoinRow | SongRow): Song => {
+  const joined = row as SongJoinRow
+  const reference =
+    joined.referenceId !== null && joined.referenceFileName !== null
+      ? Object.freeze({ id: joined.referenceId, filename: joined.referenceFileName })
+      : null
+
+  return Object.freeze({
     id: row.id,
     status: SongStatusSchema.parse(row.status),
     stage: row.stage === null ? null : SongStageSchema.parse(row.stage),
@@ -31,6 +77,7 @@ const toSong = (row: typeof songsTable.$inferSelect): Song =>
     style: row.style,
     seed: row.seed,
     cot: row.cot,
+    reference,
     scoreAbc: row.scoreAbc,
     durationSeconds: row.durationSeconds,
     truncatedAbc: row.truncatedAbc,
@@ -40,6 +87,7 @@ const toSong = (row: typeof songsTable.$inferSelect): Song =>
     updatedAt: row.updatedAt,
     completedAt: row.completedAt,
   })
+}
 
 export const makeInsertSong =
   (db: Db): InsertSong =>
@@ -66,7 +114,12 @@ export const makeInsertSong =
 export const makeFindSongById =
   (db: Db): FindSongById =>
   async (songId) => {
-    const rows = await db.select().from(songsTable).where(eq(songsTable.id, songId)).limit(1)
+    const rows = await db
+      .select(songColumns)
+      .from(songsTable)
+      .leftJoin(referencesTable, eq(referencesTable.songId, songsTable.id))
+      .where(eq(songsTable.id, songId))
+      .limit(1)
     const row = rows[0]
     return row === undefined ? null : toSong(row)
   }
@@ -90,8 +143,9 @@ export const makeListSongs =
     const where = conditions.length === 0 ? undefined : and(...conditions)
 
     const rows = await db
-      .select()
+      .select(songColumns)
       .from(songsTable)
+      .leftJoin(referencesTable, eq(referencesTable.songId, songsTable.id))
       .where(where)
       .orderBy(desc(songsTable.createdAt), desc(songsTable.id))
       .limit(query.limit + 1)
@@ -296,5 +350,80 @@ export const makeRecoverInterruptedSongs =
       })
       .where(eq(songsTable.status, "running"))
       .returning({ id: songsTable.id })
+    return rows.length
+  }
+
+export const makeInsertReference =
+  (db: Db): InsertReference =>
+  async (reference: NewReference) => {
+    const audio = Buffer.from(reference.audio)
+    const rows = await db
+      .insert(referencesTable)
+      .values({
+        id: reference.id,
+        songId: null,
+        filename: reference.filename,
+        contentType: reference.contentType,
+        byteLength: audio.byteLength,
+        audio,
+        scoreAbc: null,
+        createdAt: reference.createdAt,
+      })
+      .returning()
+    const row = rows[0]
+    if (row === undefined) {
+      throw new Error("insertReference returned no row")
+    }
+    return toReference(row)
+  }
+
+export const makeFindReferenceById =
+  (db: Db): FindReferenceById =>
+  async (referenceId) => {
+    const rows = await db
+      .select()
+      .from(referencesTable)
+      .where(eq(referencesTable.id, referenceId))
+      .limit(1)
+    const row = rows[0]
+    return row === undefined ? null : toReference(row)
+  }
+
+export const makeFindReferenceBySongId =
+  (db: Db): FindReferenceBySongId =>
+  async (songId) => {
+    const rows = await db
+      .select()
+      .from(referencesTable)
+      .where(eq(referencesTable.songId, songId))
+      .limit(1)
+    const row = rows[0]
+    return row === undefined ? null : toReference(row)
+  }
+
+export const makeAttachReferenceToSong =
+  (db: Db): AttachReferenceToSong =>
+  async (referenceId, songId) => {
+    const rows = await db
+      .update(referencesTable)
+      .set({ songId })
+      .where(and(eq(referencesTable.id, referenceId), isNull(referencesTable.songId)))
+      .returning({ id: referencesTable.id })
+    return rows.length > 0
+  }
+
+export const makeSaveReferenceScore =
+  (db: Db): SaveReferenceScore =>
+  async (referenceId, scoreAbc) => {
+    await db.update(referencesTable).set({ scoreAbc }).where(eq(referencesTable.id, referenceId))
+  }
+
+export const makeDeleteStaleReferences =
+  (db: Db): DeleteStaleReferences =>
+  async (createdBefore) => {
+    const rows = await db
+      .delete(referencesTable)
+      .where(and(isNull(referencesTable.songId), lt(referencesTable.createdAt, createdBefore)))
+      .returning({ id: referencesTable.id })
     return rows.length
   }
