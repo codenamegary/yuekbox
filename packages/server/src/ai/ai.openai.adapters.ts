@@ -1,14 +1,5 @@
-import { EffortLevel } from "contracts/http/ai"
 import { err, ok, Result } from "../shared/result"
-
-export type OpenAIError = Readonly<{ kind: "upstream"; detail: string }>
-
-export type WriterSetting = Readonly<{
-  baseUrl: string
-  apiKey: string | null
-  model: string
-  effort: EffortLevel
-}>
+import { OpenAIError, WriterSetting } from "./ai.models"
 
 export const defaultTimeoutMs = 240_000
 
