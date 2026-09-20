@@ -6,8 +6,17 @@ import { makeAiConfigStore } from "./ai/ai.config.store"
 import { chatCompletion, listModels } from "./ai/ai.openai"
 import { buildApp } from "./app"
 import { openDatabase } from "./db/client"
-import { makeFsAudioStore } from "./media/audio.store"
 import { assembleSongsSlice } from "./songs/songs.assembly"
+import {
+  makeAudioPath,
+  makeListMediaFiles,
+  makeMoveAudio,
+  makeOpenAudioRange,
+  makePutAudio,
+  makeReadAudio,
+  makeRemoveAudio,
+  makeStatAudio,
+} from "./songs/songs.media.adapters"
 import { checkFfmpeg } from "./songs/songs.ffmpeg.adapters"
 import { checkSheetsage2 } from "./songs/songs.sheetsage2.adapters"
 import { checkYue2, yue2ModelPath, yue2VaePath } from "./songs/songs.yue2.adapters"
@@ -43,7 +52,14 @@ const env = readEnv()
 const database = openDatabase({ path: env.sqlitePath })
 const songs = assembleSongsSlice({
   db: database.db,
-  audioStore: makeFsAudioStore(env.mediaDir),
+  audioPath: makeAudioPath(env.mediaDir),
+  putAudio: makePutAudio(env.mediaDir),
+  statAudio: makeStatAudio(env.mediaDir),
+  readAudio: makeReadAudio(env.mediaDir),
+  openAudioRange: makeOpenAudioRange(env.mediaDir),
+  moveAudio: makeMoveAudio(env.mediaDir),
+  removeAudio: makeRemoveAudio(env.mediaDir),
+  listMediaFiles: makeListMediaFiles(env.mediaDir),
   yue2: {
     kitRoot: env.kitRoot,
     pythonBin: env.pythonBin,

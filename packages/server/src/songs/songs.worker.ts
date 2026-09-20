@@ -1,4 +1,4 @@
-import { songTitleFromLyrics } from "../media/audio.keys"
+import { songTitleFromLyrics } from "./songs.media.keys"
 import { Song, SongCot, StageProgressUpdate } from "./songs.models"
 import {
   ClaimNextQueuedSong,

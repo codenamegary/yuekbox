@@ -3,22 +3,19 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { CreateSongBody } from "contracts/http/songs"
 import { ulid } from "ulid"
-import { referenceAudioKey, songAudioKey, songTitleFromLyrics } from "../media/audio.keys"
 import { Db } from "../db/client"
 import { err, ok, Result } from "../shared/result"
+import { makeFindReferenceAudioBySongId } from "./references.audio.usecase"
 import { makeCreateReference } from "./references.usecase"
 import { makeCreateSong } from "./songs.create.usecase"
 import { makeDeleteSong } from "./songs.delete.usecase"
 import { makeGetSong } from "./songs.get.usecase"
 import { makeListSongs, ListSongsInput } from "./songs.list.usecase"
-import {
-  makeFindReferenceAudioBySongId,
-  makePurgeStaleReferences,
-  makeReconcileMedia,
-  makeRemoveMediaById,
-  makeSaveSongAudio,
-  ReconcileReport,
-} from "./songs.media.usecase"
+import { referenceAudioKey, songAudioKey, songTitleFromLyrics } from "./songs.media.keys"
+import { makePurgeStaleReferences } from "./songs.media.purge.usecase"
+import { makeReconcileMedia, ReconcileReport } from "./songs.media.reconcile.usecase"
+import { makeRemoveMediaById } from "./songs.media.remove.usecase"
+import { makeSaveSongAudio } from "./songs.media.save.usecase"
 import {
   ByteRange,
   CreateReferenceError,
@@ -32,7 +29,16 @@ import {
   SongAudioLookupError,
   SongsPage,
 } from "./songs.models"
-import { AudioStore } from "./songs.ports"
+import {
+  AudioPath,
+  ListMediaFiles,
+  MoveAudio,
+  OpenAudioRange,
+  PutAudio,
+  ReadAudio,
+  RemoveAudio,
+  StatAudio,
+} from "./songs.ports"
 import {
   makeAttachReferenceToSong,
   makeClaimNextQueuedSong,
@@ -69,7 +75,14 @@ export type SongAudioPayload = Readonly<{
 
 export type SongsSliceDeps = Readonly<{
   db: Db
-  audioStore: AudioStore
+  audioPath: AudioPath
+  putAudio: PutAudio
+  statAudio: StatAudio
+  readAudio: ReadAudio
+  openAudioRange: OpenAudioRange
+  moveAudio: MoveAudio
+  removeAudio: RemoveAudio
+  listMediaFiles: ListMediaFiles
   yue2: Yue2AdapterEnv
   sheetsage2: Sheetsage2AdapterEnv
   ffmpeg: FfmpegAdapterEnv
@@ -122,17 +135,17 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   const encodeFlacToMp3 = makeEncodeFlacToMp3(deps.ffmpeg)
 
   const removeMediaById = makeRemoveMediaById({
-    listMediaFiles: () => deps.audioStore.list(),
-    removeMediaFile: (key) => deps.audioStore.remove(key),
+    listMediaFiles: deps.listMediaFiles,
+    removeAudio: deps.removeAudio,
   })
 
   const removeReferenceAudio = async (referenceId: string, contentType: string): Promise<void> => {
-    await deps.audioStore.remove(referenceAudioKey(referenceId, contentType, null))
+    await deps.removeAudio(referenceAudioKey(referenceId, contentType, null))
   }
 
   const saveSongAudio = makeSaveSongAudio({
     putSongAudio: async (songId, mp3, title) =>
-      (await deps.audioStore.put(songAudioKey(songId, title), mp3)).byteLength,
+      (await deps.putAudio(songAudioKey(songId, title), mp3)).byteLength,
     insertSongAudio,
     removeSongAudio: (songId) => removeMediaById("song", songId),
   })
@@ -147,7 +160,7 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     contentType: string
     title: string
   }): Promise<void> => {
-    await deps.audioStore.move(
+    await deps.moveAudio(
       referenceAudioKey(input.referenceId, input.contentType, null),
       referenceAudioKey(input.referenceId, input.contentType, input.title),
     )
@@ -156,11 +169,12 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   const findReferenceAudioBySongId = makeFindReferenceAudioBySongId({
     findReferenceBySongId,
     resolveReferenceAudioPath: (referenceId, contentType) =>
-      deps.audioStore.path(referenceAudioKey(referenceId, contentType, null)),
+      deps.audioPath(referenceAudioKey(referenceId, contentType, null)),
   })
 
   const reconcileMedia = makeReconcileMedia({
-    audioStore: deps.audioStore,
+    listMediaFiles: deps.listMediaFiles,
+    removeAudio: deps.removeAudio,
     listSongAudio,
     listReferenceAudio,
     markSongFailed,
@@ -178,8 +192,7 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   })
   const createReference = makeCreateReference({
     putReferenceAudio: async (referenceId, audio, contentType) =>
-      (await deps.audioStore.put(referenceAudioKey(referenceId, contentType, null), audio))
-        .byteLength,
+      (await deps.putAudio(referenceAudioKey(referenceId, contentType, null), audio)).byteLength,
     insertReference,
     removeReferenceAudio,
     now,
@@ -204,8 +217,8 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     if (row === null) return err({ kind: "not_found" })
     const titledKey = songAudioKey(songId, songTitleFromLyrics(song.lyrics))
     const bareKey = songAudioKey(songId, null)
-    const titled = await deps.audioStore.stat(titledKey)
-    const bare = titled === null ? await deps.audioStore.stat(bareKey) : null
+    const titled = await deps.statAudio(titledKey)
+    const bare = titled === null ? await deps.statAudio(bareKey) : null
     const key = titled !== null ? titledKey : bare !== null ? bareKey : null
     const stored = titled ?? bare
     if (key === null || stored === null) return err({ kind: "not_found" })
@@ -215,8 +228,8 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
       read: async (range) => {
         const bytes =
           range === null
-            ? await deps.audioStore.read(key)
-            : await deps.audioStore.openRange(key, range.start, range.end)
+            ? await deps.readAudio(key)
+            : await deps.openAudioRange(key, range.start, range.end)
         if (bytes === null) throw new Error(`song audio is missing at ${key}`)
         return bytes
       },

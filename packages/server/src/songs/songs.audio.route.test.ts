@@ -5,8 +5,16 @@ import { join } from "node:path"
 import { AiSlice } from "../ai/ai.models"
 import { buildApp } from "../app"
 import { openDatabase } from "../db/client"
-import { songAudioKey, songTitleFromLyrics } from "../media/audio.keys"
-import { makeFsAudioStore } from "../media/audio.store"
+import { songAudioKey, songTitleFromLyrics } from "./songs.media.keys"
+import {
+  makeListMediaFiles,
+  makeMoveAudio,
+  makeOpenAudioRange,
+  makePutAudio,
+  makeReadAudio,
+  makeRemoveAudio,
+  makeStatAudio,
+} from "./songs.media.adapters"
 import { assembleSongsSlice } from "./songs.assembly"
 import { NewSong } from "./songs.models"
 import { makeInsertSong, makeInsertSongAudio, makeMarkSongComplete } from "./songs.sqlite.adapters"
@@ -41,10 +49,17 @@ const withCompleteSong = async (
   const mediaDir = await mkdtemp(join(tmpdir(), "yuekbox-audio-route-test-"))
   const handle = openDatabase({ path: ":memory:" })
   try {
-    const audioStore = makeFsAudioStore(mediaDir)
+    const putAudio = makePutAudio(mediaDir)
     const songs = assembleSongsSlice({
       db: handle.db,
-      audioStore,
+      audioPath: (key) => join(mediaDir, key),
+      putAudio,
+      statAudio: makeStatAudio(mediaDir),
+      readAudio: makeReadAudio(mediaDir),
+      openAudioRange: makeOpenAudioRange(mediaDir),
+      moveAudio: makeMoveAudio(mediaDir),
+      removeAudio: makeRemoveAudio(mediaDir),
+      listMediaFiles: makeListMediaFiles(mediaDir),
       yue2: { kitRoot: "/kit", pythonBin: "/kit/python", scriptBin: "/kit/yue2", gpuBudget: 1 },
       sheetsage2: {
         pythonBin: "/kit/python",
@@ -69,7 +84,7 @@ const withCompleteSong = async (
       updatedAt: "2026-09-17T04:00:00.000Z",
     }
     await makeInsertSong(handle.db)(newSong)
-    await audioStore.put(fileKey, bytes)
+    await putAudio(fileKey, bytes)
     await makeInsertSongAudio(handle.db)({
       songId,
       byteLength: bytes.byteLength,

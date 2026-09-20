@@ -138,6 +138,22 @@ export type StoredAudio = Readonly<{
   byteLength: number
 }>
 
+export type AudioPath = (key: string) => string
+
+export type PutAudio = (key: string, audio: Uint8Array) => Promise<StoredAudio>
+
+export type StatAudio = (key: string) => Promise<StoredAudio | null>
+
+export type ReadAudio = (key: string) => Promise<Uint8Array | null>
+
+export type OpenAudioRange = (key: string, start: number, end: number) => Promise<Uint8Array | null>
+
+export type MoveAudio = (fromKey: string, toKey: string) => Promise<void>
+
+export type RemoveAudio = (key: string) => Promise<void>
+
+export type ListMediaFiles = () => Promise<readonly string[]>
+
 export type SongAudioRecord = Readonly<{
   songId: string
   songStatus: SongStatus
@@ -151,14 +167,3 @@ export type ReferenceAudioRecord = Readonly<{
 export type ListSongAudio = () => Promise<readonly SongAudioRecord[]>
 
 export type ListReferenceAudio = () => Promise<readonly ReferenceAudioRecord[]>
-
-export type AudioStore = Readonly<{
-  path: (key: string) => string
-  put: (key: string, audio: Uint8Array) => Promise<StoredAudio>
-  stat: (key: string) => Promise<StoredAudio | null>
-  read: (key: string) => Promise<Uint8Array | null>
-  openRange: (key: string, start: number, end: number) => Promise<Uint8Array | null>
-  move: (fromKey: string, toKey: string) => Promise<void>
-  remove: (key: string) => Promise<void>
-  list: () => Promise<readonly string[]>
-}>

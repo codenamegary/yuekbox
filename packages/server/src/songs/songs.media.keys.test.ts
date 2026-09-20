@@ -5,7 +5,7 @@ import {
   referenceAudioKey,
   songAudioKey,
   songTitleFromLyrics,
-} from "./audio.keys"
+} from "./songs.media.keys"
 
 const id = "01M2S1S56CXT1N9PMTRNKA15WJ"
 

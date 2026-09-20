@@ -271,7 +271,9 @@ packages/server/src/
     ├── songs.list.usecase.test.ts
     ├── songs.get.usecase.ts
     ├── songs.delete.usecase.ts
-    ├── songs.media.usecase.ts
+    ├── songs.media.adapters.ts
+    ├── songs.media.keys.ts
+    ├── songs.media.save.usecase.ts
     ├── songs.sqlite.adapters.ts
     ├── songs.yue2.adapters.ts
     ├── songs.ffmpeg.adapters.ts
@@ -303,9 +305,10 @@ EncodeFlacToMp3
 RunYue2Generate
 ```
 
-`AudioStore` is the media seam: `put`, `stat`, `read`, `openRange`, `remove`, and `list`, keyed by
-`<role>/<id><ext>`. Files live under `MEDIA_DIR`. Use cases pass ids; the assembly binds them to
-keys. Nothing else touches the filesystem.
+Media is a set of atomic ports: `putAudio`, `statAudio`, `readAudio`, `openAudioRange`,
+`moveAudio`, `removeAudio`, `listMediaFiles`, and `audioPath`, keyed by `<role>/<id><ext>`.
+Files live under `MEDIA_DIR`. Use cases pass ids; the assembly binds them to keys. Nothing else
+touches the filesystem.
 
 `RunYue2Generate` takes `{ lyrics, style, seed, outputDir }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter shells out to the YuE2 venv. It does not import Python.
 
