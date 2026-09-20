@@ -3,9 +3,8 @@ import { CreateSongBody } from "contracts/http/songs"
 import { openDatabase } from "../db/client"
 import { err, ok, Result } from "../shared/result"
 import { songFixture } from "../songs/songs.fixtures"
-import { makeAiConfigStore } from "./ai.config.store"
-import { AiConfigStore } from "./ai.models"
-import { WriterSetting } from "./ai.openai"
+import { makeAiConfigStore } from "./ai.config.sqlite.adapters"
+import { AiConfigStore, WriterSetting } from "./ai.models"
 import { assembleAiSlice } from "./ai.slice"
 
 const words = (count: number): string =>

@@ -6,10 +6,10 @@ import { buildApp, AppDeps } from "../app"
 import { ok } from "../shared/result"
 import { makeSongsSliceFixture, songFixture } from "../songs/songs.fixtures"
 import { openDatabase } from "../db/client"
-import { makeAiConfigStore } from "./ai.config.store"
+import { makeAiConfigStore } from "./ai.config.sqlite.adapters"
 import { AiSlice } from "./ai.models"
 import { assembleAiSlice } from "./ai.slice"
-import { chatCompletion, listModels } from "./ai.openai"
+import { chatCompletion, listModels } from "./ai.openai.adapters"
 
 const makeApp = (deps: Omit<AppDeps, "referenceMaxBytes" | "wake">, wake: () => void = () => {}) =>
   buildApp({ referenceMaxBytes: 1024, wake, ...deps })

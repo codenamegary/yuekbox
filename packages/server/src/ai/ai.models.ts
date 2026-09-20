@@ -1,7 +1,22 @@
-import { AiConfig, AiConfigPatch, AiModels, EnhanceScope, Preset } from "contracts/http/ai"
+import {
+  AiConfig,
+  AiConfigPatch,
+  AiModels,
+  EffortLevel,
+  EnhanceScope,
+  Preset,
+} from "contracts/http/ai"
 import { Result } from "../shared/result"
 import { Song } from "../songs/songs.models"
-import { OpenAIError, WriterSetting } from "./ai.openai"
+
+export type OpenAIError = Readonly<{ kind: "upstream"; detail: string }>
+
+export type WriterSetting = Readonly<{
+  baseUrl: string
+  apiKey: string | null
+  model: string
+  effort: EffortLevel
+}>
 
 /** What we store per writer, including the secret that never goes back out. */
 export type StoredSetting = Readonly<{

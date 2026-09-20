@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { openDatabase } from "../db/client"
-import { defaultStoredConfig, makeAiConfigStore } from "./ai.config.store"
+import { defaultStoredConfig, makeAiConfigStore } from "./ai.config.sqlite.adapters"
 import { toWireConfig } from "./ai.merge"
 
 const memoryDb = () => openDatabase({ path: ":memory:" }).db

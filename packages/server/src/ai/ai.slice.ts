@@ -24,8 +24,8 @@ import {
   RandomSongError,
   StoredConfig,
   StoredSetting,
+  WriterSetting,
 } from "./ai.models"
-import { WriterSetting } from "./ai.openai"
 
 export type AiSliceDeps = Readonly<{
   configStore: AiConfigStore
