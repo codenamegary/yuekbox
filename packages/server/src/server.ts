@@ -7,6 +7,16 @@ import { chatCompletion, listModels } from "./ai/ai.openai"
 import { buildApp } from "./app"
 import { openDatabase } from "./db/client"
 import { assembleSongsSlice } from "./songs/songs.assembly"
+import {
+  makeAudioPath,
+  makeListMediaFiles,
+  makeMoveAudio,
+  makeOpenAudioRange,
+  makePutAudio,
+  makeReadAudio,
+  makeRemoveAudio,
+  makeStatAudio,
+} from "./songs/songs.media.adapters"
 import { checkFfmpeg } from "./songs/songs.ffmpeg.adapters"
 import { checkSheetsage2 } from "./songs/songs.sheetsage2.adapters"
 import { checkYue2, yue2ModelPath, yue2VaePath } from "./songs/songs.yue2.adapters"
@@ -20,6 +30,7 @@ const readEnv = () => {
     host: process.env.HOST ?? "127.0.0.1",
     port: Number(process.env.PORT ?? 8787),
     sqlitePath: process.env.SQLITE_PATH ?? "./data/yuekbox.sqlite",
+    mediaDir: process.env.MEDIA_DIR ?? "./data/media",
     kitRoot,
     pythonBin: process.env.YUE2_PYTHON ?? resolve(kitRoot, ".venv/bin/python"),
     scriptBin: resolve(kitRoot, ".venv/bin/yue2"),
@@ -41,6 +52,14 @@ const env = readEnv()
 const database = openDatabase({ path: env.sqlitePath })
 const songs = assembleSongsSlice({
   db: database.db,
+  audioPath: makeAudioPath(env.mediaDir),
+  putAudio: makePutAudio(env.mediaDir),
+  statAudio: makeStatAudio(env.mediaDir),
+  readAudio: makeReadAudio(env.mediaDir),
+  openAudioRange: makeOpenAudioRange(env.mediaDir),
+  moveAudio: makeMoveAudio(env.mediaDir),
+  removeAudio: makeRemoveAudio(env.mediaDir),
+  listMediaFiles: makeListMediaFiles(env.mediaDir),
   yue2: {
     kitRoot: env.kitRoot,
     pythonBin: env.pythonBin,
@@ -76,6 +95,21 @@ const purgedReferences = await songs.purgeStaleReferences(
 )
 if (purgedReferences > 0) {
   console.warn(`purged ${purgedReferences} unattached reference upload(s)`)
+}
+
+const reconciled = await songs.reconcileMedia()
+if (reconciled.removedOrphanFiles > 0) {
+  console.warn(`removed ${reconciled.removedOrphanFiles} orphan media file(s)`)
+}
+if (reconciled.failedSongIds.length > 0) {
+  console.warn(
+    `marked ${reconciled.failedSongIds.length} complete song(s) failed: audio file missing`,
+  )
+}
+if (reconciled.missingReferenceCount > 0) {
+  console.warn(
+    `${reconciled.missingReferenceCount} reference audio file(s) missing; those songs fail at transcription`,
+  )
 }
 
 const ffmpegState = await checkFfmpeg(env.ffmpegBin)

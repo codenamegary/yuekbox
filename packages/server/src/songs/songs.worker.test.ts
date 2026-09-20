@@ -29,6 +29,7 @@ const queuedSong: Song = Object.freeze({
 type Artifacts = {
   savedMp3: Uint8Array | null
   savedContentType: string | null
+  savedTitle: string | null
   completedScore: string | null
   completedDuration: number | null
   completedTruncated: Readonly<{ abc: boolean; semantic: boolean }> | null
@@ -39,6 +40,7 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
   const artifacts: Artifacts = {
     savedMp3: null,
     savedContentType: null,
+    savedTitle: null,
     completedScore: null,
     completedDuration: null,
     completedTruncated: null,
@@ -69,6 +71,7 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
       calls.push("save-audio")
       artifacts.savedMp3 = input.mp3
       artifacts.savedContentType = input.contentType
+      artifacts.savedTitle = input.title
     },
     runYue2Generate: async (input) => {
       calls.push(`generate:${input.cot}:${input.abc === null ? "no-abc" : "abc"}`)
@@ -86,7 +89,10 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
       calls.push("encode")
       return ok(new Uint8Array([1, 2, 3, 4]))
     },
-    findReferenceBySongId: async () => null,
+    findReferenceAudioBySongId: async () => null,
+    renameReferenceAudio: async () => {
+      calls.push("rename-ref")
+    },
     runTranscribe: async () => {
       calls.push("transcribe")
       return ok({ scoreAbc: "X:1\nK:C\nC D E|" })
@@ -132,6 +138,7 @@ test("complete path saves the mp3 blob and marks the song complete", async () =>
   ])
   expect(harness.artifacts.savedMp3).toEqual(new Uint8Array([1, 2, 3, 4]))
   expect(harness.artifacts.savedContentType).toBe("audio/mpeg")
+  expect(harness.artifacts.savedTitle).toBe("hello")
   expect(harness.artifacts.completedScore).toBe("X:1\nK:C\nC D E F|")
   expect(harness.artifacts.completedDuration).toBe(184.5)
   expect(harness.artifacts.completedTruncated).toEqual({ abc: false, semantic: false })
@@ -217,18 +224,25 @@ test("reference songs transcribe first and generate from the melody ABC", async 
     filename: "demo-song.mp3",
     contentType: "audio/mpeg",
     byteLength: 3,
-    audio: new Uint8Array([1, 2, 3]),
     scoreAbc: null,
     createdAt: "2026-09-17T04:00:00.000Z",
   }
-  const harness = makeHarness({ findReferenceBySongId: async () => reference })
+  const transcribedPaths: string[] = []
+  const audioPath = "/media/references/01J8K3R4P9ABCDEFGHJKMNPQRT.mp3"
+  const harness = makeHarness({
+    findReferenceAudioBySongId: async () => ({ reference, audioPath }),
+    runTranscribe: async (input) => {
+      transcribedPaths.push(input.audioPath)
+      return ok({ scoreAbc: "X:1\nK:C\nC D E|" })
+    },
+  })
 
   await harness.run()
 
+  expect(transcribedPaths).toEqual([audioPath])
   expect(harness.calls).toEqual([
     "running",
     "stage:transcribe",
-    "transcribe",
     "save-score:01J8K3R4P9ABCDEFGHJKMNPQRT",
     "generate:melody:abc",
     "stage:plan",
@@ -237,6 +251,7 @@ test("reference songs transcribe first and generate from the melody ABC", async 
     "encode",
     "save-audio",
     "complete",
+    "rename-ref",
     "cleanup",
   ])
 })
@@ -248,12 +263,14 @@ test("a transcription failure marks the song failed without generating", async (
     filename: "demo-song.mp3",
     contentType: "audio/mpeg",
     byteLength: 3,
-    audio: new Uint8Array([1, 2, 3]),
     scoreAbc: null,
     createdAt: "2026-09-17T04:00:00.000Z",
   }
   const harness = makeHarness({
-    findReferenceBySongId: async () => reference,
+    findReferenceAudioBySongId: async () => ({
+      reference,
+      audioPath: "/media/references/01J8K3R4P9ABCDEFGHJKMNPQRT.mp3",
+    }),
     runTranscribe: async () => ({
       ok: false,
       error: { kind: "transcribe_failed", detail: "SheetSage2 exploded" },
@@ -266,5 +283,32 @@ test("a transcription failure marks the song failed without generating", async (
   expect(harness.calls).toContain("failed:SheetSage2 exploded")
   expect(harness.calls).not.toContain("generate:melody:abc")
   expect(harness.calls).not.toContain("complete")
+  expect(harness.calls).toContain("cleanup")
+})
+
+test("a reference rename failure is logged, not fatal", async () => {
+  const reference: Reference = {
+    id: "01J8K3R4P9ABCDEFGHJKMNPQRT",
+    songId: songId,
+    filename: "demo-song.mp3",
+    contentType: "audio/mpeg",
+    byteLength: 3,
+    scoreAbc: null,
+    createdAt: "2026-09-17T04:00:00.000Z",
+  }
+  const harness = makeHarness({
+    findReferenceAudioBySongId: async () => ({
+      reference,
+      audioPath: "/media/references/01J8K3R4P9ABCDEFGHJKMNPQRT.mp3",
+    }),
+    renameReferenceAudio: async () => {
+      throw new Error("disk full")
+    },
+  })
+
+  await harness.run()
+
+  expect(harness.calls).toContain("complete")
+  expect(harness.calls.some((call) => call.startsWith("log:reference rename failed"))).toBe(true)
   expect(harness.calls).toContain("cleanup")
 })

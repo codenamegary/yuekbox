@@ -35,11 +35,11 @@ const newReference = (referenceId: string, createdAt: string): NewReference => (
   id: referenceId,
   filename: "demo-song.mp3",
   contentType: "audio/mpeg",
-  audio: new Uint8Array([1, 2, 3, 4, 5]),
+  byteLength: 5,
   createdAt,
 })
 
-test("insert and find a reference round-trips the audio bytes", async () => {
+test("insert and find a reference round-trips its metadata", async () => {
   const handle = openDatabase({ path: ":memory:" })
   try {
     const insertReference = makeInsertReference(handle.db)
@@ -54,7 +54,7 @@ test("insert and find a reference round-trips the audio bytes", async () => {
     const found = await findReferenceById(id("RF"))
     expect(found?.filename).toBe("demo-song.mp3")
     expect(found?.contentType).toBe("audio/mpeg")
-    expect(Array.from(found?.audio ?? [])).toEqual([1, 2, 3, 4, 5])
+    expect(found?.byteLength).toBe(5)
   } finally {
     handle.close()
   }
@@ -137,10 +137,32 @@ test("stale purge removes only unattached references older than the cutoff", asy
 
     const removed = await deleteStaleReferences("2026-09-17T04:00:00.000Z")
 
-    expect(removed).toBe(1)
+    expect(removed.map((reference) => reference.id)).toEqual([id("OLD")])
+    expect(removed[0]?.contentType).toBe("audio/mpeg")
     expect(await findReferenceById(id("OLD"))).toBeNull()
     expect(await findReferenceById(id("NEW"))).not.toBeNull()
     expect(await findReferenceById(id("USED"))).not.toBeNull()
+  } finally {
+    handle.close()
+  }
+})
+
+test("the migrated references table keeps metadata without an audio blob", () => {
+  const handle = openDatabase({ path: ":memory:" })
+  try {
+    const columns = handle.sqlite
+      .query<{ name: string }, []>("PRAGMA table_info(`references`)")
+      .all()
+
+    expect(columns.map((column) => column.name)).toEqual([
+      "id",
+      "song_id",
+      "filename",
+      "content_type",
+      "byte_length",
+      "score_abc",
+      "created_at",
+    ])
   } finally {
     handle.close()
   }

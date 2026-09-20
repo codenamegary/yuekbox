@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs"
-import { readFile, writeFile } from "node:fs/promises"
-import { basename, join } from "node:path"
+import { readFile } from "node:fs/promises"
+import { join } from "node:path"
 import { ProcessRunner, runProcess } from "../shared/process"
 import { err, ok, Result } from "../shared/result"
 import { TranscribeError } from "./songs.models"
@@ -19,21 +19,6 @@ export type Sheetsage2AdapterEnv = Readonly<{
 export const checkSheetsage2 = (
   env: Pick<Sheetsage2AdapterEnv, "pythonBin" | "scriptPath">,
 ): "ok" | "missing" => (existsSync(env.pythonBin) && existsSync(env.scriptPath) ? "ok" : "missing")
-
-const isVisibleCharacter = (character: string): boolean => {
-  const code = character.codePointAt(0) ?? 0
-  return code > 0x1f && code !== 0x7f
-}
-
-export const safeReferenceFilename = (filename: string): string => {
-  let withoutControl = ""
-  for (const character of filename) {
-    if (isVisibleCharacter(character)) withoutControl += character
-  }
-  const plain = basename(withoutControl.replace(/\\/g, "/")).trim()
-  if (plain === "" || plain === "." || plain === "..") return "reference"
-  return plain
-}
 
 export type TranscribeArgsInput = Readonly<{
   audioPath: string
@@ -68,12 +53,17 @@ export const makeRunTranscribe =
       })
     }
 
-    const audioPath = join(input.outputDir, safeReferenceFilename(input.filename))
+    if (!existsSync(input.audioPath)) {
+      return err({
+        kind: "transcribe_failed",
+        detail: `reference audio is missing: ${input.audioPath}`,
+      })
+    }
+
     const scriptOutputDir = join(input.outputDir, "transcribe")
-    await writeFile(audioPath, input.audio)
 
     const outcome = await run(
-      transcribeArgs(env, { audioPath, outputDir: scriptOutputDir }),
+      transcribeArgs(env, { audioPath: input.audioPath, outputDir: scriptOutputDir }),
       env.cwd,
       () => {},
     )

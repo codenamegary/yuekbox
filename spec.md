@@ -257,6 +257,9 @@ packages/server/src/
 ├── db/
 │   ├── client.ts
 │   └── migrations/
+├── media/
+│   ├── audio.keys.ts
+│   └── audio.store.ts
 ├── shared/
 │   └── result.ts
 └── songs/
@@ -268,6 +271,9 @@ packages/server/src/
     ├── songs.list.usecase.test.ts
     ├── songs.get.usecase.ts
     ├── songs.delete.usecase.ts
+    ├── songs.media.adapters.ts
+    ├── songs.media.keys.ts
+    ├── songs.media.save.usecase.ts
     ├── songs.sqlite.adapters.ts
     ├── songs.yue2.adapters.ts
     ├── songs.ffmpeg.adapters.ts
@@ -286,7 +292,11 @@ Use cases are single-shot. The worker loop lives in `songs.worker.ts` (slice coo
 InsertSong
 FindSongById
 ListSongs
+InsertSongAudio
+FindSongAudio
 SaveSongAudio
+ListSongAudio
+ListReferenceAudio
 MarkSongRunning
 MarkSongComplete
 MarkSongFailed
@@ -294,6 +304,11 @@ ClaimNextQueuedSong
 EncodeFlacToMp3
 RunYue2Generate
 ```
+
+Media is a set of atomic ports: `putAudio`, `statAudio`, `readAudio`, `openAudioRange`,
+`moveAudio`, `removeAudio`, `listMediaFiles`, and `audioPath`, keyed by `<role>/<id><ext>`.
+Files live under `MEDIA_DIR`. Use cases pass ids; the assembly binds them to keys. Nothing else
+touches the filesystem.
 
 `RunYue2Generate` takes `{ lyrics, style, seed, outputDir }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter shells out to the YuE2 venv. It does not import Python.
 
@@ -303,7 +318,7 @@ RunYue2Generate
 
 WAL mode. Busy timeout set. File path from env, default `packages/server/data/yuekbox.sqlite`.
 
-Two tables so list queries never load audio:
+Tables hold metadata only. Audio bytes live on disk, so list queries never touch them:
 
 **songs**
 
@@ -329,10 +344,11 @@ completed_at      text null
 
 ```text
 song_id           text pk references songs(id) on delete cascade
-mp3               blob not null
 byte_length       integer not null
 content_type      text not null   -- always audio/mpeg in v1
 ```
+
+File: `MEDIA_DIR/songs/<slug>_<song_id>.mp3`, where the slug is the first sung lyric line (section tags stripped, lowercased, hyphenated, 60 chars max, `untitled` when nothing is left).
 
 **references**
 
@@ -342,17 +358,24 @@ song_id           text null references songs(id) on delete cascade
 filename          text not null
 content_type      text not null
 byte_length       integer not null
-audio             blob not null
 score_abc         text null       -- melody-only ABC after transcription
 created_at        text not null
 ```
+
+File: `MEDIA_DIR/references/<id><ext>` at upload, extension derived from `content_type`. Once the Song completes, the worker renames it to `MEDIA_DIR/references/<slug>_<id><ext>` so both files share the song's prefix. A failed rename is logged, never fatal.
+
+Media file names end with `_<id><ext>` or `<id><ext>`. `parseMediaKey` extracts the role and id from any key, so reconcile matches files to rows by id and does not care which shape a file uses. Temp leftovers (`<name>.tmp`) do not parse and are unlinked on the next boot.
 
 Uploads start unattached (`song_id` null). Creating a Song with `referenceId` attaches it.
 Unattached References older than 24 hours are purged on boot.
 
 Drizzle schema plus SQL migrations. `db:generate` requires `--name`.
 
-On process start: any row with `status = running` becomes `failed` with `errorDetail = "interrupted"`. The GPU job does not resume.
+Writes go to `<path>.tmp`, then rename onto the final path, then commit the row. A failed rename or
+row commit removes the temp or final file. Deletes remove the row first, then unlink the file.
+Crashes can leave orphan files, never a row pointing at a missing file.
+
+On process start: any row with `status = running` becomes `failed` with `errorDetail = "interrupted"`. The GPU job does not resume. Then the media tree reconciles against the tables: files with no row are unlinked, a complete Song whose audio file is missing becomes `failed` with `errorDetail = "audio file missing on disk"`, and missing Reference files are logged; those Songs fail at transcription with a clear detail.
 
 ### Generate path
 
@@ -375,8 +398,8 @@ On process start: any row with `status = running` becomes `failed` with `errorDe
 CLI flags must match the installed `yue2` parser. If the module form fails, call the venv `yue2` script with the same flags.
 
 5. Worker updates `stage` when stderr progress names a known stage. If parsing fails, leave the stage until done. Status stays `running`.
-6. If the Song has a Reference, transcribe it before generation. Write the audio to the temp dir, run `<sheetsage2-python> <kit>/skills/yue2-music/scripts/transcribe.py <audio> --output <tmp>/transcribe --task melody-full --device cuda --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`, read `score.abc`, store it on the Reference, then generate with `cot = melody` and the ABC in the request JSON. A transcription failure fails the Song.
-7. On success, read `audio.flac`. Encode MP3. Insert `song_audio`. Set `score_abc` from `score.abc` if present. Mark `complete`. Delete the temp dir (FLAC does not stay on disk).
+6. If the Song has a Reference, transcribe it before generation. Run `<sheetsage2-python> <kit>/skills/yue2-music/scripts/transcribe.py <MEDIA_DIR>/references/<id><ext> --output <tmp>/transcribe --task melody-full --device cuda --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`, read `score.abc`, store it on the Reference, then generate with `cot = melody` and the ABC in the request JSON. A missing file fails the Song before the script spawns; any other failure fails the Song.
+7. On success, read `audio.flac`. Encode MP3. Write it to `MEDIA_DIR/songs/<slug>_<song id>.mp3` and insert the `song_audio` row. Rename the attached Reference file to `<slug>_<reference id><ext>`. Set `score_abc` from `score.abc` if present. Mark `complete`. Delete the temp dir (FLAC does not stay on disk).
 8. On failure, mark `failed`, store a short `errorDetail`, delete the temp dir.
 9. Claim the next queued Song.
 
@@ -402,6 +425,7 @@ If ffmpeg exits non-zero, the Song is `failed`. Do not store a partial blob.
 HOST                    default 127.0.0.1
 PORT                    default 8787
 SQLITE_PATH             default ./data/yuekbox.sqlite
+MEDIA_DIR               default ./data/media
 YUE2_KIT                default ../../ (repo root that holds models/ and .venv)
 YUE2_PYTHON             default $YUE2_KIT/.venv/bin/python
 YUE2_GPU_BUDGET         default 16
@@ -427,8 +451,14 @@ Cover at least:
 - Create rejects empty lyrics and empty style.
 - Get missing id is not-found.
 - List does not include audio bytes.
-- Complete path with stub `RunYue2Generate` + stub `EncodeFlacToMp3` writes a blob and `complete`.
+- Complete path with stub `RunYue2Generate` + stub `EncodeFlacToMp3` writes the media file and `complete`.
 - Encode failure marks `failed` and leaves `song_audio` empty.
+- Saving the media unlinks the file when the row commit fails.
+- Media keys slug the first lyric line and parse both name shapes back to the id.
+- `GET /v1/songs/:id/audio` serves a range from a multi-megabyte file without reading it whole, and still serves a bare id file.
+- Deleting a Song unlinks its media; a stale purge unlinks each deleted Reference file.
+- Transcribe points the script at the stored path and fails before spawning when the file is missing.
+- Reconcile unlinks orphans and fails a complete Song whose media file is missing.
 - Claim skips `running` and `complete`.
 - Boot recovery: `running` becomes `failed`.
 
@@ -555,6 +585,8 @@ new generation starts the moment playback begins.
 | YuE2 OOM or non-zero exit | Song `failed`, detail from stderr tail |
 | Truncation | Song `complete`, `truncated` flags true |
 | Server crash mid-run | On boot, that Song `failed` |
+| Complete Song's media file missing at boot | Song `failed`, detail `audio file missing on disk` |
+| Reference's media file missing | Song fails at transcription with a clear detail |
 
 ## Later (not v1)
 

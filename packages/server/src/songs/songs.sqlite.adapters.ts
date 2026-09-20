@@ -27,6 +27,9 @@ import {
   FindSongById,
   InsertReference,
   InsertSong,
+  InsertSongAudio,
+  ListReferenceAudio,
+  ListSongAudio,
   ListSongs,
   MarkSongComplete,
   MarkSongFailed,
@@ -35,7 +38,6 @@ import {
   MarkSongStage,
   RecoverInterruptedSongs,
   SaveReferenceScore,
-  SaveSongAudio,
 } from "./songs.ports"
 
 const songColumns = {
@@ -55,7 +57,6 @@ const toReference = (row: typeof referencesTable.$inferSelect): Reference =>
     filename: row.filename,
     contentType: row.contentType,
     byteLength: row.byteLength,
-    audio: new Uint8Array(row.audio),
     scoreAbc: row.scoreAbc,
     createdAt: row.createdAt,
   })
@@ -172,24 +173,17 @@ export const makeListSongs =
     }
   }
 
-export const makeSaveSongAudio =
-  (db: Db): SaveSongAudio =>
-  async (input) => {
-    const mp3 = Buffer.from(input.mp3)
+export const makeInsertSongAudio =
+  (db: Db): InsertSongAudio =>
+  async (row) => {
     await db
       .insert(songAudioTable)
-      .values({
-        songId: input.songId,
-        mp3,
-        byteLength: mp3.byteLength,
-        contentType: input.contentType,
-      })
+      .values(row)
       .onConflictDoUpdate({
         target: songAudioTable.songId,
         set: {
-          mp3,
-          byteLength: mp3.byteLength,
-          contentType: input.contentType,
+          byteLength: row.byteLength,
+          contentType: row.contentType,
         },
       })
   }
@@ -198,13 +192,28 @@ export const makeFindSongAudio =
   (db: Db): FindSongAudio =>
   async (songId) => {
     const rows = await db
-      .select()
+      .select({ byteLength: songAudioTable.byteLength, contentType: songAudioTable.contentType })
       .from(songAudioTable)
       .where(eq(songAudioTable.songId, songId))
       .limit(1)
     const row = rows[0]
     if (row === undefined) return null
-    return Object.freeze({ mp3: new Uint8Array(row.mp3), contentType: row.contentType })
+    return Object.freeze({ byteLength: row.byteLength, contentType: row.contentType })
+  }
+
+export const makeListSongAudio =
+  (db: Db): ListSongAudio =>
+  async () => {
+    const rows = await db
+      .select({ songId: songAudioTable.songId, songStatus: songsTable.status })
+      .from(songAudioTable)
+      .innerJoin(songsTable, eq(songsTable.id, songAudioTable.songId))
+    return rows.map((row) =>
+      Object.freeze({
+        songId: row.songId,
+        songStatus: SongStatusSchema.parse(row.songStatus),
+      }),
+    )
   }
 
 export const makeMarkSongRunning =
@@ -356,7 +365,6 @@ export const makeRecoverInterruptedSongs =
 export const makeInsertReference =
   (db: Db): InsertReference =>
   async (reference: NewReference) => {
-    const audio = Buffer.from(reference.audio)
     const rows = await db
       .insert(referencesTable)
       .values({
@@ -364,8 +372,7 @@ export const makeInsertReference =
         songId: null,
         filename: reference.filename,
         contentType: reference.contentType,
-        byteLength: audio.byteLength,
-        audio,
+        byteLength: reference.byteLength,
         scoreAbc: null,
         createdAt: reference.createdAt,
       })
@@ -401,6 +408,15 @@ export const makeFindReferenceBySongId =
     return row === undefined ? null : toReference(row)
   }
 
+export const makeListReferenceAudio =
+  (db: Db): ListReferenceAudio =>
+  async () => {
+    const rows = await db
+      .select({ id: referencesTable.id, contentType: referencesTable.contentType })
+      .from(referencesTable)
+    return rows.map((row) => Object.freeze(row))
+  }
+
 export const makeAttachReferenceToSong =
   (db: Db): AttachReferenceToSong =>
   async (referenceId, songId) => {
@@ -424,6 +440,6 @@ export const makeDeleteStaleReferences =
     const rows = await db
       .delete(referencesTable)
       .where(and(isNull(referencesTable.songId), lt(referencesTable.createdAt, createdBefore)))
-      .returning({ id: referencesTable.id })
-    return rows.length
+      .returning({ id: referencesTable.id, contentType: referencesTable.contentType })
+    return rows.map((row) => Object.freeze(row))
   }

@@ -277,6 +277,7 @@ If a PR needs work, a maintainer will say so warmly and specifically.
 | `HOST` | `127.0.0.1` | Fastify bind address |
 | `PORT` | `8787` | Fastify port |
 | `SQLITE_PATH` | `./data/yuekbox.sqlite` | SQLite file (relative to `packages/server`) |
+| `MEDIA_DIR` | `./data/media` | Audio files on disk: `songs/<id>.mp3`, `references/<id><ext>` (relative to `packages/server`) |
 | `YUE2_KIT` | four levels above `packages/server/src` | YuE root holding `models/` and `.venv/` |
 | `YUE2_PYTHON` | `$YUE2_KIT/.venv/bin/python` | Interpreter for `python -m yue2` |
 | `YUE2_GPU_BUDGET` | `16` | Passed to `yue2 generate --budget` (GiB) |

@@ -25,11 +25,23 @@ export type FindReferenceById = (referenceId: string) => Promise<Reference | nul
 
 export type FindReferenceBySongId = (songId: string) => Promise<Reference | null>
 
+export type TranscribeReference = Readonly<{
+  reference: Reference
+  audioPath: string
+}>
+
+export type FindReferenceAudioBySongId = (songId: string) => Promise<TranscribeReference | null>
+
 export type AttachReferenceToSong = (referenceId: string, songId: string) => Promise<boolean>
 
 export type SaveReferenceScore = (referenceId: string, scoreAbc: string) => Promise<void>
 
-export type DeleteStaleReferences = (createdBefore: string) => Promise<number>
+export type DeleteStaleReferences = (createdBefore: string) => Promise<readonly DeletedReference[]>
+
+export type DeletedReference = Readonly<{
+  id: string
+  contentType: string
+}>
 
 export type ListSongsQuery = Readonly<{
   limit: number
@@ -40,12 +52,20 @@ export type ListSongsQuery = Readonly<{
 export type ListSongs = (query: ListSongsQuery) => Promise<SongsPage>
 
 export type SaveSongAudio = (
-  input: Readonly<{ songId: string; mp3: Uint8Array; contentType: string }>,
+  input: Readonly<{ songId: string; mp3: Uint8Array; contentType: string; title: string }>,
+) => Promise<void>
+
+export type RenameReferenceAudio = (
+  input: Readonly<{ referenceId: string; contentType: string; title: string }>,
+) => Promise<void>
+
+export type InsertSongAudio = (
+  row: Readonly<{ songId: string; byteLength: number; contentType: string }>,
 ) => Promise<void>
 
 export type FindSongAudio = (
   songId: string,
-) => Promise<Readonly<{ mp3: Uint8Array; contentType: string }> | null>
+) => Promise<Readonly<{ byteLength: number; contentType: string }> | null>
 
 export type MarkSongRunning = (songId: string) => Promise<void>
 
@@ -97,8 +117,7 @@ export type RunYue2Generate = (
 ) => Promise<Result<RunYue2GenerateOutput, GenerateSongError>>
 
 export type RunTranscribeInput = Readonly<{
-  audio: Uint8Array
-  filename: string
+  audioPath: string
   outputDir: string
 }>
 
@@ -113,3 +132,38 @@ export type RunTranscribe = (
 export type CreateTempDir = () => Promise<string>
 
 export type RemoveTempDir = (path: string) => Promise<void>
+
+export type StoredAudio = Readonly<{
+  path: string
+  byteLength: number
+}>
+
+export type AudioPath = (key: string) => string
+
+export type PutAudio = (key: string, audio: Uint8Array) => Promise<StoredAudio>
+
+export type StatAudio = (key: string) => Promise<StoredAudio | null>
+
+export type ReadAudio = (key: string) => Promise<Uint8Array | null>
+
+export type OpenAudioRange = (key: string, start: number, end: number) => Promise<Uint8Array | null>
+
+export type MoveAudio = (fromKey: string, toKey: string) => Promise<void>
+
+export type RemoveAudio = (key: string) => Promise<void>
+
+export type ListMediaFiles = () => Promise<readonly string[]>
+
+export type SongAudioRecord = Readonly<{
+  songId: string
+  songStatus: SongStatus
+}>
+
+export type ReferenceAudioRecord = Readonly<{
+  id: string
+  contentType: string
+}>
+
+export type ListSongAudio = () => Promise<readonly SongAudioRecord[]>
+
+export type ListReferenceAudio = () => Promise<readonly ReferenceAudioRecord[]>

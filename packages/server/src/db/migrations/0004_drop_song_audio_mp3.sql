@@ -1,0 +1,1 @@
+ALTER TABLE `song_audio` DROP COLUMN `mp3`;

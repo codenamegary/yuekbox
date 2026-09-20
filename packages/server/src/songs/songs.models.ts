@@ -45,7 +45,6 @@ export type Reference = Readonly<{
   filename: string
   contentType: string
   byteLength: number
-  audio: Uint8Array
   scoreAbc: string | null
   createdAt: string
 }>
@@ -54,7 +53,7 @@ export type NewReference = Readonly<{
   id: string
   filename: string
   contentType: string
-  audio: Uint8Array
+  byteLength: number
   createdAt: string
 }>
 
@@ -106,6 +105,8 @@ export type ListSongsError = Readonly<{ kind: "invalid_cursor" }>
 export type DeleteSongError = Readonly<{ kind: "not_found" }>
 
 export type SongAudioLookupError = Readonly<{ kind: "not_found" } | { kind: "not_complete" }>
+
+export type ByteRange = Readonly<{ start: number; end: number }>
 
 export type GenerateSongError =
   | Readonly<{ kind: "yue2_failed"; detail: string }>

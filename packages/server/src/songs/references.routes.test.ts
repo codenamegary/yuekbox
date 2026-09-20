@@ -16,7 +16,6 @@ const reference: Reference = Object.freeze({
   filename: "demo-song.mp3",
   contentType: "audio/mpeg",
   byteLength: 4,
-  audio: new Uint8Array([1, 2, 3, 4]),
   scoreAbc: null,
   createdAt: "2026-09-17T04:00:00.000Z",
 })
@@ -34,8 +33,14 @@ const makeSlice = (
     ok({ items: [], limit: 20, nextCursor: null, previousCursor: null, count: 0 }),
   getSong: async () => ok(null as never),
   deleteSong: async () => ok(null),
-  getSongAudio: async () => ok({ mp3: new Uint8Array(), contentType: "audio/mpeg" }),
+  getSongAudio: async () =>
+    ok({ contentType: "audio/mpeg", byteLength: 0, read: async () => new Uint8Array() }),
   recoverInterruptedSongs: async () => 0,
+  reconcileMedia: async () => ({
+    removedOrphanFiles: 0,
+    failedSongIds: [],
+    missingReferenceCount: 0,
+  }),
   purgeStaleReferences: async () => 0,
   queueDepth: async () => 0,
   worker: { kick: () => {}, drain: async () => {}, isBusy: () => false },

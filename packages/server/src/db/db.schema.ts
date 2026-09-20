@@ -1,4 +1,4 @@
-import { blob, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core"
+import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core"
 
 export const songsTable = sqliteTable("songs", {
   id: text("id").primaryKey(),
@@ -24,7 +24,6 @@ export const songAudioTable = sqliteTable("song_audio", {
   songId: text("song_id")
     .primaryKey()
     .references(() => songsTable.id, { onDelete: "cascade" }),
-  mp3: blob("mp3", { mode: "buffer" }).notNull(),
   byteLength: integer("byte_length").notNull(),
   contentType: text("content_type").notNull(),
 })
@@ -35,7 +34,6 @@ export const referencesTable = sqliteTable("references", {
   filename: text("filename").notNull(),
   contentType: text("content_type").notNull(),
   byteLength: integer("byte_length").notNull(),
-  audio: blob("audio", { mode: "buffer" }).notNull(),
   scoreAbc: text("score_abc"),
   createdAt: text("created_at").notNull(),
 })

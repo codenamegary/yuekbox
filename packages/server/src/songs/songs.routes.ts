@@ -16,13 +16,11 @@ import {
   validationProblem,
 } from "../shared/problems"
 import { SongsSlice } from "./songs.assembly"
-import { Song } from "./songs.models"
+import { ByteRange, Song } from "./songs.models"
 
 export type SongsRoutesOptions = Readonly<{
   songs: SongsSlice
 }>
-
-type ByteRange = Readonly<{ start: number; end: number }>
 
 const parseRangeHeader = (
   header: string | undefined,
@@ -183,7 +181,7 @@ export const songsRoutes: FastifyPluginAsync<SongsRoutesOptions> = async (fastif
         return sendProblem(reply, notFoundProblem(`Song ${songId} does not exist`))
       }
 
-      const total = result.value.mp3.byteLength
+      const total = result.value.byteLength
       reply.header("content-type", result.value.contentType)
       reply.header("accept-ranges", "bytes")
 
@@ -192,15 +190,16 @@ export const songsRoutes: FastifyPluginAsync<SongsRoutesOptions> = async (fastif
         reply.header("content-range", `bytes */${total}`)
         return reply.status(416).send()
       }
+
+      const bytes = await result.value.read(range)
       if (range === null) {
         reply.header("content-length", String(total))
-        return reply.send(Buffer.from(result.value.mp3))
+        return reply.send(Buffer.from(bytes))
       }
 
-      const slice = Buffer.from(result.value.mp3.subarray(range.start, range.end + 1))
       reply.header("content-range", `bytes ${range.start}-${range.end}/${total}`)
-      reply.header("content-length", String(slice.byteLength))
-      return reply.status(206).send(slice)
+      reply.header("content-length", String(bytes.byteLength))
+      return reply.status(206).send(Buffer.from(bytes))
     },
   )
 

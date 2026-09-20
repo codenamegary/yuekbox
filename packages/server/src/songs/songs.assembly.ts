@@ -5,12 +5,19 @@ import { CreateSongBody } from "contracts/http/songs"
 import { ulid } from "ulid"
 import { Db } from "../db/client"
 import { err, ok, Result } from "../shared/result"
+import { makeFindReferenceAudioBySongId } from "./references.audio.usecase"
 import { makeCreateReference } from "./references.usecase"
 import { makeCreateSong } from "./songs.create.usecase"
 import { makeDeleteSong } from "./songs.delete.usecase"
 import { makeGetSong } from "./songs.get.usecase"
 import { makeListSongs, ListSongsInput } from "./songs.list.usecase"
+import { referenceAudioKey, songAudioKey, songTitleFromLyrics } from "./songs.media.keys"
+import { makePurgeStaleReferences } from "./songs.media.purge.usecase"
+import { makeReconcileMedia, ReconcileReport } from "./songs.media.reconcile.usecase"
+import { makeRemoveMediaById } from "./songs.media.remove.usecase"
+import { makeSaveSongAudio } from "./songs.media.save.usecase"
 import {
+  ByteRange,
   CreateReferenceError,
   CreateReferenceInput,
   CreateSongError,
@@ -23,6 +30,16 @@ import {
   SongsPage,
 } from "./songs.models"
 import {
+  AudioPath,
+  ListMediaFiles,
+  MoveAudio,
+  OpenAudioRange,
+  PutAudio,
+  ReadAudio,
+  RemoveAudio,
+  StatAudio,
+} from "./songs.ports"
+import {
   makeAttachReferenceToSong,
   makeClaimNextQueuedSong,
   makeDeleteSong as makeDeleteSongAdapter,
@@ -33,6 +50,9 @@ import {
   makeFindSongById,
   makeInsertReference,
   makeInsertSong,
+  makeInsertSongAudio,
+  makeListReferenceAudio,
+  makeListSongAudio,
   makeListSongs as makeListSongsAdapter,
   makeMarkSongComplete,
   makeMarkSongFailed,
@@ -41,17 +61,28 @@ import {
   makeMarkSongStage,
   makeRecoverInterruptedSongs,
   makeSaveReferenceScore,
-  makeSaveSongAudio,
 } from "./songs.sqlite.adapters"
 import { makeEncodeFlacToMp3, FfmpegAdapterEnv } from "./songs.ffmpeg.adapters"
 import { makeRunTranscribe, Sheetsage2AdapterEnv } from "./songs.sheetsage2.adapters"
 import { makeRunYue2Generate, Yue2AdapterEnv } from "./songs.yue2.adapters"
 import { makeSongWorker, SongWorker } from "./songs.worker"
 
-export type SongAudioPayload = Readonly<{ mp3: Uint8Array; contentType: string }>
+export type SongAudioPayload = Readonly<{
+  contentType: string
+  byteLength: number
+  read: (range: ByteRange | null) => Promise<Uint8Array>
+}>
 
 export type SongsSliceDeps = Readonly<{
   db: Db
+  audioPath: AudioPath
+  putAudio: PutAudio
+  statAudio: StatAudio
+  readAudio: ReadAudio
+  openAudioRange: OpenAudioRange
+  moveAudio: MoveAudio
+  removeAudio: RemoveAudio
+  listMediaFiles: ListMediaFiles
   yue2: Yue2AdapterEnv
   sheetsage2: Sheetsage2AdapterEnv
   ffmpeg: FfmpegAdapterEnv
@@ -68,6 +99,7 @@ export type SongsSlice = Readonly<{
   deleteSong: (songId: string) => Promise<Result<null, DeleteSongError>>
   getSongAudio: (songId: string) => Promise<Result<SongAudioPayload, SongAudioLookupError>>
   recoverInterruptedSongs: () => Promise<number>
+  reconcileMedia: () => Promise<ReconcileReport>
   queueDepth: () => Promise<number>
   worker: SongWorker
 }>
@@ -86,7 +118,9 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   const deleteStaleReferences = makeDeleteStaleReferences(deps.db)
   const findSongAudio = makeFindSongAudio(deps.db)
   const listSongsPort = makeListSongsAdapter(deps.db)
-  const saveSongAudio = makeSaveSongAudio(deps.db)
+  const insertSongAudio = makeInsertSongAudio(deps.db)
+  const listSongAudio = makeListSongAudio(deps.db)
+  const listReferenceAudio = makeListReferenceAudio(deps.db)
   const markSongRunning = makeMarkSongRunning(deps.db)
   const markSongStage = makeMarkSongStage(deps.db)
   const markSongProgress = makeMarkSongProgress(deps.db)
@@ -100,6 +134,52 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   const runTranscribe = makeRunTranscribe(deps.sheetsage2)
   const encodeFlacToMp3 = makeEncodeFlacToMp3(deps.ffmpeg)
 
+  const removeMediaById = makeRemoveMediaById({
+    listMediaFiles: deps.listMediaFiles,
+    removeAudio: deps.removeAudio,
+  })
+
+  const removeReferenceAudio = async (referenceId: string, contentType: string): Promise<void> => {
+    await deps.removeAudio(referenceAudioKey(referenceId, contentType, null))
+  }
+
+  const saveSongAudio = makeSaveSongAudio({
+    putSongAudio: async (songId, mp3, title) =>
+      (await deps.putAudio(songAudioKey(songId, title), mp3)).byteLength,
+    insertSongAudio,
+    removeSongAudio: (songId) => removeMediaById("song", songId),
+  })
+
+  const purgeStaleReferences = makePurgeStaleReferences({
+    deleteStaleReferences,
+    removeReferenceAudio,
+  })
+
+  const renameReferenceAudio = async (input: {
+    referenceId: string
+    contentType: string
+    title: string
+  }): Promise<void> => {
+    await deps.moveAudio(
+      referenceAudioKey(input.referenceId, input.contentType, null),
+      referenceAudioKey(input.referenceId, input.contentType, input.title),
+    )
+  }
+
+  const findReferenceAudioBySongId = makeFindReferenceAudioBySongId({
+    findReferenceBySongId,
+    resolveReferenceAudioPath: (referenceId, contentType) =>
+      deps.audioPath(referenceAudioKey(referenceId, contentType, null)),
+  })
+
+  const reconcileMedia = makeReconcileMedia({
+    listMediaFiles: deps.listMediaFiles,
+    removeAudio: deps.removeAudio,
+    listSongAudio,
+    listReferenceAudio,
+    markSongFailed,
+  })
+
   const createSong = makeCreateSong({
     insertSong,
     findReferenceById,
@@ -111,13 +191,21 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     randomSeed: () => Math.floor(Math.random() * 2 ** 31),
   })
   const createReference = makeCreateReference({
+    putReferenceAudio: async (referenceId, audio, contentType) =>
+      (await deps.putAudio(referenceAudioKey(referenceId, contentType, null), audio)).byteLength,
     insertReference,
+    removeReferenceAudio,
     now,
     generateId: () => ulid(),
   })
   const listSongs = makeListSongs({ listSongs: listSongsPort })
   const getSong = makeGetSong({ findSongById })
-  const deleteSong = makeDeleteSong({ deleteSong: deleteSongRow })
+  const deleteSong = makeDeleteSong({
+    deleteSong: deleteSongRow,
+    findReferenceBySongId,
+    removeSongMedia: (songId) => removeMediaById("song", songId),
+    removeReferenceMedia: (referenceId) => removeMediaById("reference", referenceId),
+  })
 
   const getSongAudio = async (
     songId: string,
@@ -125,9 +213,27 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     const song = await findSongById(songId)
     if (song === null) return err({ kind: "not_found" })
     if (song.status !== "complete") return err({ kind: "not_complete" })
-    const audio = await findSongAudio(songId)
-    if (audio === null) return err({ kind: "not_found" })
-    return ok(audio)
+    const row = await findSongAudio(songId)
+    if (row === null) return err({ kind: "not_found" })
+    const titledKey = songAudioKey(songId, songTitleFromLyrics(song.lyrics))
+    const bareKey = songAudioKey(songId, null)
+    const titled = await deps.statAudio(titledKey)
+    const bare = titled === null ? await deps.statAudio(bareKey) : null
+    const key = titled !== null ? titledKey : bare !== null ? bareKey : null
+    const stored = titled ?? bare
+    if (key === null || stored === null) return err({ kind: "not_found" })
+    return ok({
+      contentType: row.contentType,
+      byteLength: stored.byteLength,
+      read: async (range) => {
+        const bytes =
+          range === null
+            ? await deps.readAudio(key)
+            : await deps.openAudioRange(key, range.start, range.end)
+        if (bytes === null) throw new Error(`song audio is missing at ${key}`)
+        return bytes
+      },
+    })
   }
 
   const queueDepth = async (): Promise<number> => {
@@ -143,7 +249,8 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     markSongComplete,
     markSongFailed,
     saveSongAudio,
-    findReferenceBySongId,
+    renameReferenceAudio,
+    findReferenceAudioBySongId,
     runTranscribe,
     saveReferenceScore,
     runYue2Generate,
@@ -156,12 +263,13 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   return {
     createSong,
     createReference,
-    purgeStaleReferences: (createdBefore) => deleteStaleReferences(createdBefore),
+    purgeStaleReferences,
     listSongs,
     getSong,
     deleteSong,
     getSongAudio,
     recoverInterruptedSongs,
+    reconcileMedia,
     queueDepth,
     worker,
   }

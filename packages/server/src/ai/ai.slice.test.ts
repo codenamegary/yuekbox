@@ -51,6 +51,11 @@ const songsSlice = (kicks: number[] = []): SongsSlice => ({
   getSongAudio: async () => err({ kind: "not_found" }),
   createReference: async () => err({ kind: "validation_error", pointer: "/", code: "unused" }),
   recoverInterruptedSongs: async () => 0,
+  reconcileMedia: async () => ({
+    removedOrphanFiles: 0,
+    failedSongIds: [],
+    missingReferenceCount: 0,
+  }),
   purgeStaleReferences: async () => 0,
   queueDepth: async () => 0,
   worker: {

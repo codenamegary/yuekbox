@@ -1,11 +1,10 @@
 import { expect, test } from "bun:test"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { ProcessRunner } from "../shared/process"
 import {
   makeRunTranscribe,
-  safeReferenceFilename,
   Sheetsage2AdapterEnv,
   transcribeArgs,
 } from "./songs.sheetsage2.adapters"
@@ -40,15 +39,6 @@ test("transcribe args omit optional flags when unset", () => {
   expect(args).not.toContain("--offline")
 })
 
-test("safeReferenceFilename strips directories and control characters", () => {
-  expect(safeReferenceFilename("../../etc/passwd")).toBe("passwd")
-  expect(safeReferenceFilename("..\\..\\demo.mp3")).toBe("demo.mp3")
-  expect(safeReferenceFilename("my song (demo).mp3")).toBe("my song (demo).mp3")
-  expect(safeReferenceFilename("bad\u0000name.mp3")).toBe("badname.mp3")
-  expect(safeReferenceFilename("   ")).toBe("reference")
-  expect(safeReferenceFilename(".")).toBe("reference")
-})
-
 const makeFakeRunner =
   (behavior: (outputDir: string) => Promise<number> | number): ProcessRunner =>
   async (command) => {
@@ -58,9 +48,21 @@ const makeFakeRunner =
     return { exitCode, stdout: "", stderrTail: exitCode === 0 ? "" : "traceback: no module" }
   }
 
-test("successful transcription returns the score ABC", async () => {
+const withStoredAudio = async (
+  run: (audioPath: string, outputRoot: string) => Promise<void>,
+): Promise<void> => {
   const outputRoot = await mkdtemp(join(tmpdir(), "yuekbox-transcribe-test-"))
   try {
+    const audioPath = join(outputRoot, "demo.mp3")
+    await writeFile(audioPath, new Uint8Array([1, 2, 3]))
+    await run(audioPath, outputRoot)
+  } finally {
+    await rm(outputRoot, { recursive: true, force: true })
+  }
+}
+
+test("successful transcription returns the score ABC", async () => {
+  await withStoredAudio(async (audioPath, outputRoot) => {
     const runner = makeFakeRunner(async (outputDir) => {
       await mkdir(outputDir, { recursive: true })
       await writeFile(join(outputDir, "score.abc"), "X:1\nK:C\nC D E|", "utf8")
@@ -68,60 +70,87 @@ test("successful transcription returns the score ABC", async () => {
     })
     const runTranscribe = makeRunTranscribe(env, runner)
 
-    const result = await runTranscribe({
-      audio: new Uint8Array([1, 2, 3]),
-      filename: "demo.mp3",
-      outputDir: outputRoot,
-    })
+    const result = await runTranscribe({ audioPath, outputDir: outputRoot })
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.value.scoreAbc).toBe("X:1\nK:C\nC D E|")
-  } finally {
-    await rm(outputRoot, { recursive: true, force: true })
-  }
+  })
+})
+
+test("the script receives the stored path without a temp copy", async () => {
+  await withStoredAudio(async (audioPath, outputRoot) => {
+    const commands: string[][] = []
+    const runner = makeFakeRunner(async (outputDir) => {
+      await mkdir(outputDir, { recursive: true })
+      await writeFile(join(outputDir, "score.abc"), "X:1\nK:C\nC D E|", "utf8")
+      return 0
+    })
+    const capturingRunner: ProcessRunner = async (command, cwd, onOutput) => {
+      commands.push([...command])
+      return runner(command, cwd, onOutput)
+    }
+    const runTranscribe = makeRunTranscribe(env, capturingRunner)
+
+    const result = await runTranscribe({ audioPath, outputDir: outputRoot })
+
+    expect(result.ok).toBe(true)
+    expect(commands).toHaveLength(1)
+    expect(commands[0]?.[2]).toBe(audioPath)
+    expect((await readdir(outputRoot)).toSorted()).toEqual(["demo.mp3", "transcribe"])
+  })
 })
 
 test("a non-zero exit is a transcribe failure with the stderr tail", async () => {
-  const outputRoot = await mkdtemp(join(tmpdir(), "yuekbox-transcribe-test-"))
-  try {
+  await withStoredAudio(async (audioPath, outputRoot) => {
     const runTranscribe = makeRunTranscribe(
       env,
       makeFakeRunner(() => 1),
     )
 
-    const result = await runTranscribe({
-      audio: new Uint8Array([1, 2, 3]),
-      filename: "demo.mp3",
-      outputDir: outputRoot,
-    })
+    const result = await runTranscribe({ audioPath, outputDir: outputRoot })
 
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.error.kind).toBe("transcribe_failed")
     expect(result.error.detail).toContain("no module")
-  } finally {
-    await rm(outputRoot, { recursive: true, force: true })
-  }
+  })
 })
 
 test("a run without score.abc is a transcribe failure", async () => {
-  const outputRoot = await mkdtemp(join(tmpdir(), "yuekbox-transcribe-test-"))
-  try {
+  await withStoredAudio(async (audioPath, outputRoot) => {
     const runTranscribe = makeRunTranscribe(
       env,
       makeFakeRunner(() => 0),
     )
 
+    const result = await runTranscribe({ audioPath, outputDir: outputRoot })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.detail).toContain("score.abc")
+  })
+})
+
+test("a missing audio file fails before spawning", async () => {
+  const outputRoot = await mkdtemp(join(tmpdir(), "yuekbox-transcribe-test-"))
+  try {
+    const spawns: string[] = []
+    const runner: ProcessRunner = async (command) => {
+      spawns.push(command[2] ?? "")
+      return { exitCode: 0, stdout: "", stderrTail: "" }
+    }
+    const runTranscribe = makeRunTranscribe(env, runner)
+
     const result = await runTranscribe({
-      audio: new Uint8Array([1, 2, 3]),
-      filename: "demo.mp3",
+      audioPath: join(outputRoot, "missing.mp3"),
       outputDir: outputRoot,
     })
 
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.error.detail).toContain("score.abc")
+    expect(result.error.detail).toContain("reference audio is missing")
+    expect(spawns).toEqual([])
   } finally {
     await rm(outputRoot, { recursive: true, force: true })
   }
@@ -130,21 +159,20 @@ test("a run without score.abc is a transcribe failure", async () => {
 test("a missing sheetsage2 environment fails before spawning", async () => {
   const outputRoot = await mkdtemp(join(tmpdir(), "yuekbox-transcribe-test-"))
   try {
-    let spawned = false
-    const runner: ProcessRunner = async () => {
-      spawned = true
+    const spawns: string[] = []
+    const runner: ProcessRunner = async (command) => {
+      spawns.push(command[2] ?? "")
       return { exitCode: 0, stdout: "", stderrTail: "" }
     }
     const runTranscribe = makeRunTranscribe({ ...env, pythonBin: "/kit/nope/python" }, runner)
 
     const result = await runTranscribe({
-      audio: new Uint8Array([1, 2, 3]),
-      filename: "demo.mp3",
+      audioPath: join(outputRoot, "demo.mp3"),
       outputDir: outputRoot,
     })
 
     expect(result.ok).toBe(false)
-    expect(spawned).toBe(false)
+    expect(spawns).toEqual([])
   } finally {
     await rm(outputRoot, { recursive: true, force: true })
   }
