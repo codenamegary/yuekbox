@@ -9,6 +9,15 @@ Default to using Bun instead of Node.js.
 - Use `bunx <package> <command>` instead of `npx <package> <command>`
 - Bun automatically loads .env, so don't use dotenv.
 
+## Server architecture
+
+The server follows the `typescript-dev-backend` skill: vertical slices under
+`packages/server/src/`, models and ports pointing inward, use cases as curried
+factories, atomic ports, zero-mock tests. oxlint, dependency-cruiser, and a
+structure check enforce it in CI. Read
+[packages/server/README.md](./packages/server/README.md) before adding or moving
+a slice, port, use case, or adapter.
+
 ## APIs
 
 - `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
