@@ -1,16 +1,16 @@
 import { ReferenceUploadQuerySchema } from "contracts/http/references"
+import { PutFile } from "../media/media.ports"
 import { err, ok, Result } from "../shared/result"
+import {
+  parseReferenceFileName,
+  referenceFileName,
+  referenceStemFromUpload,
+  uploadDirectoryName,
+} from "./songs.files"
 import { CreateReferenceError, CreateReferenceInput, Reference } from "./songs.models"
-import { InsertReference } from "./songs.ports"
 
 export type CreateReferenceDeps = Readonly<{
-  putReferenceAudio: (
-    referenceId: string,
-    audio: Uint8Array,
-    contentType: string,
-  ) => Promise<number>
-  insertReference: InsertReference
-  removeReferenceAudio: (referenceId: string, contentType: string) => Promise<void>
+  putFile: PutFile
   now: () => string
   generateId: () => string
 }>
@@ -26,19 +26,19 @@ export const makeCreateReference =
       return err({ kind: "validation_error", pointer, code: issue?.code ?? "invalid" })
     }
 
-    const id = deps.generateId()
-    const byteLength = await deps.putReferenceAudio(id, input.audio, input.contentType)
-    try {
-      const reference = await deps.insertReference({
-        id,
-        filename: parsed.data.filename,
+    const referenceId = deps.generateId()
+    const stem = referenceStemFromUpload(parsed.data.filename)
+    const fileName = referenceFileName(stem, referenceId, input.contentType)
+    const byteLength = await deps.putFile(`${uploadDirectoryName}/${fileName}`, input.audio)
+    const parts = parseReferenceFileName(fileName)
+
+    return ok(
+      Object.freeze({
+        id: referenceId,
+        filename: parts?.displayName ?? fileName,
         contentType: input.contentType,
         byteLength,
         createdAt: deps.now(),
-      })
-      return ok(reference)
-    } catch (error: unknown) {
-      await deps.removeReferenceAudio(id, input.contentType).catch(() => undefined)
-      throw error
-    }
+      }),
+    )
   }

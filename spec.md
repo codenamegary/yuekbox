@@ -2,7 +2,7 @@
 
 Local web app. User types lyrics and a style, hits Generate, and hears a song.
 
-This is v1 plus reference covers. Later score editing and agent edits stay out of the product surface. The database still keeps the score text so those features can turn on later without a new generator.
+This is v1 plus reference covers. Later score editing and agent edits stay out of the product surface. Every successful Song keeps its ABC score on disk so those features can turn on later without a new generator.
 
 ## Language
 
@@ -15,7 +15,7 @@ The lyrics and style the user submitted. Stored on the Song.
 _Avoid_: Prompt, prompt JSON (except when talking to the YuE2 CLI)
 
 **Score**:
-ABC lead sheet YuE2 wrote for the Song. Stored on the Song. Hidden in v1.
+ABC lead sheet YuE2 wrote for the Song. Stored as `score.abc` in the Song's folder. Hidden in v1.
 _Avoid_: Plan, MIDI, sheet
 
 **Queue**:
@@ -253,134 +253,160 @@ Layout:
 ```text
 packages/server/src/
 ├── app.ts
-├── server.ts
+├── server.ts                 # env, real vendor adapters, boot recovery, listen, signals
+├── compose.ts                # media -> songs -> generation -> app wiring
 ├── db/
 │   ├── client.ts
 │   └── migrations/
-├── media/
-│   ├── audio.keys.ts
-│   └── audio.store.ts
+├── media/                    # pure file store; depends on nothing
+│   ├── media.ports.ts
+│   ├── media.adapters.ts
+│   └── media.assembly.ts
+├── generation/               # worker and vendor adapters; depends on songs
+│   ├── generation.models.ts
+│   ├── generation.ports.ts
+│   ├── generation.assembly.ts
+│   ├── generation.worker.ts
+│   ├── generation.yue2.adapters.ts
+│   ├── generation.ffmpeg.adapters.ts
+│   └── generation.sheetsage2.adapters.ts
 ├── shared/
 │   └── result.ts
-└── songs/
+└── songs/                    # lifecycle, routes, naming; depends on media
     ├── songs.models.ts
     ├── songs.ports.ts
+    ├── songs.files.ts        # pure key building, folder matching, display parsing
     ├── songs.create.usecase.ts
-    ├── songs.create.usecase.test.ts
     ├── songs.list.usecase.ts
-    ├── songs.list.usecase.test.ts
     ├── songs.get.usecase.ts
     ├── songs.delete.usecase.ts
-    ├── songs.media.adapters.ts
-    ├── songs.media.keys.ts
-    ├── songs.media.save.usecase.ts
+    ├── songs.complete.usecase.ts
+    ├── songs.audio.usecase.ts
+    ├── songs.reference.score.usecase.ts
+    ├── references.usecase.ts
     ├── songs.sqlite.adapters.ts
-    ├── songs.yue2.adapters.ts
-    ├── songs.ffmpeg.adapters.ts
     ├── songs.routes.ts
-    ├── songs.assembly.ts
-    └── songs.worker.ts
+    ├── references.routes.ts
+    └── songs.assembly.ts
 ```
 
-`server.ts` loads env, opens SQLite, assembles the songs slice, registers routes, starts the worker, listens, handles SIGTERM.
+`server.ts` loads env, builds the real vendor adapters, calls `composeServer`, runs boot recovery, listens, and handles SIGTERM. `compose.ts` builds media, then songs, then generation, then the app and the AI slice; the process-root wiring test calls the same function.
 
-Use cases are single-shot. The worker loop lives in `songs.worker.ts` (slice coordinator). Routes enqueue then return. The worker claims work.
+Use cases are single-shot. The worker loop lives in `generation.worker.ts`. Routes enqueue then return. The worker claims work.
+
+### Slices and dependency direction
+
+One direction only: `media` depends on nothing, `songs` depends on media, `generation` depends on songs. Nothing under `songs/` imports anything under `generation/`. Both edges are wired in `compose.ts`.
+
+- `media` is a pure file store over opaque keys. No tables, no domain rules.
+- `songs` owns the lifecycle table, the `/v1/songs` and `/v1/references` routes, file naming and folder discovery, upload to `temp/`, the reference move at create time, audio streaming, and folder removal on delete. It exposes route-facing methods plus the capabilities record the worker consumes.
+- `generation` owns the worker loop plus the yue2, ffmpeg, and sheetsage2 adapters. It reaches songs only through the capabilities record.
+- `wake` (`() => void`) starts the worker. `compose.ts` passes it to the songs POST route and the AI slice. `/v1/status` reads queue depth from songs and `isBusy` from the generation worker.
 
 ### Ports
 
+Media is a set of atomic ports:
+
 ```text
-InsertSong
-FindSongById
-ListSongs
-InsertSongAudio
-FindSongAudio
-SaveSongAudio
-ListSongAudio
-ListReferenceAudio
-MarkSongRunning
-MarkSongComplete
-MarkSongFailed
-ClaimNextQueuedSong
-EncodeFlacToMp3
-RunYue2Generate
+MakeDirectory
+PutFile
+StatFile
+ReadFile
+OpenFileRange
+MoveFile
+RemoveFile
+RemoveDirectory
+FindFiles
 ```
 
-Media is a set of atomic ports: `putAudio`, `statAudio`, `readAudio`, `openAudioRange`,
-`moveAudio`, `removeAudio`, `listMediaFiles`, and `audioPath`, keyed by `<role>/<id><ext>`.
-Files live under `MEDIA_DIR`. Use cases pass ids; the assembly binds them to keys. Nothing else
-touches the filesystem.
+`FindFiles` is a glob over `/`-separated segments with `*` per segment. There is no `**`, and `..` is rejected. Songs uses it to find a folder (`*_<songId>`), a reference file (`<folder>/references/*`), and an upload (`temp/*_<referenceId>.*`). `StatFile` returns `{ path, byteLength }`; it is the only port that hands out a real path, because the transcribe adapter shells out to Python with it. Everything else stays keyed.
 
-`RunYue2Generate` takes `{ lyrics, style, seed, outputDir }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter shells out to the YuE2 venv. It does not import Python.
+Songs exposes these capabilities to generation:
+
+```text
+ClaimNextQueuedSong
+MarkSongRunning
+MarkSongStage
+MarkSongProgress
+MarkSongFailed
+FindReferenceBySongId
+SaveReferenceScore
+CompleteSong
+```
+
+Generation's own ports:
+
+```text
+RunYue2Generate
+RunTranscribe
+EncodeFlacToMp3
+CreateTempDir
+RemoveTempDir
+```
+
+`RunYue2Generate` takes `{ lyrics, style, seed, cot, abc, outputDir, onStage, onProgress }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter shells out to the YuE2 venv. It does not import Python.
 
 `EncodeFlacToMp3` takes a FLAC path and returns MP3 `Uint8Array`.
+
+`CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the folder, then marks the row complete. If the row update fails it removes those files and rethrows.
 
 ### SQLite
 
 WAL mode. Busy timeout set. File path from env, default `packages/server/data/yuekbox.sqlite`.
 
-Tables hold metadata only. Audio bytes live on disk, so list queries never touch them:
+One table holds lifecycle state. Media lives on disk, so list queries never touch it:
 
 **songs**
 
 ```text
-id                text pk
-status            text not null
-stage             text null
-lyrics            text not null
-style             text not null
-seed              integer not null
-cot               text not null default 'full'
-score_abc         text null
-duration_seconds  real null
-truncated_abc     integer null
+id                 text pk
+status             text not null
+stage              text null
+stage_completed    integer null
+stage_total        integer null
+lyrics             text not null
+style              text not null
+seed               integer not null
+cot                text not null default 'full'
+duration_seconds   real null
+truncated_abc      integer null
 truncated_semantic integer null
-error_detail      text null
-created_at        text not null
-updated_at        text not null
-completed_at      text null
+error_detail       text null
+created_at         text not null
+updated_at         text not null
+completed_at       text null
 ```
 
-**song_audio**
+`ai_config` is unchanged. There is no `song_audio` table, no `references` table, and no `score_abc` column. Since the local library was wiped, the schema is a single fresh `0000_init` migration with no backfill and no legacy read path.
+
+### Disk layout
 
 ```text
-song_id           text pk references songs(id) on delete cascade
-byte_length       integer not null
-content_type      text not null   -- always audio/mpeg in v1
+<MEDIA_DIR>/<TITLE>_<SONG_ID>/
+  generated_<SONG_ID>.mp3
+  score.abc
+  reference_score.abc
+  references/<uploaded>_<ulid>.<ext>    optional
+<MEDIA_DIR>/temp/<uploaded>_<ulid>.<ext>
 ```
 
-File: `MEDIA_DIR/songs/<slug>_<song_id>.mp3`, where the slug is the first sung lyric line (section tags stripped, lowercased, hyphenated, 60 chars max, `untitled` when nothing is left).
+- `TITLE` is the first sung lyric line slugged the old way: section tags stripped, lowercased, hyphenated, 60 chars max, `untitled` when nothing is left.
+- A Song folder is found by scanning for `*_<song_id>`. No path is stored anywhere.
+- The folder is created at create time, so even a freeform Song owns one from birth.
+- Uploads land in `temp/`. Creating a Song with a `referenceId` moves the file into the Song's `references/` directory. Nothing is renamed after that.
+- The uploaded name keeps its case, spaces, and unicode; path separators and control characters become `-`, the stem is capped at 120 chars, and the extension comes from the content type. The trailing `_<ulid>` is the Reference id; display names strip it (and add back the extension).
+- `reference_score.abc` is written right after transcription. `score.abc` is written at completion. `visualization.js` is a reserved name for a future feature; nothing reads or writes it yet.
 
-**references**
+There is no purge job, no boot reconcile, and no rename step. Missing files surface lazily: the audio route stats the file and 404s, transcription fails before the script spawns, and `GET /v1/songs/:id` omits `scoreAbc` when the file is gone.
 
-```text
-id                text pk
-song_id           text null references songs(id) on delete cascade
-filename          text not null
-content_type      text not null
-byte_length       integer not null
-score_abc         text null       -- melody-only ABC after transcription
-created_at        text not null
-```
+Writes go to `<path>.tmp`, then rename onto the final path. Deletes remove the row and the folder in parallel; either side tolerating a failure is fine, an orphan folder is harmless and a later read just reports the file as missing.
 
-File: `MEDIA_DIR/references/<id><ext>` at upload, extension derived from `content_type`. Once the Song completes, the worker renames it to `MEDIA_DIR/references/<slug>_<id><ext>` so both files share the song's prefix. A failed rename is logged, never fatal.
-
-Media file names end with `_<id><ext>` or `<id><ext>`. `parseMediaKey` extracts the role and id from any key, so reconcile matches files to rows by id and does not care which shape a file uses. Temp leftovers (`<name>.tmp`) do not parse and are unlinked on the next boot.
-
-Uploads start unattached (`song_id` null). Creating a Song with `referenceId` attaches it.
-Unattached References older than 24 hours are purged on boot.
-
-Drizzle schema plus SQL migrations. `db:generate` requires `--name`.
-
-Writes go to `<path>.tmp`, then rename onto the final path, then commit the row. A failed rename or
-row commit removes the temp or final file. Deletes remove the row first, then unlink the file.
-Crashes can leave orphan files, never a row pointing at a missing file.
-
-On process start: any row with `status = running` becomes `failed` with `errorDetail = "interrupted"`. The GPU job does not resume. Then the media tree reconciles against the tables: files with no row are unlinked, a complete Song whose audio file is missing becomes `failed` with `errorDetail = "audio file missing on disk"`, and missing Reference files are logged; those Songs fail at transcription with a clear detail.
+On process start, one recovery runs: any row with `status = running` becomes `failed` with `errorDetail = "interrupted"`. The GPU job does not resume.
 
 ### Generate path
 
-1. `POST /v1/songs` validates body, inserts `queued`, returns `201` and the Song JSON.
-2. Route fires `void worker.kick()`.
+1. `POST /v1/songs` validates body, inserts `queued`, creates the Song folder, returns `201` and the Song JSON.
+2. Route calls `wake()`.
 3. Worker claims the oldest queued Song, sets `running` and `stage = plan`.
 4. Adapter writes a temp request JSON and runs:
 
@@ -398,8 +424,8 @@ On process start: any row with `status = running` becomes `failed` with `errorDe
 CLI flags must match the installed `yue2` parser. If the module form fails, call the venv `yue2` script with the same flags.
 
 5. Worker updates `stage` when stderr progress names a known stage. If parsing fails, leave the stage until done. Status stays `running`.
-6. If the Song has a Reference, transcribe it before generation. Run `<sheetsage2-python> <kit>/skills/yue2-music/scripts/transcribe.py <MEDIA_DIR>/references/<id><ext> --output <tmp>/transcribe --task melody-full --device cuda --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`, read `score.abc`, store it on the Reference, then generate with `cot = melody` and the ABC in the request JSON. A missing file fails the Song before the script spawns; any other failure fails the Song.
-7. On success, read `audio.flac`. Encode MP3. Write it to `MEDIA_DIR/songs/<slug>_<song id>.mp3` and insert the `song_audio` row. Rename the attached Reference file to `<slug>_<reference id><ext>`. Set `score_abc` from `score.abc` if present. Mark `complete`. Delete the temp dir (FLAC does not stay on disk).
+6. If the Song has a Reference, transcribe it before generation. Run `<sheetsage2-python> <kit>/skills/yue2-music/scripts/transcribe.py <MEDIA_DIR>/<TITLE>_<SONG_ID>/references/<name>_<ulid>.<ext> --output <tmp>/transcribe --task melody-full --device cuda --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`, read `score.abc`, write it to `reference_score.abc` in the Song folder, then generate with `cot = melody` and the ABC in the request JSON. A missing Reference file fails the Song before the script spawns; any other failure fails the Song.
+7. On success, read `audio.flac`. Encode MP3. `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the Song folder and marks the row `complete` with `durationSeconds` and the truncation flags. Delete the temp dir (FLAC does not stay on disk).
 8. On failure, mark `failed`, store a short `errorDetail`, delete the temp dir.
 9. Claim the next queued Song.
 
@@ -448,19 +474,24 @@ bun:test. Zero mocks. Inline stub ports.
 Cover at least:
 
 - Create returns a queued Song and does not call YuE2 (route/worker boundary).
+- Create writes the Song folder, moves an upload into `references/`, and rolls back the row and folder when the move fails.
+- Create rejects a missing upload with `reference_unavailable` on `/referenceId`.
 - Create rejects empty lyrics and empty style.
-- Get missing id is not-found.
-- List does not include audio bytes.
-- Complete path with stub `RunYue2Generate` + stub `EncodeFlacToMp3` writes the media file and `complete`.
-- Encode failure marks `failed` and leaves `song_audio` empty.
-- Saving the media unlinks the file when the row commit fails.
-- Media keys slug the first lyric line and parse both name shapes back to the id.
-- `GET /v1/songs/:id/audio` serves a range from a multi-megabyte file without reading it whole, and still serves a bare id file.
-- Deleting a Song unlinks its media; a stale purge unlinks each deleted Reference file.
+- Get missing id is not-found; Get fills `scoreAbc` and the reference summary from disk.
+- List does not include media or per-item disk reads.
+- Complete path with stub `RunYue2Generate` + stub `EncodeFlacToMp3` writes `generated_<ID>.mp3` and `score.abc`, then marks `complete`.
+- A failed row update after completion removes the files it just wrote.
+- Encode failure marks `failed` and writes nothing.
+- `songs.files.ts` slugs the first lyric line, builds every key, and parses folder and reference names back to their ids.
+- `media.find` matches segments, returns files and directories, and rejects `..`.
+- `GET /v1/songs/:id/audio` serves a range from a multi-megabyte file in the folder, 416s an unsatisfiable range, and 404s when the file is gone.
 - Transcribe points the script at the stored path and fails before spawning when the file is missing.
-- Reconcile unlinks orphans and fails a complete Song whose media file is missing.
+- Deleting a Song removes the row and the folder; a folder failure is logged, not fatal.
 - Claim skips `running` and `complete`.
 - Boot recovery: `running` becomes `failed`.
+- One process-root wiring test: in-memory database, temp `MEDIA_DIR`, stubbed vendor ports, driving upload, create, complete, ranged stream, and delete through the real `composeServer`.
+
+Fixture helpers in `songs/songs.fixtures.ts` build song rows, a capabilities stub, and files under a temp `MEDIA_DIR`.
 
 No GPU in unit tests. No real ffmpeg in unit tests.
 
@@ -585,16 +616,17 @@ new generation starts the moment playback begins.
 | YuE2 OOM or non-zero exit | Song `failed`, detail from stderr tail |
 | Truncation | Song `complete`, `truncated` flags true |
 | Server crash mid-run | On boot, that Song `failed` |
-| Complete Song's media file missing at boot | Song `failed`, detail `audio file missing on disk` |
-| Reference's media file missing | Song fails at transcription with a clear detail |
+| Complete Song's audio file missing | Audio route 404s |
+| Complete Song's `score.abc` missing | `scoreAbc` omitted from `GET /v1/songs/:id` |
+| Reference's media file missing | Song fails before transcription spawns, detail `reference audio is missing` |
 
 ## Later (not v1)
 
-Unlock by revealing data already in SQLite:
+Unlock by reading files already on disk:
 
 1. Show and download `scoreAbc`.
 2. Re-generate from a stored score (`cot=full` plus `abc`).
 3. Chord-only edits.
 4. Covers via SheetSage2 in a second Python env.
 
-The v1 UI must not block those. Keep `score_abc` on every successful Song.
+The v1 UI must not block those. Keep `score.abc` in every successful Song's folder.

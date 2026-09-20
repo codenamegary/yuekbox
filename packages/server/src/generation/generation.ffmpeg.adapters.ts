@@ -1,6 +1,6 @@
 import { err, ok, Result } from "../shared/result"
-import { EncodeSongError } from "./songs.models"
-import { EncodeFlacToMp3 } from "./songs.ports"
+import { EncodeSongError } from "./generation.models"
+import { EncodeFlacToMp3 } from "./generation.ports"
 
 export type FfmpegAdapterEnv = Readonly<{
   ffmpegBin: string

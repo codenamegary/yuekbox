@@ -1,19 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { PROBLEM_TYPES } from "contracts/http/error"
-import { SongSchema } from "contracts/http/songs"
+import { CreateSongBody, SongSchema } from "contracts/http/songs"
 import { Status } from "contracts/http/status"
 import { buildApp, AppDeps } from "../app"
-import { err, ok } from "../shared/result"
-import { SongsSlice } from "../songs/songs.assembly"
-import { Song } from "../songs/songs.models"
+import { ok } from "../shared/result"
+import { makeSongsSliceFixture, songFixture } from "../songs/songs.fixtures"
 import { openDatabase } from "../db/client"
 import { makeAiConfigStore } from "./ai.config.store"
 import { AiSlice } from "./ai.models"
 import { assembleAiSlice } from "./ai.slice"
 import { chatCompletion, listModels } from "./ai.openai"
 
-const makeApp = (deps: Omit<AppDeps, "referenceMaxBytes">) =>
-  buildApp({ referenceMaxBytes: 1024, ...deps })
+const makeApp = (deps: Omit<AppDeps, "referenceMaxBytes" | "wake">, wake: () => void = () => {}) =>
+  buildApp({ referenceMaxBytes: 1024, wake, ...deps })
 
 const statusFixture: Status = Object.freeze({
   version: "0.1.0",
@@ -77,55 +76,19 @@ const startFakeOpenAI = () => {
   }
 }
 
-const songsSlice = (kicks: number[] = []): SongsSlice => ({
-  createSong: async (body) =>
-    ok({
-      id: "01J8K3R4P9ABCDEFGHJKMNPQRS",
-      status: "queued",
-      stage: null,
-      stageCompleted: null,
-      stageTotal: null,
-      lyrics: body.lyrics,
-      style: body.style,
-      seed: 1,
-      cot: "full",
-      reference: null,
-      scoreAbc: null,
-      durationSeconds: null,
-      truncatedAbc: null,
-      truncatedSemantic: null,
-      errorDetail: null,
-      createdAt: "2026-09-19T00:00:00.000Z",
-      updatedAt: "2026-09-19T00:00:00.000Z",
-      completedAt: null,
-    } satisfies Song),
-  listSongs: async () =>
-    ok({ items: [], limit: 20, nextCursor: null, previousCursor: null, count: 0 }),
-  getSong: async () => err({ kind: "not_found" }),
-  deleteSong: async () => err({ kind: "not_found" }),
-  getSongAudio: async () => err({ kind: "not_found" }),
-  createReference: async () => err({ kind: "validation_error", pointer: "/", code: "unused" }),
-  recoverInterruptedSongs: async () => 0,
-  reconcileMedia: async () => ({
-    removedOrphanFiles: 0,
-    failedSongIds: [],
-    missingReferenceCount: 0,
-  }),
-  purgeStaleReferences: async () => 0,
-  queueDepth: async () => 0,
-  worker: {
-    kick: () => kicks.push(1),
-    drain: async () => {},
-    isBusy: () => false,
-  },
-})
+const songsSlice = (): ReturnType<typeof makeSongsSliceFixture> =>
+  makeSongsSliceFixture({
+    createSong: async (body: CreateSongBody) =>
+      ok(songFixture({ lyrics: body.lyrics, style: body.style })),
+  })
 
-const buildAi = (): AiSlice =>
+const buildAi = (wake: () => void = () => {}): AiSlice =>
   assembleAiSlice({
     configStore: makeAiConfigStore(openDatabase({ path: ":memory:" }).db),
     chat: chatCompletion,
     listModels,
-    songs: songsSlice(),
+    createSong: songsSlice().createSong,
+    wake,
   })
 
 describe("ai routes", () => {
@@ -300,19 +263,15 @@ describe("ai routes", () => {
     const fake = startFakeOpenAI()
     try {
       const kicks: number[] = []
-      const songs = songsSlice(kicks)
-      const ai = assembleAiSlice({
-        configStore: makeAiConfigStore(openDatabase({ path: ":memory:" }).db),
-        chat: chatCompletion,
-        listModels,
-        songs,
+      const ai = buildAi(() => {
+        kicks.push(1)
       })
       await ai.saveConfig({
         enabled: true,
         style: { baseUrl: fake.baseUrl, apiKey: "sk-test", model: "gpt-4o" },
         lyrics: { baseUrl: fake.baseUrl, apiKey: "sk-test", model: "gpt-4o" },
       })
-      const app = makeApp({ songs, ai, status: async () => statusFixture })
+      const app = makeApp({ songs: songsSlice(), ai, status: async () => statusFixture })
       const response = await app.inject({ method: "POST", url: "/v1/ai/songs/random" })
       expect(response.statusCode).toBe(201)
       const song = SongSchema.parse(response.json())

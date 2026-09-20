@@ -1,78 +1,62 @@
 import { expect, test } from "bun:test"
-import { makeCreateReference, CreateReferenceDeps } from "./references.usecase"
-import { Reference } from "./songs.models"
+import { makeCreateReference } from "./references.usecase"
 
 const referenceId = "01J8K3R4P9ABCDEFGHJKMNPQRT"
 const now = "2026-09-17T04:00:00.000Z"
 
-const toReference = (byteLength: number): Reference =>
-  Object.freeze({
-    id: referenceId,
-    songId: null,
-    filename: "demo-song.mp3",
-    contentType: "audio/mpeg",
-    byteLength,
-    audioPath: `/media/references/${referenceId}.mp3`,
-    scoreAbc: null,
-    createdAt: now,
+const makeHarness = () => {
+  const puts: Array<Readonly<{ key: string; byteLength: number }>> = []
+  const createReference = makeCreateReference({
+    putFile: async (key, bytes) => {
+      puts.push({ key, byteLength: bytes.byteLength })
+      return bytes.byteLength
+    },
+    now: () => now,
+    generateId: () => referenceId,
   })
+  return { createReference, puts }
+}
 
-const makeDeps = (calls: string[], failInsert = false): CreateReferenceDeps => ({
-  putReferenceAudio: async (_referenceId, audio) => {
-    calls.push("put")
-    return audio.byteLength
-  },
-  insertReference: async (reference) => {
-    calls.push(`insert:${reference.byteLength}:${reference.contentType}`)
-    if (failInsert) throw new Error("row commit failed")
-    return toReference(reference.byteLength)
-  },
-  removeReferenceAudio: async () => {
-    calls.push("remove")
-  },
-  now: () => now,
-  generateId: () => referenceId,
-})
+test("upload writes to temp and returns the reference derived from the file name", async () => {
+  const harness = makeHarness()
 
-test("create writes the file first, then commits the row", async () => {
-  const calls: string[] = []
-  const createReference = makeCreateReference(makeDeps(calls))
-
-  const result = await createReference({
-    filename: "demo-song.mp3",
+  const result = await harness.createReference({
+    filename: "Demo Song.mp3",
     contentType: "audio/mpeg",
     audio: new Uint8Array([1, 2, 3, 4]),
   })
 
   expect(result.ok).toBe(true)
   if (!result.ok) return
-  expect(result.value.id).toBe(referenceId)
-  expect(result.value.byteLength).toBe(4)
-  expect(calls).toEqual(["put", "insert:4:audio/mpeg"])
-})
-
-test("create unlinks the file when the row commit fails", async () => {
-  const calls: string[] = []
-  const createReference = makeCreateReference(makeDeps(calls, true))
-
-  const failure = await createReference({
-    filename: "demo-song.mp3",
+  expect(result.value).toEqual({
+    id: referenceId,
+    filename: "Demo Song.mp3",
     contentType: "audio/mpeg",
-    audio: new Uint8Array([1, 2]),
-  }).then(
-    () => "resolved",
-    (error: unknown) => (error instanceof Error ? error.message : String(error)),
-  )
-
-  expect(failure).toBe("row commit failed")
-  expect(calls).toEqual(["put", "insert:2:audio/mpeg", "remove"])
+    byteLength: 4,
+    createdAt: now,
+  })
+  expect(harness.puts).toEqual([{ key: `temp/Demo Song_${referenceId}.mp3`, byteLength: 4 }])
 })
 
-test("create rejects an invalid filename before writing anything", async () => {
-  const calls: string[] = []
-  const createReference = makeCreateReference(makeDeps(calls))
+test("upload makes unsafe characters safe and uses the canonical extension", async () => {
+  const harness = makeHarness()
 
-  const result = await createReference({
+  const result = await harness.createReference({
+    filename: "weird: name?.wav",
+    contentType: "audio/flac",
+    audio: new Uint8Array([1, 2]),
+  })
+
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(harness.puts[0]?.key).toBe(`temp/weird- name-_${referenceId}.flac`)
+  expect(result.value.filename).toBe("weird- name-.flac")
+})
+
+test("upload rejects an invalid filename before writing anything", async () => {
+  const harness = makeHarness()
+
+  const result = await harness.createReference({
     filename: "../demo.mp3",
     contentType: "audio/mpeg",
     audio: new Uint8Array([1, 2, 3]),
@@ -81,5 +65,5 @@ test("create rejects an invalid filename before writing anything", async () => {
   expect(result.ok).toBe(false)
   if (result.ok) return
   expect(result.error.kind).toBe("validation_error")
-  expect(calls).toEqual([])
+  expect(harness.puts).toEqual([])
 })

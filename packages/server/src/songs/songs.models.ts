@@ -34,22 +34,11 @@ export type NewSong = Readonly<{
   style: string
   seed: number
   cot: SongCot
-  referenceId: string | null
   createdAt: string
   updatedAt: string
 }>
 
 export type Reference = Readonly<{
-  id: string
-  songId: string | null
-  filename: string
-  contentType: string
-  byteLength: number
-  scoreAbc: string | null
-  createdAt: string
-}>
-
-export type NewReference = Readonly<{
   id: string
   filename: string
   contentType: string
@@ -69,8 +58,6 @@ export type CreateReferenceError = Readonly<{
   code: string
 }>
 
-export type TranscribeError = Readonly<{ kind: "transcribe_failed"; detail: string }>
-
 export const referenceUnavailableCode = "reference_unavailable"
 
 export type TruncatedFlags = Readonly<{
@@ -82,6 +69,19 @@ export type StageProgressUpdate = Readonly<{
   stage: SongStage
   completed: number
   total: number
+}>
+
+export type TranscribeReference = Readonly<{
+  referenceId: string
+  audioPath: string | null
+}>
+
+export type CompleteSongInput = Readonly<{
+  songId: string
+  mp3: Uint8Array
+  scoreAbc: string | null
+  durationSeconds: number
+  truncated: TruncatedFlags
 }>
 
 export type SongsPage = Readonly<{
@@ -108,10 +108,10 @@ export type SongAudioLookupError = Readonly<{ kind: "not_found" } | { kind: "not
 
 export type ByteRange = Readonly<{ start: number; end: number }>
 
-export type GenerateSongError =
-  | Readonly<{ kind: "yue2_failed"; detail: string }>
-  | Readonly<{ kind: "yue2_missing"; detail: string }>
-
-export type EncodeSongError = Readonly<{ kind: "encode_failed"; detail: string }>
+export type SongAudioPayload = Readonly<{
+  contentType: string
+  byteLength: number
+  read: (range: ByteRange | null) => Promise<Uint8Array>
+}>
 
 export const interruptedErrorDetail = "interrupted"

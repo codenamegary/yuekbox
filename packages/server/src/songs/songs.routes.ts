@@ -20,6 +20,7 @@ import { ByteRange, Song } from "./songs.models"
 
 export type SongsRoutesOptions = Readonly<{
   songs: SongsSlice
+  wake: () => void
 }>
 
 const parseRangeHeader = (
@@ -76,7 +77,7 @@ export const toSongResponse = (song: Song, options: SongResponseOptions = {}) =>
   })
 
 export const songsRoutes: FastifyPluginAsync<SongsRoutesOptions> = async (fastify, options) => {
-  const { songs } = options
+  const { songs, wake } = options
 
   fastify.post(songsPath, async (request, reply) => {
     const parsed = CreateSongBodySchema.safeParse(request.body)
@@ -104,7 +105,7 @@ export const songsRoutes: FastifyPluginAsync<SongsRoutesOptions> = async (fastif
       )
     }
 
-    songs.worker.kick()
+    wake()
 
     reply.header("location", songPath(result.value.id))
     return reply.status(201).send(toSongResponse(result.value))

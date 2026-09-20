@@ -1,35 +1,32 @@
-import { songTitleFromLyrics } from "./songs.media.keys"
-import { Song, SongCot, StageProgressUpdate } from "./songs.models"
+import { Song, SongCot, StageProgressUpdate } from "../songs/songs.models"
 import {
   ClaimNextQueuedSong,
-  CreateTempDir,
-  EncodeFlacToMp3,
-  FindReferenceAudioBySongId,
-  MarkSongComplete,
+  CompleteSong,
+  FindReferenceBySongId,
   MarkSongFailed,
   MarkSongProgress,
   MarkSongRunning,
   MarkSongStage,
+  SaveReferenceScore,
+} from "../songs/songs.ports"
+import {
+  CreateTempDir,
+  EncodeFlacToMp3,
   RemoveTempDir,
-  RenameReferenceAudio,
   RunTranscribe,
   RunYue2Generate,
-  SaveReferenceScore,
-  SaveSongAudio,
-} from "./songs.ports"
+} from "./generation.ports"
 
 export type SongWorkerDeps = Readonly<{
   claimNextQueuedSong: ClaimNextQueuedSong
   markSongRunning: MarkSongRunning
   markSongStage: MarkSongStage
   markSongProgress: MarkSongProgress
-  markSongComplete: MarkSongComplete
   markSongFailed: MarkSongFailed
-  saveSongAudio: SaveSongAudio
-  renameReferenceAudio: RenameReferenceAudio
-  findReferenceAudioBySongId: FindReferenceAudioBySongId
-  runTranscribe: RunTranscribe
+  findReferenceBySongId: FindReferenceBySongId
   saveReferenceScore: SaveReferenceScore
+  completeSong: CompleteSong
+  runTranscribe: RunTranscribe
   runYue2Generate: RunYue2Generate
   encodeFlacToMp3: EncodeFlacToMp3
   createTempDir: CreateTempDir
@@ -38,12 +35,14 @@ export type SongWorkerDeps = Readonly<{
 }>
 
 export type SongWorker = Readonly<{
-  kick: () => void
+  wake: () => void
   drain: () => Promise<void>
   isBusy: () => boolean
 }>
 
 const errorDetailLimit = 2000
+
+const missingReferenceDetail = "reference audio is missing"
 
 const toErrorDetail = (value: string): string =>
   value.trim().slice(0, errorDetailLimit) || "unknown error"
@@ -68,22 +67,25 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
     }
 
     try {
-      const title = songTitleFromLyrics(song.lyrics)
-      const referenceAudio = await deps.findReferenceAudioBySongId(song.id)
+      const reference = await deps.findReferenceBySongId(song.id)
       let cot: SongCot = "full"
       let abc: string | null = null
 
-      if (referenceAudio !== null) {
+      if (reference !== null) {
+        if (reference.audioPath === null) {
+          await deps.markSongFailed(song.id, missingReferenceDetail)
+          return
+        }
         await deps.markSongStage(song.id, "transcribe")
         const transcribed = await deps.runTranscribe({
-          audioPath: referenceAudio.audioPath,
+          audioPath: reference.audioPath,
           outputDir: tempDir,
         })
         if (!transcribed.ok) {
           await deps.markSongFailed(song.id, toErrorDetail(transcribed.error.detail))
           return
         }
-        await deps.saveReferenceScore(referenceAudio.reference.id, transcribed.value.scoreAbc)
+        await deps.saveReferenceScore(song.id, transcribed.value.scoreAbc)
         cot = "melody"
         abc = transcribed.value.scoreAbc
       }
@@ -113,27 +115,13 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
         return
       }
 
-      await deps.saveSongAudio({
+      await deps.completeSong({
         songId: song.id,
         mp3: encoded.value,
-        contentType: "audio/mpeg",
-        title,
-      })
-      await deps.markSongComplete({
-        songId: song.id,
         scoreAbc: generated.value.scoreAbc,
         durationSeconds: generated.value.durationSeconds,
         truncated: generated.value.truncated,
       })
-      if (referenceAudio !== null) {
-        await deps
-          .renameReferenceAudio({
-            referenceId: referenceAudio.reference.id,
-            contentType: referenceAudio.reference.contentType,
-            title,
-          })
-          .catch((error) => deps.logError("reference rename failed", error))
-      }
     } finally {
       await deps
         .removeTempDir(tempDir)
@@ -170,7 +158,7 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
   }
 
   return {
-    kick: () => {
+    wake: () => {
       state.chain = state.chain
         .then(runLoop)
         .catch((error) => deps.logError("worker loop failed", error))

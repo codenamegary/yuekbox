@@ -9,6 +9,7 @@ import { songsRoutes } from "./songs/songs.routes"
 
 export type AppDeps = Readonly<{
   songs: SongsSlice
+  wake: () => void
   referenceMaxBytes: number
   ai: AiSlice
   status: () => Promise<Status>
@@ -79,7 +80,7 @@ export const buildApp = (deps: AppDeps): FastifyInstance => {
       }),
   )
 
-  app.register(songsRoutes, { songs: deps.songs })
+  app.register(songsRoutes, { songs: deps.songs, wake: deps.wake })
   app.register(referencesRoutes, { songs: deps.songs })
   app.register(aiRoutes, { ai: deps.ai })
 

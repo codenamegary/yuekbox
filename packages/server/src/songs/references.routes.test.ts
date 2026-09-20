@@ -1,77 +1,23 @@
 import { expect, test } from "bun:test"
 import { PROBLEM_TYPES } from "contracts/http/error"
 import { ReferenceSchema } from "contracts/http/references"
-import { AiSlice } from "../ai/ai.models"
+import { unusedAiFixture } from "../ai/ai.fixtures"
 import { buildApp } from "../app"
 import { ok } from "../shared/result"
-import { CreateReferenceInput, Reference } from "./songs.models"
+import { makeSongsSliceFixture, referenceFixture, songFixture } from "./songs.fixtures"
 import { SongsSlice } from "./songs.assembly"
+import { CreateReferenceInput } from "./songs.models"
 
 const referenceId = "01J8K3R4P9ABCDEFGHJKMNPQRT"
-const songId = "01J8K3R4P9ABCDEFGHJKMNPQRS"
 
-const reference: Reference = Object.freeze({
-  id: referenceId,
-  songId: null,
-  filename: "demo-song.mp3",
-  contentType: "audio/mpeg",
-  byteLength: 4,
-  scoreAbc: null,
-  createdAt: "2026-09-17T04:00:00.000Z",
-})
+const reference = referenceFixture()
 
-const makeSlice = (
-  overrides: Partial<SongsSlice> = {},
-  uploaded: CreateReferenceInput[] = [],
-): SongsSlice => ({
-  createSong: async () => ok(null as never),
-  createReference: async (input) => {
-    uploaded.push(input)
-    return ok(reference)
-  },
-  listSongs: async () =>
-    ok({ items: [], limit: 20, nextCursor: null, previousCursor: null, count: 0 }),
-  getSong: async () => ok(null as never),
-  deleteSong: async () => ok(null),
-  getSongAudio: async () =>
-    ok({ contentType: "audio/mpeg", byteLength: 0, read: async () => new Uint8Array() }),
-  recoverInterruptedSongs: async () => 0,
-  reconcileMedia: async () => ({
-    removedOrphanFiles: 0,
-    failedSongIds: [],
-    missingReferenceCount: 0,
-  }),
-  purgeStaleReferences: async () => 0,
-  queueDepth: async () => 0,
-  worker: { kick: () => {}, drain: async () => {}, isBusy: () => false },
-  ...overrides,
-})
-
-/** These tests exercise reference routes, so every AI port throws if it is ever called. */
-const unusedAi: AiSlice = {
-  listPresets: () => [],
-  getConfig: async () => {
-    throw new Error("references tests never call the AI slice")
-  },
-  saveConfig: async () => {
-    throw new Error("references tests never call the AI slice")
-  },
-  fetchModels: async () => {
-    throw new Error("references tests never call the AI slice")
-  },
-  enhance: async () => {
-    throw new Error("references tests never call the AI slice")
-  },
-  randomSong: async () => {
-    throw new Error("references tests never call the AI slice")
-  },
-}
-
-const makeApp = (slice: SongsSlice) =>
+const makeApp = (songs: SongsSlice) =>
   buildApp({
-    songs: slice,
+    songs,
+    wake: () => {},
     referenceMaxBytes: 1024,
-    ai: unusedAi,
+    ai: unusedAiFixture(),
     status: async () => ({
       version: "0.1.0",
       state: "online",
@@ -86,7 +32,14 @@ const makeApp = (slice: SongsSlice) =>
 
 test("upload stores audio bytes with the filename and returns a reference", async () => {
   const uploaded: CreateReferenceInput[] = []
-  const app = makeApp(makeSlice({}, uploaded))
+  const app = makeApp(
+    makeSongsSliceFixture({
+      createReference: async (input) => {
+        uploaded.push(input)
+        return ok(reference)
+      },
+    }),
+  )
 
   const response = await app.inject({
     method: "POST",
@@ -110,7 +63,7 @@ test("upload stores audio bytes with the filename and returns a reference", asyn
 })
 
 test("upload rejects a filename with a path separator", async () => {
-  const app = makeApp(makeSlice())
+  const app = makeApp(makeSongsSliceFixture())
 
   const response = await app.inject({
     method: "POST",
@@ -124,7 +77,7 @@ test("upload rejects a filename with a path separator", async () => {
 })
 
 test("upload rejects an empty body", async () => {
-  const app = makeApp(makeSlice())
+  const app = makeApp(makeSongsSliceFixture())
 
   const response = await app.inject({
     method: "POST",
@@ -138,7 +91,7 @@ test("upload rejects an empty body", async () => {
 })
 
 test("upload rejects a non-audio content type", async () => {
-  const app = makeApp(makeSlice())
+  const app = makeApp(makeSongsSliceFixture())
 
   const response = await app.inject({
     method: "POST",
@@ -150,9 +103,9 @@ test("upload rejects a non-audio content type", async () => {
   expect(response.statusCode).toBe(415)
 })
 
-test("upload rejects a reference id that cannot attach", async () => {
+test("upload surfaces slice validation failures as problems", async () => {
   const app = makeApp(
-    makeSlice({
+    makeSongsSliceFixture({
       createReference: async () => ({
         ok: false,
         error: { kind: "validation_error", pointer: "/filename", code: "too_big" },
@@ -173,29 +126,17 @@ test("upload rejects a reference id that cannot attach", async () => {
 test("create forwards a reference id to the slice", async () => {
   const bodies: unknown[] = []
   const app = makeApp(
-    makeSlice({
+    makeSongsSliceFixture({
       createSong: async (body) => {
         bodies.push(body)
-        return ok({
-          id: songId,
-          status: "queued",
-          stage: null,
-          stageCompleted: null,
-          stageTotal: null,
-          lyrics: body.lyrics,
-          style: body.style,
-          seed: 1,
-          cot: "melody",
-          reference: { id: referenceId, filename: "demo-song.mp3" },
-          scoreAbc: null,
-          durationSeconds: null,
-          truncatedAbc: null,
-          truncatedSemantic: null,
-          errorDetail: null,
-          createdAt: "2026-09-17T04:00:00.000Z",
-          updatedAt: "2026-09-17T04:00:00.000Z",
-          completedAt: null,
-        })
+        return ok(
+          songFixture({
+            lyrics: body.lyrics,
+            style: body.style,
+            cot: "melody",
+            reference: { id: referenceId, filename: "demo-song.mp3" },
+          }),
+        )
       },
     }),
   )

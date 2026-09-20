@@ -1,68 +1,69 @@
 import { expect, test } from "bun:test"
-import { NewSong, Reference, Song } from "./songs.models"
-import { makeCreateSong } from "./songs.create.usecase"
+import { songFixture } from "./songs.fixtures"
+import { CreateSongDeps, makeCreateSong } from "./songs.create.usecase"
+import { NewSong, Song } from "./songs.models"
 
 const fixedSongId = "01J8K3R4P9ABCDEFGHJKMNPQRS"
 const referenceId = "01J8K3R4P9ABCDEFGHJKMNPQRT"
 
-const reference: Reference = Object.freeze({
-  id: referenceId,
-  songId: null,
-  filename: "demo-song.mp3",
-  contentType: "audio/mpeg",
-  byteLength: 3,
-  scoreAbc: null,
-  createdAt: "2026-09-17T04:00:00.000Z",
-})
-
 const toQueuedSong = (song: NewSong): Song =>
-  Object.freeze({
-    ...song,
-    status: "queued" as const,
-    stage: null,
-    stageCompleted: null,
-    stageTotal: null,
-    reference:
-      song.referenceId === null ? null : { id: song.referenceId, filename: "demo-song.mp3" },
-    scoreAbc: null,
-    durationSeconds: null,
-    truncatedAbc: null,
-    truncatedSemantic: null,
-    errorDetail: null,
-    completedAt: null,
+  songFixture({
+    id: song.id,
+    lyrics: song.lyrics,
+    style: song.style,
+    seed: song.seed,
+    cot: song.cot,
+    createdAt: song.createdAt,
+    updatedAt: song.updatedAt,
   })
 
-type HarnessOptions = Readonly<{
-  reference?: Reference | null
-  attach?: boolean
+type Harness = Readonly<{
+  deps: CreateSongDeps
+  inserted: NewSong[]
+  calls: string[]
 }>
 
-const makeDeps = (captured: NewSong[], deleted: string[], options: HarnessOptions = {}) => {
-  const findableReference = options.reference === undefined ? reference : options.reference
-  return {
-    insertSong: async (song: NewSong) => {
-      captured.push(song)
+const makeHarness = (
+  options: Readonly<{ uploads?: readonly string[]; failMove?: boolean }> = {},
+): Harness => {
+  const inserted: NewSong[] = []
+  const calls: string[] = []
+  const uploads = options.uploads ?? []
+
+  const deps: CreateSongDeps = {
+    insertSong: async (song) => {
+      inserted.push(song)
       return toQueuedSong(song)
     },
-    findReferenceById: async () => findableReference,
-    attachReferenceToSong: async () => options.attach ?? true,
-    findSongById: async (songId: string) => {
-      const song = captured.find((candidate) => candidate.id === songId)
-      return song === undefined ? null : toQueuedSong(song)
-    },
-    deleteSong: async (songId: string) => {
-      deleted.push(songId)
+    deleteSong: async (songId) => {
+      calls.push(`delete:${songId}`)
       return true
+    },
+    makeDirectory: async (key) => {
+      calls.push(`mkdir:${key}`)
+    },
+    moveFile: async (fromKey, toKey) => {
+      calls.push(`move:${fromKey}->${toKey}`)
+      if (options.failMove ?? false) throw new Error("disk full")
+    },
+    removeDirectory: async (key) => {
+      calls.push(`rmdir:${key}`)
+    },
+    find: async (pattern: string) => {
+      calls.push(`find:${pattern}`)
+      return uploads
     },
     now: () => "2026-09-17T04:00:00.000Z",
     generateId: () => fixedSongId,
     randomSeed: () => 424242,
   }
+
+  return { deps, inserted, calls }
 }
 
-test("create returns a queued Song with cot full and a generated seed", async () => {
-  const captured: NewSong[] = []
-  const createSong = makeCreateSong(makeDeps(captured, []))
+test("create inserts a queued song and makes its folder", async () => {
+  const harness = makeHarness()
+  const createSong = makeCreateSong(harness.deps)
 
   const result = await createSong({ lyrics: "hello", style: "warm piano pop" })
 
@@ -73,27 +74,30 @@ test("create returns a queued Song with cot full and a generated seed", async ()
   expect(result.value.seed).toBe(424242)
   expect(result.value.cot).toBe("full")
   expect(result.value.reference).toBeNull()
-  expect(captured).toHaveLength(1)
+  expect(harness.inserted).toHaveLength(1)
+  expect(harness.calls).toEqual([`mkdir:hello_${fixedSongId}`])
 })
 
-test("create with a reference attaches it and switches cot to melody", async () => {
-  const captured: NewSong[] = []
-  const createSong = makeCreateSong(makeDeps(captured, []))
+test("create moves an uploaded reference into the folder and returns its summary", async () => {
+  const harness = makeHarness({ uploads: [`temp/Demo Song_${referenceId}.mp3`] })
+  const createSong = makeCreateSong(harness.deps)
 
   const result = await createSong({ lyrics: "hello", style: "jazz", referenceId })
 
   expect(result.ok).toBe(true)
   if (!result.ok) return
   expect(result.value.cot).toBe("melody")
-  expect(result.value.reference).toEqual({ id: referenceId, filename: "demo-song.mp3" })
-  expect(captured[0]?.referenceId).toBe(referenceId)
-  expect(captured[0]?.cot).toBe("melody")
+  expect(result.value.reference).toEqual({ id: referenceId, filename: "Demo Song.mp3" })
+  expect(harness.calls).toEqual([
+    `find:temp/*_${referenceId}.*`,
+    `mkdir:hello_${fixedSongId}`,
+    `move:temp/Demo Song_${referenceId}.mp3->hello_${fixedSongId}/references/Demo Song_${referenceId}.mp3`,
+  ])
 })
 
-test("create rejects an unknown reference before inserting", async () => {
-  const captured: NewSong[] = []
-  const deleted: string[] = []
-  const createSong = makeCreateSong(makeDeps(captured, deleted, { reference: null }))
+test("create rejects a missing upload before inserting", async () => {
+  const harness = makeHarness()
+  const createSong = makeCreateSong(harness.deps)
 
   const result = await createSong({ lyrics: "hello", style: "jazz", referenceId })
 
@@ -101,40 +105,27 @@ test("create rejects an unknown reference before inserting", async () => {
   if (result.ok) return
   expect(result.error.pointer).toBe("/referenceId")
   expect(result.error.code).toBe("reference_unavailable")
-  expect(captured).toHaveLength(0)
-  expect(deleted).toHaveLength(0)
+  expect(harness.inserted).toHaveLength(0)
+  expect(harness.calls).toEqual([`find:temp/*_${referenceId}.*`])
 })
 
-test("create rejects a reference that already belongs to a song", async () => {
-  const captured: NewSong[] = []
-  const createSong = makeCreateSong(
-    makeDeps(captured, [], { reference: { ...reference, songId: "01J8K3R4P9ABCDEFGHJKMNPQRV" } }),
+test("create rolls back the row and the folder when the move fails", async () => {
+  const harness = makeHarness({ uploads: [`temp/demo_${referenceId}.mp3`], failMove: true })
+  const createSong = makeCreateSong(harness.deps)
+
+  const outcome = await createSong({ lyrics: "hello", style: "jazz", referenceId }).then(
+    () => "resolved",
+    (error: unknown) => (error instanceof Error ? error.message : String(error)),
   )
 
-  const result = await createSong({ lyrics: "hello", style: "jazz", referenceId })
-
-  expect(result.ok).toBe(false)
-  if (result.ok) return
-  expect(result.error.code).toBe("reference_unavailable")
-  expect(captured).toHaveLength(0)
-})
-
-test("create rolls back the song when the reference cannot attach", async () => {
-  const captured: NewSong[] = []
-  const deleted: string[] = []
-  const createSong = makeCreateSong(makeDeps(captured, deleted, { attach: false }))
-
-  const result = await createSong({ lyrics: "hello", style: "jazz", referenceId })
-
-  expect(result.ok).toBe(false)
-  if (result.ok) return
-  expect(result.error.code).toBe("reference_unavailable")
-  expect(captured).toHaveLength(1)
-  expect(deleted).toEqual([fixedSongId])
+  expect(outcome).toBe("disk full")
+  expect(harness.calls).toContain(`delete:${fixedSongId}`)
+  expect(harness.calls).toContain(`rmdir:hello_${fixedSongId}`)
 })
 
 test("create rejects empty and whitespace-only lyrics", async () => {
-  const createSong = makeCreateSong(makeDeps([], []))
+  const harness = makeHarness()
+  const createSong = makeCreateSong(harness.deps)
 
   const empty = await createSong({ lyrics: "", style: "warm piano pop" })
   const blank = await createSong({ lyrics: "   ", style: "warm piano pop" })
@@ -143,10 +134,12 @@ test("create rejects empty and whitespace-only lyrics", async () => {
   expect(blank.ok).toBe(false)
   if (empty.ok) return
   expect(empty.error.pointer).toBe("/lyrics")
+  expect(harness.calls).toEqual([])
 })
 
 test("create rejects empty and whitespace-only style", async () => {
-  const createSong = makeCreateSong(makeDeps([], []))
+  const harness = makeHarness()
+  const createSong = makeCreateSong(harness.deps)
 
   const empty = await createSong({ lyrics: "hello", style: "" })
   const blank = await createSong({ lyrics: "hello", style: "  " })
@@ -158,8 +151,8 @@ test("create rejects empty and whitespace-only style", async () => {
 })
 
 test("create keeps an explicit seed", async () => {
-  const captured: NewSong[] = []
-  const createSong = makeCreateSong(makeDeps(captured, []))
+  const harness = makeHarness()
+  const createSong = makeCreateSong(harness.deps)
 
   const result = await createSong({ lyrics: "hello", style: "pop", seed: 7 })
 
@@ -169,12 +162,12 @@ test("create keeps an explicit seed", async () => {
 })
 
 test("create trims lyrics and style before insert", async () => {
-  const captured: NewSong[] = []
-  const createSong = makeCreateSong(makeDeps(captured, []))
+  const harness = makeHarness()
+  const createSong = makeCreateSong(harness.deps)
 
   const result = await createSong({ lyrics: "  hello  ", style: "  pop  " })
 
   expect(result.ok).toBe(true)
-  expect(captured[0]?.lyrics).toBe("hello")
-  expect(captured[0]?.style).toBe("pop")
+  expect(harness.inserted[0]?.lyrics).toBe("hello")
+  expect(harness.inserted[0]?.style).toBe("pop")
 })

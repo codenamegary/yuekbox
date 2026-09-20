@@ -183,9 +183,9 @@ packages/contracts  Zod wire schemas, paths, RFC 7807 problems
 One worker claims the oldest `queued` Song, marks it `running`, and shells out to
 `python -m yue2 generate`. YuE2's stderr is parsed live: known stage names move the
 pips, numeric lines move the progress bar. Success means: encode the FLAC to MP3 with
-ffmpeg, store the blob and the ABC score in SQLite, mark it `complete`, nuke the temp
-dir. Failure stores a short stderr tail and marks it `failed`. If the server dies
-mid-run, the next boot confesses: `interrupted`.
+ffmpeg, write the MP3 and the ABC scores into the Song's own folder under `MEDIA_DIR`,
+mark it `complete`, nuke the temp dir. Failure stores a short stderr tail and marks it
+`failed`. If the server dies mid-run, the next boot confesses: `interrupted`.
 
 Songs move through `queued → running → complete | failed`, and while running they carry
 a `stage` (`plan`, `semantic`, `synthesize`, `decode`, `encode`) plus `stageProgress`
@@ -277,7 +277,7 @@ If a PR needs work, a maintainer will say so warmly and specifically.
 | `HOST` | `127.0.0.1` | Fastify bind address |
 | `PORT` | `8787` | Fastify port |
 | `SQLITE_PATH` | `./data/yuekbox.sqlite` | SQLite file (relative to `packages/server`) |
-| `MEDIA_DIR` | `./data/media` | Audio files on disk: `songs/<id>.mp3`, `references/<id><ext>` (relative to `packages/server`) |
+| `MEDIA_DIR` | `./data/media` | Per-Song folders: `<title>_<songId>/generated_<songId>.mp3`, `score.abc`, `reference_score.abc`, `references/<name>_<ulid>.<ext>`; uploads land in `temp/` (relative to `packages/server`) |
 | `YUE2_KIT` | four levels above `packages/server/src` | YuE root holding `models/` and `.venv/` |
 | `YUE2_PYTHON` | `$YUE2_KIT/.venv/bin/python` | Interpreter for `python -m yue2` |
 | `YUE2_GPU_BUDGET` | `16` | Passed to `yue2 generate --budget` (GiB) |

@@ -1,35 +1,28 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "81db9fcc-a276-4994-8dd8-cd74e05f0a9f",
+  "id": "2d9bbe13-c789-4e09-a044-97265c64af9c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "song_audio": {
-      "name": "song_audio",
+    "ai_config": {
+      "name": "ai_config",
       "columns": {
-        "song_id": {
-          "name": "song_id",
+        "id": {
+          "name": "id",
           "type": "text",
           "primaryKey": true,
           "notNull": true,
           "autoincrement": false
         },
-        "mp3": {
-          "name": "mp3",
-          "type": "blob",
+        "value": {
+          "name": "value",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "byte_length": {
-          "name": "byte_length",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "content_type": {
-          "name": "content_type",
+        "updated_at": {
+          "name": "updated_at",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -37,17 +30,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "song_audio_song_id_songs_id_fk": {
-          "name": "song_audio_song_id_songs_id_fk",
-          "tableFrom": "song_audio",
-          "tableTo": "songs",
-          "columnsFrom": ["song_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -72,6 +55,20 @@
         "stage": {
           "name": "stage",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "stage_completed": {
+          "name": "stage_completed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "stage_total": {
+          "name": "stage_total",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -104,13 +101,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'full'"
-        },
-        "score_abc": {
-          "name": "score_abc",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         },
         "duration_seconds": {
           "name": "duration_seconds",

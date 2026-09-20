@@ -134,14 +134,6 @@ export const SongList: React.FC<SongListProps> = ({
               <div className="flex justify-between items-center text-3xs font-mono text-slate-400 mt-1">
                 <span className="truncate">{song.id}</span>
                 <span className="flex items-center gap-1.5 shrink-0">
-                  {song.reference !== undefined ? (
-                    <span
-                      className="text-cyan-300/70"
-                      title={`Cover of ${song.reference.filename}`}
-                    >
-                      ⌁
-                    </span>
-                  ) : null}
                   <span className={statusColor(song)}>
                     {song.status === "complete" && song.durationSeconds !== undefined
                       ? formatDuration(song.durationSeconds)

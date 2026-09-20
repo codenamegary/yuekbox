@@ -2,7 +2,7 @@ import { AiConfigPatch, AiModels, EnhanceScope, Preset } from "contracts/http/ai
 import { CreateSongBody } from "contracts/http/songs"
 import pRetry from "p-retry"
 import { err, ok, Result } from "../shared/result"
-import { SongsSlice } from "../songs/songs.assembly"
+import { CreateSong } from "../songs/songs.ports"
 import { Song } from "../songs/songs.models"
 import {
   buildLyricsEnhancePrompt,
@@ -38,7 +38,8 @@ export type AiSliceDeps = Readonly<{
   listModels: (
     setting: Pick<WriterSetting, "baseUrl" | "apiKey">,
   ) => Promise<Result<readonly string[], { kind: "upstream"; detail: string }>>
-  songs?: Pick<SongsSlice, "createSong" | "worker">
+  createSong: CreateSong
+  wake: () => void
   logError?: (message: string, error: unknown) => void
 }>
 
@@ -192,9 +193,6 @@ export const assembleAiSlice = (deps: AiSliceDeps): AiSlice => {
   }
 
   const randomSong = async (): Promise<Result<Song, RandomSongError>> => {
-    if (deps.songs === undefined) {
-      return err({ kind: "upstream_failed", detail: "song queue is not wired up" })
-    }
     const guarded = await guardBoth(deps.configStore)
     if (!guarded.ok) return err(guarded.error)
 
@@ -222,11 +220,11 @@ export const assembleAiSlice = (deps: AiSliceDeps): AiSlice => {
       style: style.value.slice(0, 2000),
       lyrics: lyrics.value.slice(0, 20000),
     }
-    const created = await deps.songs.createSong(body)
+    const created = await deps.createSong(body)
     if (!created.ok) {
       return err({ kind: "upstream_failed", detail: "generated song failed validation" })
     }
-    deps.songs.worker.kick()
+    deps.wake()
     return ok(created.value)
   }
 

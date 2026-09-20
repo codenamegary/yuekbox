@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { parseYue2Line } from "./songs.yue2.adapters"
+import { parseYue2Line } from "./generation.yue2.adapters"
 
 test("parses a numeric synthesizing line", () => {
   expect(
