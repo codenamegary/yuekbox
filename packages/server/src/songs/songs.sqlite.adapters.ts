@@ -12,6 +12,7 @@ import {
   SQL,
 } from "drizzle-orm"
 import { SongStageSchema, SongStatusSchema } from "contracts/http/songs"
+import { referenceAudioKey } from "../media/audio.keys"
 import { Db } from "../db/client"
 import { referencesTable, songAudioTable, songsTable } from "../db/db.schema"
 import { encodeCursor } from "./songs.cursor"
@@ -55,7 +56,7 @@ const toReference = (row: typeof referencesTable.$inferSelect): Reference =>
     filename: row.filename,
     contentType: row.contentType,
     byteLength: row.byteLength,
-    audio: new Uint8Array(row.audio),
+    audioPath: referenceAudioKey(row.id, row.contentType),
     scoreAbc: row.scoreAbc,
     createdAt: row.createdAt,
   })
@@ -349,7 +350,6 @@ export const makeRecoverInterruptedSongs =
 export const makeInsertReference =
   (db: Db): InsertReference =>
   async (reference: NewReference) => {
-    const audio = Buffer.from(reference.audio)
     const rows = await db
       .insert(referencesTable)
       .values({
@@ -357,8 +357,7 @@ export const makeInsertReference =
         songId: null,
         filename: reference.filename,
         contentType: reference.contentType,
-        byteLength: audio.byteLength,
-        audio,
+        byteLength: reference.byteLength,
         scoreAbc: null,
         createdAt: reference.createdAt,
       })
@@ -417,6 +416,6 @@ export const makeDeleteStaleReferences =
     const rows = await db
       .delete(referencesTable)
       .where(and(isNull(referencesTable.songId), lt(referencesTable.createdAt, createdBefore)))
-      .returning({ id: referencesTable.id })
-    return rows.length
+      .returning({ id: referencesTable.id, contentType: referencesTable.contentType })
+    return rows.map((row) => Object.freeze(row))
   }

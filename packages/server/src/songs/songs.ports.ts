@@ -29,7 +29,12 @@ export type AttachReferenceToSong = (referenceId: string, songId: string) => Pro
 
 export type SaveReferenceScore = (referenceId: string, scoreAbc: string) => Promise<void>
 
-export type DeleteStaleReferences = (createdBefore: string) => Promise<number>
+export type DeleteStaleReferences = (createdBefore: string) => Promise<readonly DeletedReference[]>
+
+export type DeletedReference = Readonly<{
+  id: string
+  contentType: string
+}>
 
 export type ListSongsQuery = Readonly<{
   limit: number
@@ -101,8 +106,7 @@ export type RunYue2Generate = (
 ) => Promise<Result<RunYue2GenerateOutput, GenerateSongError>>
 
 export type RunTranscribeInput = Readonly<{
-  audio: Uint8Array
-  filename: string
+  audioPath: string
   outputDir: string
 }>
 

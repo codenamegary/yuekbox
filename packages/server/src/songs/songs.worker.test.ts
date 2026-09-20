@@ -217,18 +217,25 @@ test("reference songs transcribe first and generate from the melody ABC", async 
     filename: "demo-song.mp3",
     contentType: "audio/mpeg",
     byteLength: 3,
-    audio: new Uint8Array([1, 2, 3]),
+    audioPath: "references/01J8K3R4P9ABCDEFGHJKMNPQRT.mp3",
     scoreAbc: null,
     createdAt: "2026-09-17T04:00:00.000Z",
   }
-  const harness = makeHarness({ findReferenceBySongId: async () => reference })
+  const transcribedPaths: string[] = []
+  const harness = makeHarness({
+    findReferenceBySongId: async () => reference,
+    runTranscribe: async (input) => {
+      transcribedPaths.push(input.audioPath)
+      return ok({ scoreAbc: "X:1\nK:C\nC D E|" })
+    },
+  })
 
   await harness.run()
 
+  expect(transcribedPaths).toEqual([reference.audioPath])
   expect(harness.calls).toEqual([
     "running",
     "stage:transcribe",
-    "transcribe",
     "save-score:01J8K3R4P9ABCDEFGHJKMNPQRT",
     "generate:melody:abc",
     "stage:plan",
@@ -248,7 +255,7 @@ test("a transcription failure marks the song failed without generating", async (
     filename: "demo-song.mp3",
     contentType: "audio/mpeg",
     byteLength: 3,
-    audio: new Uint8Array([1, 2, 3]),
+    audioPath: "references/01J8K3R4P9ABCDEFGHJKMNPQRT.mp3",
     scoreAbc: null,
     createdAt: "2026-09-17T04:00:00.000Z",
   }

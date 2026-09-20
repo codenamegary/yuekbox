@@ -3,7 +3,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { CreateSongBody } from "contracts/http/songs"
 import { ulid } from "ulid"
-import { songAudioKey } from "../media/audio.keys"
+import { referenceAudioKey, songAudioKey } from "../media/audio.keys"
 import { Db } from "../db/client"
 import { err, ok, Result } from "../shared/result"
 import { makeCreateReference } from "./references.usecase"
@@ -11,7 +11,7 @@ import { makeCreateSong } from "./songs.create.usecase"
 import { makeDeleteSong } from "./songs.delete.usecase"
 import { makeGetSong } from "./songs.get.usecase"
 import { makeListSongs, ListSongsInput } from "./songs.list.usecase"
-import { makeSaveSongAudio } from "./songs.media.usecase"
+import { makePurgeStaleReferences, makeSaveSongAudio } from "./songs.media.usecase"
 import {
   ByteRange,
   CreateReferenceError,
@@ -113,11 +113,20 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     await deps.audioStore.remove(songAudioKey(songId))
   }
 
+  const removeReferenceAudio = async (referenceId: string, contentType: string): Promise<void> => {
+    await deps.audioStore.remove(referenceAudioKey(referenceId, contentType))
+  }
+
   const saveSongAudio = makeSaveSongAudio({
     putSongAudio: async (songId, mp3) =>
       (await deps.audioStore.put(songAudioKey(songId), mp3)).byteLength,
     insertSongAudio,
     removeSongAudio,
+  })
+
+  const purgeStaleReferences = makePurgeStaleReferences({
+    deleteStaleReferences,
+    removeReferenceAudio,
   })
 
   const createSong = makeCreateSong({
@@ -131,7 +140,10 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     randomSeed: () => Math.floor(Math.random() * 2 ** 31),
   })
   const createReference = makeCreateReference({
+    putReferenceAudio: async (referenceId, audio, contentType) =>
+      (await deps.audioStore.put(referenceAudioKey(referenceId, contentType), audio)).byteLength,
     insertReference,
+    removeReferenceAudio,
     now,
     generateId: () => ulid(),
   })
@@ -190,7 +202,7 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   return {
     createSong,
     createReference,
-    purgeStaleReferences: (createdBefore) => deleteStaleReferences(createdBefore),
+    purgeStaleReferences,
     listSongs,
     getSong,
     deleteSong,

@@ -1,4 +1,4 @@
-import { InsertSongAudio, SaveSongAudio } from "./songs.ports"
+import { DeleteStaleReferences, InsertSongAudio, SaveSongAudio } from "./songs.ports"
 
 export type SaveSongAudioDeps = Readonly<{
   putSongAudio: (songId: string, mp3: Uint8Array) => Promise<number>
@@ -20,4 +20,19 @@ export const makeSaveSongAudio =
       await deps.removeSongAudio(input.songId).catch(() => undefined)
       throw error
     }
+  }
+
+export type PurgeStaleReferencesDeps = Readonly<{
+  deleteStaleReferences: DeleteStaleReferences
+  removeReferenceAudio: (referenceId: string, contentType: string) => Promise<void>
+}>
+
+export const makePurgeStaleReferences =
+  (deps: PurgeStaleReferencesDeps) =>
+  async (createdBefore: string): Promise<number> => {
+    const deleted = await deps.deleteStaleReferences(createdBefore)
+    await Promise.all(
+      deleted.map((reference) => deps.removeReferenceAudio(reference.id, reference.contentType)),
+    )
+    return deleted.length
   }

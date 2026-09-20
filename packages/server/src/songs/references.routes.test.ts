@@ -16,7 +16,7 @@ const reference: Reference = Object.freeze({
   filename: "demo-song.mp3",
   contentType: "audio/mpeg",
   byteLength: 4,
-  audio: new Uint8Array([1, 2, 3, 4]),
+  audioPath: `references/${referenceId}.mp3`,
   scoreAbc: null,
   createdAt: "2026-09-17T04:00:00.000Z",
 })

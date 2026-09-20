@@ -45,7 +45,7 @@ export type Reference = Readonly<{
   filename: string
   contentType: string
   byteLength: number
-  audio: Uint8Array
+  audioPath: string
   scoreAbc: string | null
   createdAt: string
 }>
@@ -54,7 +54,7 @@ export type NewReference = Readonly<{
   id: string
   filename: string
   contentType: string
-  audio: Uint8Array
+  byteLength: number
   createdAt: string
 }>
 

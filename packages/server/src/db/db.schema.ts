@@ -1,4 +1,4 @@
-import { blob, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core"
+import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core"
 
 export const songsTable = sqliteTable("songs", {
   id: text("id").primaryKey(),
@@ -34,7 +34,6 @@ export const referencesTable = sqliteTable("references", {
   filename: text("filename").notNull(),
   contentType: text("content_type").notNull(),
   byteLength: integer("byte_length").notNull(),
-  audio: blob("audio", { mode: "buffer" }).notNull(),
   scoreAbc: text("score_abc"),
   createdAt: text("created_at").notNull(),
 })

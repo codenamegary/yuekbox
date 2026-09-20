@@ -72,8 +72,7 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
       if (reference !== null) {
         await deps.markSongStage(song.id, "transcribe")
         const transcribed = await deps.runTranscribe({
-          audio: reference.audio,
-          filename: reference.filename,
+          audioPath: reference.audioPath,
           outputDir: tempDir,
         })
         if (!transcribed.ok) {
