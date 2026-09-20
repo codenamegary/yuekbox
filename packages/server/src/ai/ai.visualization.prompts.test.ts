@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { buildVisualizationPrompt, visualizationExample } from "./ai.visualization.prompts"
+import {
+  buildVisualizationPrompt,
+  sampleVisualizationDirection,
+  visualizationExample,
+} from "./ai.visualization.prompts"
 
 const input = {
   style: "glacial techno, 128 bpm, analog drone",
@@ -51,5 +55,33 @@ describe("buildVisualizationPrompt", () => {
     }
     expect(visualizationExample).toContain("cue.line")
     expect(visualizationExample).toContain("hsla")
+  })
+
+  test("injects a sampled direction covering every axis", () => {
+    const direction = sampleVisualizationDirection(() => 0)
+    const prompt = buildVisualizationPrompt(input, () => 0)
+    expect(prompt).toContain("DIRECTION")
+    for (const [axis, value] of Object.entries(direction)) {
+      expect(prompt).toContain(`- ${axis}: ${value}`)
+    }
+  })
+
+  test("samples a different value on every axis for different randoms", () => {
+    const axes = ["subject", "motion", "composition", "marks", "palette", "lyric", "event"] as const
+    const first = sampleVisualizationDirection(() => 0)
+    const last = sampleVisualizationDirection(() => 0.99)
+    for (const axis of axes) {
+      expect(first[axis]).not.toBe(last[axis])
+    }
+  })
+
+  test("picks a new direction on every call", () => {
+    expect(buildVisualizationPrompt(input)).not.toBe(buildVisualizationPrompt(input))
+  })
+
+  test("tells the model the direction outranks the example", () => {
+    const prompt = buildVisualizationPrompt(input)
+    expect(prompt).toContain("not the style to copy")
+    expect(prompt).toContain("Follow the DIRECTION")
   })
 })
