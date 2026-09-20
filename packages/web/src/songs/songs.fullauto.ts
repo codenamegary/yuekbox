@@ -36,7 +36,7 @@ const retryDelayMs = 8000
 
 /**
  * The always-on jukebox controller: one song playing, the next one always
- * generating. Plain closure state (like the audio and brain engines), so the
+ * generating. Plain closure state (like the audio and winamp engines), so the
  * machine lives entirely outside React's render rules.
  */
 export const createFullAutoController = () => {

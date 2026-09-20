@@ -5,7 +5,6 @@ import { cn } from "@/lib/cn"
 import { AiSettings } from "@/ai/AiSettings"
 import { useAiConfigQuery } from "@/ai/ai.queries"
 import { useEnhanceMutation, useRandomSongMutation } from "@/ai/ai.mutations"
-import { BrainEntity } from "./BrainEntity"
 import { LoadSongDialog } from "./LoadSongDialog"
 import { LyricOverlay } from "./LyricOverlay"
 import { SongForm } from "./SongForm"
@@ -13,8 +12,7 @@ import { SongList } from "./SongList"
 import { SongPlayer } from "./SongPlayer"
 import { WinampCanvas } from "./WinampCanvas"
 import { createAudioEngine } from "./songs.audio.engine"
-import { createBrainEngine } from "./songs.brain.engine"
-import { countWords, Draft, shouldConfirmLoad } from "./songs.draft"
+import { Draft, shouldConfirmLoad } from "./songs.draft"
 import { useDeleteSongMutation } from "./songs.mutations"
 import { pickActiveSong, useSongQuery, useSongsQuery, useStatusQuery } from "./songs.queries"
 import { useFullAuto } from "./songs.fullauto"
@@ -43,13 +41,6 @@ export const SongsPage: React.FC = () => {
       isPlaying: () => audio.isPlaying(),
     }),
   )
-  const [brain] = React.useState(() =>
-    createBrainEngine({
-      isPlaying: () => audio.isPlaying(),
-      bins: () => audio.bins,
-    }),
-  )
-
   const [activeId, setActiveId] = React.useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = React.useState(false)
   const [settingsOpen, setSettingsOpen] = React.useState(false)
@@ -75,22 +66,16 @@ export const SongsPage: React.FC = () => {
   const deleteSong = useDeleteSongMutation()
 
   const poke = React.useCallback(() => {
-    brain.poke()
     winamp.pulse(1.6)
-  }, [brain, winamp])
+  }, [winamp])
 
   const typing = React.useCallback(() => {
-    brain.noteTyping()
     winamp.pulse(0.3)
-  }, [brain, winamp])
+  }, [winamp])
 
-  const applyDraft = React.useCallback(
-    (next: Draft) => {
-      setDraft(next)
-      brain.setWordCount(countWords(`${next.style} ${next.lyrics}`))
-    },
-    [brain],
-  )
+  const applyDraft = React.useCallback((next: Draft) => {
+    setDraft(next)
+  }, [])
 
   const cancelLoad = React.useCallback(() => {
     setLoadCandidate(null)
@@ -107,11 +92,10 @@ export const SongsPage: React.FC = () => {
   const activeStage = activeSong?.stage ?? null
   React.useEffect(() => {
     if (activeStage !== null && activeStage !== lastStage.current) {
-      brain.poke()
       winamp.pulse(1.4)
     }
     lastStage.current = activeStage
-  }, [activeStage, brain, winamp])
+  }, [activeStage, winamp])
 
   const lyricsTakeover = audioPlaying && activeSong?.status === "complete"
   const editorDimmed = lyricsTakeover && !editorEngaged
@@ -239,7 +223,6 @@ export const SongsPage: React.FC = () => {
     <>
       <WinampCanvas engine={winamp} mode={mode} />
       <div className="tech-vignette" />
-      <BrainEntity engine={brain} onPoke={poke} />
 
       {!fullAutoActive ? (
         <div className="fixed top-8 right-8 z-20 flex items-center gap-2.5 pointer-events-auto">
@@ -249,7 +232,6 @@ export const SongsPage: React.FC = () => {
               type="button"
               onClick={() => {
                 setMode(trip.mode)
-                brain.poke()
                 winamp.pulse(0.8)
               }}
               className={cn("alien-sigil", mode === trip.mode && "active")}
