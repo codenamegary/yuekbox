@@ -92,8 +92,8 @@ test("places lines across the measured singing spans in order", () => {
   })
 
   expect(cues).toEqual([
-    { text: "hello world", startSeconds: 4, endSeconds: 8.8 },
-    { text: "second line here", startSeconds: 8.8, endSeconds: 16 },
+    { text: "hello world", section: "Verse", startSeconds: 4, endSeconds: 8.8 },
+    { text: "second line here", section: "Verse", startSeconds: 8.8, endSeconds: 16 },
   ])
 })
 
@@ -105,8 +105,8 @@ test("scales score time onto the real audio duration", () => {
   })
 
   expect(cues).toEqual([
-    { text: "hello world", startSeconds: 8, endSeconds: 17.6 },
-    { text: "second line here", startSeconds: 17.6, endSeconds: 32 },
+    { text: "hello world", section: "Verse", startSeconds: 8, endSeconds: 17.6 },
+    { text: "second line here", section: "Verse", startSeconds: 17.6, endSeconds: 32 },
   ])
 })
 
@@ -129,8 +129,8 @@ test("distributes lines across separate singing spans", () => {
   })
 
   expect(cues).toEqual([
-    { text: "first line", startSeconds: 4, endSeconds: 8 },
-    { text: "second line", startSeconds: 12, endSeconds: 16 },
+    { text: "first line", section: null, startSeconds: 4, endSeconds: 8 },
+    { text: "second line", section: null, startSeconds: 12, endSeconds: 16 },
   ])
 })
 
@@ -142,19 +142,22 @@ test("falls back to an even spread when the score is missing", () => {
   })
 
   expect(cues).toEqual([
-    { text: "aa bb", startSeconds: 6, endSeconds: 50 },
-    { text: "cc dd", startSeconds: 50, endSeconds: 94 },
+    { text: "aa bb", section: null, startSeconds: 6, endSeconds: 50 },
+    { text: "cc dd", section: null, startSeconds: 50, endSeconds: 94 },
   ])
 })
 
-test("strips section tags and blank lines from the lyrics", () => {
+test("strips section tags from the line and carries the active one", () => {
   const cues = buildLyricCues({
     lyrics: "[Verse]\n\n  hold on  \n[Chorus]\nlet go",
     scoreAbc: null,
     durationSeconds: 10,
   })
 
-  expect(cues.map((cue) => cue.text)).toEqual(["hold on", "let go"])
+  expect(cues.map((cue) => [cue.text, cue.section])).toEqual([
+    ["hold on", "Verse"],
+    ["let go", "Chorus"],
+  ])
 })
 
 test("splits run-on lyrics at section tags, slashes, and sentence ends", () => {
@@ -173,6 +176,14 @@ test("splits run-on lyrics at section tags, slashes, and sentence ends", () => {
     "With every step and sigh",
     "We're walking on a worn-out trail",
   ])
+  expect(cues.map((cue) => cue.section)).toEqual([
+    "Verse 1",
+    "Verse 1",
+    "Verse 1",
+    "Verse 1",
+    "Chorus",
+    "Chorus",
+  ])
 })
 
 test("keeps short lines whole and only splits long comma runs", () => {
@@ -188,6 +199,7 @@ test("keeps short lines whole and only splits long comma runs", () => {
     "In twilight's whisper",
     "I find my way Home under starlit skies where shadows play With the wind as friend",
   ])
+  expect(cues.map((cue) => cue.section)).toEqual([null, "Verse", "Verse"])
 })
 
 test("returns no cues when there are no lyrics or no duration", () => {
@@ -197,8 +209,8 @@ test("returns no cues when there are no lyrics or no duration", () => {
 
 test("cueIndexAt follows playback through the cue list", () => {
   const cues: readonly LyricCue[] = [
-    { text: "a", startSeconds: 4, endSeconds: 8 },
-    { text: "b", startSeconds: 8, endSeconds: 12 },
+    { text: "a", section: null, startSeconds: 4, endSeconds: 8 },
+    { text: "b", section: "Chorus", startSeconds: 8, endSeconds: 12 },
   ]
 
   expect(cueIndexAt(cues, -1)).toBeNull()

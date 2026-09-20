@@ -61,6 +61,9 @@ export const makeSongsSliceFixture = (overrides: Partial<SongsSlice> = {}): Song
   deleteSong: async () => ok(null),
   getSongAudio: async () =>
     ok({ contentType: "audio/mpeg", byteLength: 0, read: async () => new Uint8Array() }),
+  findSongById: async () => null,
+  readVisualizationFile: async () => null,
+  writeVisualizationFile: async () => 0,
   queueDepth: async () => 0,
   recoverInterruptedSongs: async () => 0,
   capabilities: makeSongsCapabilitiesFixture(),

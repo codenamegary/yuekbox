@@ -13,6 +13,7 @@ import { assembleSongsSlice, SongsSlice } from "./songs.assembly"
 import { makeSongsSliceFixture, songFolderKey, writeMediaFile } from "./songs.fixtures"
 import { generatedAudioKey } from "./songs.files"
 import { makeInsertSong, makeMarkSongComplete } from "./songs.sqlite.adapters"
+import { unusedVisualizationsFixture } from "../visualizations/visualizations.fixtures"
 
 const songId = "01J8K3R4P9ABCDEFGHJKMNPQRS"
 const lyrics = "hello"
@@ -34,6 +35,7 @@ const makeApp = (songs: SongsSlice) =>
     wake: () => {},
     referenceMaxBytes: 1024,
     ai: unusedAiFixture(),
+    visualizations: unusedVisualizationsFixture(),
     status: async () => statusFixture,
   })
 

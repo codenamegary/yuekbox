@@ -12,4 +12,6 @@ export const unusedAiFixture = (): AiSlice => ({
   fetchModels: async () => notWired(),
   enhance: async () => notWired(),
   randomSong: async () => notWired(),
+  canAuthorVisualizations: async () => notWired(),
+  authorVisualization: async () => notWired(),
 })

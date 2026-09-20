@@ -7,6 +7,12 @@
   },
   "overrides": [
     {
+      "files": ["src/ai/ai.visualization.code.ts"],
+      "rules": {
+        "typescript/no-implied-eval": "off"
+      }
+    },
+    {
       "files": ["**/*.usecase.ts"],
       "rules": {
         "no-restricted-imports": [

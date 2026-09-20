@@ -48,4 +48,13 @@ describe("mergeStored", () => {
     })
     expect(merged.style.baseUrl).toBe(defaultStoredConfig().style.baseUrl)
   })
+
+  test("visuals patches merge like the other writers", () => {
+    const merged = mergeStored(defaultStoredConfig(), {
+      visuals: { model: "canvas-model", apiKey: "sk-vis" },
+    })
+    expect(merged.visuals.model).toBe("canvas-model")
+    expect(merged.visuals.apiKey).toBe("sk-vis")
+    expect(merged.style.model).toBe("")
+  })
 })

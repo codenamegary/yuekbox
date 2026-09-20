@@ -10,7 +10,7 @@ import {
   AiPresetsSchema,
   EnhanceBodySchema,
   EnhanceResultSchema,
-  EnhanceScopeSchema,
+  WriterScopeSchema,
 } from "contracts/http/ai"
 import { PROBLEM_TYPES, ProblemError } from "contracts/http/error"
 import { toSongResponse } from "../songs/songs.responses"
@@ -92,7 +92,7 @@ export const aiRoutes: FastifyPluginAsync<AiRoutesOptions> = async (fastify, opt
   })
 
   fastify.get(aiModelsPath, async (request, reply) => {
-    const parsed = EnhanceScopeSchema.safeParse((request.query as { scope?: unknown }).scope)
+    const parsed = WriterScopeSchema.safeParse((request.query as { scope?: unknown }).scope)
     if (!parsed.success) {
       return sendProblem(
         reply,
@@ -100,7 +100,7 @@ export const aiRoutes: FastifyPluginAsync<AiRoutesOptions> = async (fastify, opt
           400,
           PROBLEM_TYPES.validationError,
           "Validation Error",
-          "scope must be style or lyrics",
+          "scope must be style, lyrics, or visuals",
           [{ pointer: "/scope", code: "invalid" }],
         ),
       )

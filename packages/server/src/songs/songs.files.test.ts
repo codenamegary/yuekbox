@@ -13,6 +13,7 @@ import {
   songIdFromFolderName,
   songTitleFromLyrics,
   uploadPattern,
+  visualizationKey,
 } from "./songs.files"
 
 const id = "01M2S1S56CXT1N9PMTRNKA15WJ"
@@ -94,6 +95,7 @@ test("keys point inside the song folder", () => {
   expect(generatedAudioKey(folder, id)).toBe(`${folder}/generated_${id}.mp3`)
   expect(scoreKey(folder)).toBe(`${folder}/score.abc`)
   expect(referenceScoreKey(folder)).toBe(`${folder}/reference_score.abc`)
+  expect(visualizationKey(folder)).toBe(`${folder}/visualization.js`)
   expect(referenceFilesPattern(folder)).toBe(`${folder}/references/*`)
   expect(uploadPattern(referenceId)).toBe(`temp/*_${referenceId}.*`)
 })

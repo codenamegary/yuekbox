@@ -14,6 +14,10 @@ export const effortLevels: readonly EffortLevel[] = ["off", "low", "medium", "hi
 export const EnhanceScopeSchema = z.enum(["style", "lyrics"])
 export type EnhanceScope = z.infer<typeof EnhanceScopeSchema>
 
+/** The writers the AI config covers. The enhance box only exists on style and lyrics. */
+export const WriterScopeSchema = z.enum(["style", "lyrics", "visuals"])
+export type WriterScope = z.infer<typeof WriterScopeSchema>
+
 export const PresetSchema = z.strictObject({
   id: z.string().min(1).max(64),
   name: z.string().min(1).max(64),
@@ -53,6 +57,7 @@ export const AiConfigSchema = z.strictObject({
   enabled: z.boolean(),
   style: SettingSchema,
   lyrics: SettingSchema,
+  visuals: SettingSchema,
 })
 export type AiConfig = z.infer<typeof AiConfigSchema>
 
@@ -69,6 +74,7 @@ export const AiConfigPatchSchema = z.strictObject({
   enabled: z.boolean().optional(),
   style: SettingPatchSchema.optional(),
   lyrics: SettingPatchSchema.optional(),
+  visuals: SettingPatchSchema.optional(),
 })
 export type AiConfigPatch = z.infer<typeof AiConfigPatchSchema>
 

@@ -90,6 +90,8 @@ export const scoreFileName = "score.abc"
 
 export const referenceScoreFileName = "reference_score.abc"
 
+export const visualizationFileName = "visualization.js"
+
 export const referencesDirectoryName = "references"
 
 export const uploadDirectoryName = "temp"
@@ -110,6 +112,9 @@ export const generatedAudioKey = (folderKey: string, songId: string): string =>
   `${folderKey}/${generatedAudioFileName(songId)}`
 
 export const scoreKey = (folderKey: string): string => `${folderKey}/${scoreFileName}`
+
+export const visualizationKey = (folderKey: string): string =>
+  `${folderKey}/${visualizationFileName}`
 
 export const referenceScoreKey = (folderKey: string): string =>
   `${folderKey}/${referenceScoreFileName}`

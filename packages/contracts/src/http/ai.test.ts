@@ -8,6 +8,7 @@ import {
   EnhanceResultSchema,
   EffortLevelSchema,
   SettingSchema,
+  WriterScopeSchema,
 } from "./ai"
 
 describe("EffortLevelSchema", () => {
@@ -78,15 +79,35 @@ describe("AiConfigSchema", () => {
       enabled: true,
       style: setting,
       lyrics: setting,
+      visuals: setting,
     })
     expect(parsed.enabled).toBe(true)
     expect(parsed.style.keyHint).toBe("···abcd")
   })
 
+  test("every config needs all three writers", () => {
+    expect(
+      AiConfigSchema.safeParse({ enabled: true, style: setting, lyrics: setting }).success,
+    ).toBe(false)
+  })
+
   test("patch allows nested partials and key writes", () => {
     expect(AiConfigPatchSchema.safeParse({ enabled: true }).success).toBe(true)
     expect(AiConfigPatchSchema.safeParse({ lyrics: { apiKey: "sk-test" } }).success).toBe(true)
+    expect(AiConfigPatchSchema.safeParse({ visuals: { apiKey: "sk-test" } }).success).toBe(true)
     expect(AiConfigPatchSchema.safeParse({ lyrics: { apiKey: 3 } }).success).toBe(false)
+  })
+})
+
+describe("WriterScopeSchema", () => {
+  test("accepts the three writers the config covers", () => {
+    for (const scope of ["style", "lyrics", "visuals"]) {
+      expect(WriterScopeSchema.safeParse(scope).success).toBe(true)
+    }
+  })
+
+  test("rejects scopes no writer exists for", () => {
+    expect(WriterScopeSchema.safeParse("brain").success).toBe(false)
   })
 })
 

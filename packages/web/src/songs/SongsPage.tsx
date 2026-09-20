@@ -9,14 +9,23 @@ import { LoadSongDialog } from "./LoadSongDialog"
 import { LyricOverlay } from "./LyricOverlay"
 import { SongForm } from "./SongForm"
 import { SongList } from "./SongList"
-import { SongPlayer } from "./SongPlayer"
+import { SongPlayer, SongVisualizationControls } from "./SongPlayer"
+import { VisualizationCanvas } from "./VisualizationCanvas"
 import { WinampCanvas } from "./WinampCanvas"
 import { createAudioEngine } from "./songs.audio.engine"
 import { Draft, shouldConfirmLoad } from "./songs.draft"
-import { useDeleteSongMutation } from "./songs.mutations"
-import { pickActiveSong, useSongQuery, useSongsQuery, useStatusQuery } from "./songs.queries"
+import { buildLyricCues } from "./songs.lyrics.timing"
+import { useDeleteSongMutation, useRerollVisualizationMutation } from "./songs.mutations"
+import {
+  pickActiveSong,
+  useSongQuery,
+  useSongsQuery,
+  useStatusQuery,
+  useVisualizationQuery,
+} from "./songs.queries"
 import { useFullAuto } from "./songs.fullauto"
 import { FullAutoPhase } from "./songs.fullauto.machine"
+import { createVisualizationEngine, VisualizationSong } from "./songs.visualization"
 import { createWinampEngine, TripMode } from "./songs.winamp.engine"
 
 const tripModes: ReadonlyArray<{ mode: TripMode; glyph: string; title: string }> = [
@@ -63,7 +72,64 @@ export const SongsPage: React.FC = () => {
   const activeFromList = pickActiveSong(songs, activeId)
   const songQuery = useSongQuery(activeFromList?.id ?? null)
   const activeSong: Song | null = songQuery.data ?? activeFromList
+  const visualizationQuery = useVisualizationQuery(activeSong?.id ?? null)
   const deleteSong = useDeleteSongMutation()
+  const rerollVisualization = useRerollVisualizationMutation()
+
+  const [visualizationFailure, setVisualizationFailure] = React.useState<Readonly<{
+    key: string
+    detail: string
+  }> | null>(null)
+  const [visualizationEngine] = React.useState(() =>
+    createVisualizationEngine({
+      time: audio.currentTime,
+      duration: audio.duration,
+      isPlaying: audio.isPlaying,
+      bins: () => audio.bins,
+    }),
+  )
+
+  const activeSongId = activeSong?.id ?? null
+  const activeSongStyle = activeSong?.style ?? ""
+  const activeSongLyrics = activeSong?.lyrics ?? ""
+  const activeSongSeed = activeSong?.seed ?? 0
+  const visualizationSong = React.useMemo<VisualizationSong | null>(
+    () =>
+      activeSongId === null
+        ? null
+        : {
+            id: activeSongId,
+            style: activeSongStyle,
+            lyrics: activeSongLyrics,
+            seed: activeSongSeed,
+          },
+    [activeSongId, activeSongStyle, activeSongLyrics, activeSongSeed],
+  )
+
+  const lyricCues = React.useMemo(
+    () =>
+      activeSong === null || activeSong.status !== "complete"
+        ? []
+        : buildLyricCues({
+            lyrics: activeSong.lyrics,
+            scoreAbc: activeSong.scoreAbc ?? null,
+            durationSeconds: activeSong.durationSeconds ?? 0,
+          }),
+    [activeSong],
+  )
+
+  const visualization = visualizationQuery.data ?? null
+  const visualizationCode = visualization?.code ?? null
+  const visualizationKey = `${activeSongId ?? "none"}:${visualization?.checksum ?? "none"}`
+  const visualizationFailed = visualizationFailure?.key === visualizationKey
+  const visualRunning = visualizationCode !== null && !visualizationFailed
+
+  const handleVisualizationFailure = React.useCallback(
+    (detail: string) => {
+      setVisualizationFailure({ key: visualizationKey, detail })
+    },
+    [visualizationKey],
+  )
 
   const poke = React.useCallback(() => {
     winamp.pulse(1.6)
@@ -180,7 +246,41 @@ export const SongsPage: React.FC = () => {
     poke()
   }, [poke])
 
+  const visualOnTrack = React.useRef(false)
+  React.useEffect(() => {
+    visualOnTrack.current = visualRunning
+  }, [visualRunning])
+
+  const handleTrackEnded = React.useCallback(() => {
+    if (!visualOnTrack.current) rotateVisualizer()
+  }, [rotateVisualizer])
+
   const aiConfig = aiConfigQuery.data
+  const visualsConfigured = aiEnabled && (aiConfig?.visuals.model.trim() ?? "") !== ""
+  const visualizationControls: SongVisualizationControls = {
+    configured: visualsConfigured,
+    status: visualization?.status ?? null,
+    failed: visualizationFailed,
+    detail: visualizationFailed
+      ? (visualizationFailure?.detail ?? null)
+      : visualization?.status === "failed"
+        ? (visualization.errorDetail ?? null)
+        : null,
+    rerolling:
+      rerollVisualization.isPending ||
+      visualization?.status === "rerolling" ||
+      visualization?.status === "pending",
+    onReroll: () => {
+      if (!visualsConfigured) {
+        setSettingsOpen(true)
+        poke()
+        return
+      }
+      if (activeSongId === null) return
+      rerollVisualization.mutate(activeSongId)
+      poke()
+    },
+  }
   const enhance = useEnhanceMutation((kind, text) => {
     if (kind === "style") {
       applyDraft({ style: text, lyrics: draft.lyrics })
@@ -215,13 +315,23 @@ export const SongsPage: React.FC = () => {
     songs,
     onWatch: handleWatch,
     onPlay: handlePlayNow,
-    onTrackEnded: rotateVisualizer,
+    onTrackEnded: handleTrackEnded,
     requestRandom,
   })
 
   return (
     <>
-      <WinampCanvas engine={winamp} mode={mode} />
+      {visualRunning && visualizationSong !== null && visualizationCode !== null ? (
+        <VisualizationCanvas
+          engine={visualizationEngine}
+          song={visualizationSong}
+          code={visualizationCode}
+          cues={lyricCues}
+          onFailure={handleVisualizationFailure}
+        />
+      ) : (
+        <WinampCanvas engine={winamp} mode={mode} />
+      )}
       <div className="tech-vignette" />
 
       {!fullAutoActive ? (
@@ -335,11 +445,16 @@ export const SongsPage: React.FC = () => {
         ) : null}
 
         <div className="shrink-0 pt-6">
-          <SongPlayer song={activeSong} engine={audio} onPoke={poke} />
+          <SongPlayer
+            song={activeSong}
+            engine={audio}
+            onPoke={poke}
+            visualization={visualizationControls}
+          />
         </div>
       </main>
 
-      <LyricOverlay song={activeSong} engine={audio} receded={editorEngaged} />
+      <LyricOverlay cues={lyricCues} engine={audio} receded={editorEngaged} muted={visualRunning} />
 
       <LoadSongDialog song={loadCandidate} onCancel={cancelLoad} onConfirm={confirmLoad} />
 

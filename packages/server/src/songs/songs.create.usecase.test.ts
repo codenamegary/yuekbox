@@ -171,3 +171,35 @@ test("create trims lyrics and style before insert", async () => {
   expect(harness.inserted[0]?.lyrics).toBe("hello")
   expect(harness.inserted[0]?.style).toBe("pop")
 })
+
+test("create tells the visualizations slice about the queued song", async () => {
+  const harness = makeHarness()
+  const queued: string[] = []
+  const createSong = makeCreateSong({
+    ...harness.deps,
+    onSongQueued: (songId) => {
+      queued.push(songId)
+    },
+  })
+
+  const result = await createSong({ lyrics: "hello", style: "warm piano pop" })
+
+  expect(result.ok).toBe(true)
+  expect(queued).toEqual([fixedSongId])
+})
+
+test("create stays quiet when validation fails", async () => {
+  const harness = makeHarness()
+  const queued: string[] = []
+  const createSong = makeCreateSong({
+    ...harness.deps,
+    onSongQueued: (songId) => {
+      queued.push(songId)
+    },
+  })
+
+  const result = await createSong({ lyrics: "", style: "warm piano pop" })
+
+  expect(result.ok).toBe(false)
+  expect(queued).toEqual([])
+})

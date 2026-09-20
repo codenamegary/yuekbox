@@ -6,10 +6,19 @@ import { buildApp, AppDeps } from "../app"
 import { ok } from "../shared/result"
 import { makeSongsSliceFixture, songFixture } from "../songs/songs.fixtures"
 import { openDatabase } from "../db/client"
+import { unusedVisualizationsFixture } from "../visualizations/visualizations.fixtures"
 import { AiSlice, assembleAiSlice } from "./ai.assembly"
 
-const makeApp = (deps: Omit<AppDeps, "referenceMaxBytes" | "wake">, wake: () => void = () => {}) =>
-  buildApp({ referenceMaxBytes: 1024, wake, ...deps })
+const makeApp = (
+  deps: Omit<AppDeps, "referenceMaxBytes" | "wake" | "visualizations">,
+  wake: () => void = () => {},
+) =>
+  buildApp({
+    referenceMaxBytes: 1024,
+    wake,
+    visualizations: unusedVisualizationsFixture(),
+    ...deps,
+  })
 
 const statusFixture: Status = Object.freeze({
   version: "0.1.0",

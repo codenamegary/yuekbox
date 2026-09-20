@@ -10,6 +10,11 @@ import {
 } from "contracts/http/songs"
 import { Status, StatusSchema, statusPath } from "contracts/http/status"
 import { Reference, ReferenceSchema, referencesPath } from "contracts/http/references"
+import {
+  SongVisualization,
+  SongVisualizationSchema,
+  songVisualizationPath,
+} from "contracts/http/visualizations"
 import { ProblemDetailsSchema } from "contracts/http/error"
 
 const toErrorMessage = async (response: Response): Promise<string> => {
@@ -39,6 +44,24 @@ export const fetchSongs = async (): Promise<SongsCollection> => {
 export const fetchSong = async (songId: string): Promise<Song> => {
   const response = await fetch(songPath(songId))
   return parseJson(response, (value) => SongSchema.parse(value))
+}
+
+/**
+ * The Song's visualization, or null when it has none. The server answers 404
+ * for both an unknown Song and a Song with no visual; the caller already knows
+ * the Song exists.
+ */
+export const fetchSongVisualization = async (songId: string): Promise<SongVisualization | null> => {
+  const response = await fetch(songVisualizationPath(songId))
+  if (response.status === 404) return null
+  return parseJson(response, (value) => SongVisualizationSchema.parse(value))
+}
+
+export const requestSongVisualization = async (songId: string): Promise<void> => {
+  const response = await fetch(songVisualizationPath(songId), { method: "POST" })
+  if (!response.ok) {
+    throw new Error(await toErrorMessage(response))
+  }
 }
 
 export const createSong = async (body: CreateSongBody): Promise<Song> => {

@@ -17,6 +17,7 @@ const storedConfig = (overrides: Partial<StoredConfig> = {}): StoredConfig => ({
   enabled: true,
   style: setting({ baseUrl: "http://127.0.0.1:9/style", apiKey: "sk-style" }),
   lyrics: setting({ baseUrl: "http://127.0.0.1:9/lyrics", apiKey: "sk-lyrics" }),
+  visuals: setting({ baseUrl: "http://127.0.0.1:9/visuals", apiKey: "sk-visuals" }),
   ...overrides,
 })
 

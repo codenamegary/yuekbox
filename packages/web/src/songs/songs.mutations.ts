@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { CreateSongBody } from "contracts/http/songs"
 import { queryKeys } from "@/queryKeys"
-import { createSong, deleteSong, uploadReference } from "./songs.api"
+import { createSong, deleteSong, requestSongVisualization, uploadReference } from "./songs.api"
 
 export const useCreateSongMutation = () => {
   const queryClient = useQueryClient()
@@ -30,6 +30,16 @@ export const useDeleteSongMutation = () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.songs() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.status() }),
       ])
+    },
+  })
+}
+
+export const useRerollVisualizationMutation = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (songId: string) => requestSongVisualization(songId),
+    onSuccess: async (_result, songId) => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.visualization(songId) })
     },
   })
 }

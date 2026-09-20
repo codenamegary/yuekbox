@@ -17,6 +17,7 @@ import {
   songFolderName,
   songFolderPattern,
   songTitleFromLyrics,
+  visualizationKey,
 } from "./songs.files"
 import { makeGetSong } from "./songs.get.usecase"
 import { ListSongsInput, makeListSongs } from "./songs.list.usecase"
@@ -40,6 +41,7 @@ import {
   CompleteSong,
   CreateSong,
   FindReferenceBySongId,
+  FindSongById,
   MarkSongFailed,
   MarkSongProgress,
   MarkSongRunning,
@@ -65,6 +67,8 @@ export type SongsSliceDeps = Readonly<{
   media: MediaSlice
   now?: () => string
   logError?: (message: string, error: unknown) => void
+  /** Fired after a Song insert; compose wires it to the visualizations slice. */
+  onSongQueued?: (songId: string) => void
 }>
 
 export type SongsCapabilities = Readonly<{
@@ -85,6 +89,9 @@ export type SongsSlice = Readonly<{
   getSong: (songId: string) => Promise<Result<Song, GetSongError>>
   deleteSong: (songId: string) => Promise<Result<null, DeleteSongError>>
   getSongAudio: (songId: string) => Promise<Result<SongAudioPayload, SongAudioLookupError>>
+  findSongById: FindSongById
+  readVisualizationFile: (songId: string) => Promise<string | null>
+  writeVisualizationFile: (songId: string, code: string) => Promise<number>
   queueDepth: () => Promise<number>
   recoverInterruptedSongs: () => Promise<number>
   capabilities: SongsCapabilities
@@ -150,6 +157,19 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     return bytes === null ? null : new TextDecoder().decode(bytes)
   }
 
+  const readVisualizationFile = async (songId: string): Promise<string | null> => {
+    const folderKey = await findSongFolder(songId)
+    if (folderKey === null) return null
+    const bytes = await media.readFile(visualizationKey(folderKey))
+    return bytes === null ? null : new TextDecoder().decode(bytes)
+  }
+
+  const writeVisualizationFile = async (songId: string, code: string): Promise<number> => {
+    const folderKey = await findSongFolder(songId)
+    if (folderKey === null) throw new Error(`song folder is missing for ${songId}`)
+    return media.putFile(visualizationKey(folderKey), new TextEncoder().encode(code))
+  }
+
   const removeSongFolder = async (songId: string): Promise<void> => {
     const matches = await media.find(songFolderPattern(songId))
     await Promise.all(
@@ -185,6 +205,7 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     now,
     generateId: () => ulid(),
     randomSeed: () => Math.floor(Math.random() * 2 ** 31),
+    onSongQueued: deps.onSongQueued,
   })
 
   const createReference = makeCreateReference({
@@ -235,6 +256,9 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     getSong,
     deleteSong,
     getSongAudio,
+    findSongById,
+    readVisualizationFile,
+    writeVisualizationFile,
     queueDepth,
     recoverInterruptedSongs,
     capabilities,

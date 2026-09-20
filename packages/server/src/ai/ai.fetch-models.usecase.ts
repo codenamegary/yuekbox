@@ -1,4 +1,4 @@
-import { EnhanceScope } from "contracts/http/ai"
+import { WriterScope } from "contracts/http/ai"
 import { AiModelsResult } from "./ai.models"
 import { ListModels, LoadStoredConfig } from "./ai.ports"
 import { presetByBaseUrl, presetById } from "./ai.presets"
@@ -10,9 +10,9 @@ export type FetchModelsDeps = Readonly<{
 
 export const makeFetchModels =
   (deps: FetchModelsDeps) =>
-  async (scope: EnhanceScope): Promise<AiModelsResult> => {
+  async (scope: WriterScope): Promise<AiModelsResult> => {
     const stored = await deps.loadStoredConfig()
-    const setting = scope === "style" ? stored.style : stored.lyrics
+    const setting = stored[scope]
     const result = await deps.listModels({ baseUrl: setting.baseUrl, apiKey: setting.apiKey })
     if (result.ok && result.value.length > 0) {
       return { models: [...result.value], live: true }

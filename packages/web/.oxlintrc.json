@@ -12,6 +12,12 @@
       "rules": {
         "unicorn/filename-case": "off"
       }
+    },
+    {
+      "files": ["src/songs/songs.visualization.ts"],
+      "rules": {
+        "typescript/no-implied-eval": "off"
+      }
     }
   ]
 }
