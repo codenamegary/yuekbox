@@ -205,7 +205,7 @@ export const SongForm: React.FC<SongFormProps> = ({
             rows={4}
             value={lyrics}
             onChange={(event) => onLyricsChange(event.target.value)}
-            placeholder="[Verse]\nwrite the words here\n\n[Chorus]\n..."
+            placeholder={"[Verse]\nwrite the words here\n\n[Chorus]\n..."}
             className="w-full min-h-[4lh] max-h-[8lh] overflow-y-auto border-0 bg-transparent p-0 text-xs font-mono text-slate-200 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15"
           />
         </div>

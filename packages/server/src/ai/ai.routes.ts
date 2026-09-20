@@ -49,12 +49,12 @@ const issuePointer = (path: readonly PropertyKey[]): string =>
   path.length === 0 ? "/" : `/${path.map((segment) => String(segment)).join("/")}`
 
 const aiErrorShape = (
-  kind: "ai_disabled" | "not_configured" | "upstream_failed" | "empty_result" | "unparseable",
+  kind: "ai_disabled" | "not_configured" | "upstream_failed" | "unusable_result",
 ): Readonly<{ status: number; type: string; title: string }> => {
   if (kind === "ai_disabled" || kind === "not_configured") {
     return { status: 409, type: PROBLEM_TYPES.conflict, title: "AI Not Ready" }
   }
-  if (kind === "empty_result" || kind === "unparseable") {
+  if (kind === "unusable_result") {
     return { status: 502, type: PROBLEM_TYPES.upstreamError, title: "AI Model Failed" }
   }
   return { status: 502, type: PROBLEM_TYPES.upstreamError, title: "AI Endpoint Failed" }

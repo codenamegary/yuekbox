@@ -16,16 +16,9 @@ export const cleanAgentText = (raw: string): string => {
   return text.trim()
 }
 
-const maxStyleWords = 140
-
-export type RandomSongDraft = Readonly<{ style: string; lyrics: string }>
-
-export type StyleNudge = Readonly<{
-  genre: string
-  voice: string
-  production: string
-  register: string
-}>
+export const maxStyleWords = 140
+const minLyricsWords = 150
+const maxLyricsWords = 400
 
 const genreHints: readonly string[] = [
   // pop & rock
@@ -149,18 +142,15 @@ const registerHints: readonly string[] = [
   "arch and theatrical, old-world vocabulary",
 ]
 
-const pick = <T>(items: readonly T[], random: () => number): T => {
-  const index = Math.min(items.length - 1, Math.max(0, Math.floor(random() * items.length)))
-  return items[index] as T
-}
+/** Random order per call so consecutive takes never reach for the same safe pick. */
+const shuffled = <T>(items: readonly T[], random: () => number): readonly T[] =>
+  items
+    .map((item) => ({ item, key: random() }))
+    .sort((left, right) => left.key - right.key)
+    .map((entry) => entry.item)
 
-/** A random production nudge so consecutive enhances never converge on the same take. */
-export const pickStyleNudge = (random: () => number = Math.random): StyleNudge => ({
-  genre: pick(genreHints, random),
-  voice: pick(voiceHints, random),
-  production: pick(productionHints, random),
-  register: pick(registerHints, random),
-})
+const paletteLine = (label: string, hints: readonly string[], random: () => number): string =>
+  `${label}: ${shuffled(hints, random).join(" · ")}`
 
 const styleBriefDimensions = `- Genre: one lane, or a deliberate mashup of two (name both).
 - Voice: a specific singer profile — sex (male / female / duet / choir), range, timbre,
@@ -173,22 +163,25 @@ const styleBriefDimensions = `- Genre: one lane, or a deliberate mashup of two (
 - Production: era, space, texture.`
 
 const wordsRule =
-  "Word choice: follow the register above — slang, dialect, and profanity only where it " +
-  "asks for them; slurs are never allowed."
+  "Word choice: slang, dialect, and profanity only where the song calls for them; " +
+  "slurs are never allowed."
 
 const lyricsLineRule =
   "Every sung line goes on its own line, ending in a single newline. Section tags like " +
   "[Verse], [Chorus], [Bridge], [Outro] each start a new line and appear alone — never " +
   "append a tag to the end of a sung line. Never pack a verse into one paragraph."
 
-const nudgeLine = (nudge: StyleNudge, conflictLine: string): string =>
-  `For this take, lean toward: ${nudge.genre} · ${nudge.voice} · ${nudge.production} · ` +
-  `${nudge.register}.\n${conflictLine}`
+const songStructures = `- [Verse] → [Chorus] → [Verse] → [Chorus] → [Bridge] → [Outro] — the standard
+- [Verse] → [Chorus] → [Verse] → [Chorus] → [Outro] — short, no bridge
+- [Verse] → [Pre-Chorus] → [Chorus] → [Verse] → [Pre-Chorus] → [Chorus] → [Bridge] → [Chorus] — modern pop
+- [Verse] → [Verse] → [Chorus] → [Verse] → [Chorus] → [Outro] — rap and storytelling
+- [Intro] → [Verse] → [Chorus] → [Verse] → [Chorus] → [Bridge] → [Chorus] → [Outro] — full pop
+- [Verse] → [Chorus] → [Verse] → [Chorus] → [Bridge] → [Verse] → [Chorus] → [Outro] — extended
+- [Verse] → [Verse] → [Bridge] → [Verse] → [Outro] — AABA standard`
 
 export const buildStyleEnhancePrompt = (input: {
   readonly style: string
   readonly lyrics?: string
-  readonly nudge: StyleNudge
 }): string => {
   const lyrics = input.lyrics?.trim() ?? ""
   const lyricsContext =
@@ -201,7 +194,6 @@ Make every dimension explicit — never leave the voice implied or the genre gen
 
 ${styleBriefDimensions}
 
-${nudgeLine(input.nudge, "If that fights the STYLE, the STYLE wins.")}
 ${wordsRule}
 Keep it under ${maxStyleWords} words. Output ONLY the brief — no preamble, no quotes, no commentary.
 ${lyricsContext}
@@ -219,10 +211,14 @@ export const buildLyricsEnhancePrompt = (input: {
       : "No style is given; infer one from the lyrics themselves.\n"
   const task =
     input.lyrics.trim().length === 0
-      ? "Write brand new original song lyrics that fit the style."
+      ? `Write brand new original song lyrics that fit the style.
+Pick exactly one of these common song structures and follow it from start to finish:
+${songStructures}`
       : `Rework and extend the LYRICS below. Keep their theme, voice, and language;
 improve flow and imagery, complete partial sections, and keep the [Verse] / [Chorus] /
-[Bridge] section structure YuE2 expects. Return the full lyric sheet, not a diff.`
+[Bridge] section structure YuE2 expects. Return the full lyric sheet, not a diff.
+If the LYRICS have no clear structure, pick exactly one of these and follow it:
+${songStructures}`
   return `You are writing for a text-to-song model (YuE2).
 ${task}
 ${styleContext}
@@ -235,72 +231,70 @@ LYRICS:
 ${input.lyrics}`
 }
 
-export const buildRandomSongPrompt = (input: {
-  readonly nudge: StyleNudge
-}): string => `Invent one brand new song from scratch, then brief it like a producer.
-Be adventurous; commit fully to the direction you pick.
+/** A random direction from scratch; the palette is examples, not a menu. */
+export const buildRandomStylePrompt = (
+  random: () => number = Math.random,
+): string => `Invent a brand new musical direction for a text-to-song model (YuE2).
+Commit fully to one clear, specific direction and be adventurous.
 
-${nudgeLine(input.nudge, "If it fights where the song is heading, the song wins.")}
+The palette below is examples to spark a direction — not a menu. Invent beyond it
+whenever a better direction comes to mind, and never fall back on the same safe pick
+twice. The lists are shuffled on every call.
+
+${paletteLine("Genres", genreHints, random)}
+${paletteLine("Voices", voiceHints, random)}
+${paletteLine("Production", productionHints, random)}
+${paletteLine("Register", registerHints, random)}
+
+Make every dimension explicit — never leave the vocalist implied or the genre generic:
+
+${styleBriefDimensions}
+
 ${wordsRule}
+Write one vivid paragraph under ${maxStyleWords} words. Output ONLY the brief — no
+preamble, no labels, no quotes, no commentary.
+`
 
-Reply with exactly two sections and nothing else. No JSON, no markdown fences, no commentary.
+/** A full lyric sheet for a style the model just invented. */
+export const buildRandomLyricsPrompt = (
+  style: string,
+): string => `Write the complete lyric sheet for a brand new song in the style below.
+The song's style is: ${style.trim()}
 
-STYLE:
-One vivid paragraph (under ${maxStyleWords} words) that states: genre (one lane, or a
-deliberate two-genre mashup — name both), the singer profile (sex, range, timbre, delivery —
-state it plainly and vary it; never default to the same breathy female lead), 3 to 6 named
-instruments, mood, tempo, a key plus one or two chord colors or a short progression, and the
-production era and texture.
-
-LYRICS:
-[Verse]
-<one sung line>
-<one sung line>
-
-Rules for the lyrics, all mandatory:
+Rules, all mandatory:
 - ${lyricsLineRule}
-- 150 to 400 words, written for that singer's voice in that register.`
+- 150 to 400 words.
+- Write for the voice, mood, and register the style calls for.
+- ${wordsRule}
 
-const jsonCandidate = (raw: string): string => {
-  const start = raw.indexOf("{")
-  const end = raw.lastIndexOf("}")
-  if (start === -1 || end <= start) return ""
-  return raw.slice(start, end + 1)
+Output ONLY the lyric sheet — no preamble, no commentary.
+
+LYRICS:`
+
+const sectionTagLine = /^\s*\[[^\]]+\]\s*$/
+
+const wordCount = (text: string): number => text.split(/\s+/).filter((word) => word !== "").length
+
+/** Sung words only — section tags do not count against the sheet's budget. */
+const sungWordCount = (text: string): number =>
+  text
+    .split("\n")
+    .filter((line) => !sectionTagLine.test(line))
+    .join(" ")
+    .split(/\s+/)
+    .filter((word) => word !== "").length
+
+/** A style brief must say something and respect the word cap. */
+export const isUsableStyleBrief = (text: string): boolean => {
+  const words = wordCount(text)
+  return words > 0 && words <= maxStyleWords
 }
 
-const fallbackDraftFromMarkers = (raw: string): RandomSongDraft | null => {
-  const styleMatch = /style\s*[:]\s*([\s\S]*?)(?:lyrics\s*[:]|$)/i.exec(raw)
-  const lyricsMatch = /lyrics\s*[:]\s*([\s\S]*)/i.exec(raw)
-  const style = styleMatch?.[1]?.trim() ?? ""
-  const lyrics = lyricsMatch?.[1]?.trim() ?? ""
-  if (style === "" || lyrics === "") return null
-  return { style, lyrics }
-}
-
-/** Parse the model's reply into a song draft; tolerates fences and chatter. */
-export const parseRandomSong = (raw: string): RandomSongDraft | null => {
-  const candidate = jsonCandidate(raw)
-  if (candidate !== "") {
-    try {
-      const parsed: unknown = JSON.parse(candidate)
-      if (
-        typeof parsed === "object" &&
-        parsed !== null &&
-        "style" in parsed &&
-        "lyrics" in parsed &&
-        typeof parsed.style === "string" &&
-        typeof parsed.lyrics === "string"
-      ) {
-        const style = cleanAgentText(parsed.style)
-        const lyrics = parsed.lyrics.trim()
-        if (style !== "" && lyrics !== "") return { style, lyrics }
-      }
-    } catch {
-      // fall through to the marker parser
-    }
-  }
-  return fallbackDraftFromMarkers(raw)
-}
+/** A lyric sheet needs section tags and a full song's worth of sung words. */
+export const isUsableLyrics = (text: string): boolean =>
+  text.split("\n").some((line) => sectionTagLine.test(line)) &&
+  sungWordCount(text) >= minLyricsWords &&
+  sungWordCount(text) <= maxLyricsWords
 
 /** The model must return usable text; fences and quotes are tolerated. */
 export const parseEnhanceText = (raw: string): string | null => {

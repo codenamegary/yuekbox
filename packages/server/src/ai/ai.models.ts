@@ -43,9 +43,15 @@ export type AiSettingsError = Readonly<
   | { kind: "upstream_failed"; detail: string }
 >
 
-export type EnhanceError = AiSettingsError | { kind: "empty_result"; detail: string }
+/** Failures a single prompt attempt can hand back for a retry. */
+export type AiAttemptError = Readonly<
+  { kind: "upstream_failed"; detail: string } | { kind: "unusable_result"; detail: string }
+>
 
-export type RandomSongError = AiSettingsError | { kind: "unparseable"; detail: string }
+export type EnhanceError = AiSettingsError | AiAttemptError
+
+/** Random song reuses the enhance failure vocabulary; it is two prompt runs. */
+export type RandomSongError = EnhanceError
 
 export type EnhanceInput = Readonly<{
   kind: EnhanceScope
