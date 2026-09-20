@@ -26,8 +26,15 @@ const statusFixture: Status = Object.freeze({
   startedAt: "2026-09-19T00:00:00.000Z",
 })
 
+const words = (count: number): string =>
+  Array.from({ length: count }, (_, index) => `word${index}`).join(" ")
+
+const styleBrief = "electro swing, brass stabs, female alto, 122 bpm"
+const lyricSheet = `[Verse]\n${words(200)}\n[Chorus]\n${words(100)}`
+
 /** A real OpenAI-compatible server on an ephemeral port — no mocks. */
 const startFakeOpenAI = () => {
+  const calls: Array<{ model: string; user: string }> = []
   const server = Bun.serve({
     port: 0,
     routes: {
@@ -52,19 +59,22 @@ const startFakeOpenAI = () => {
           )
         }
         const user = body.messages?.find((message) => message.role === "user")?.content ?? ""
+        calls.push({ model: body.model ?? "", user })
         const reply =
-          user.includes("STYLE:") && user.includes("LYRICS:")
-            ? "STYLE:\nelectro swing\n\nLYRICS:\n[Chorus]\ndance, robot"
-            : user.includes("STYLE:")
-              ? "lush dream pop, tape hiss"
-              : "[Verse]\nneon rain"
+          user.includes("Invent a brand new musical direction") || user.includes("STYLE:")
+            ? styleBrief
+            : lyricSheet
         return Response.json({
           choices: [{ message: { role: "assistant", content: reply } }],
         })
       },
     },
   })
-  return { baseUrl: `http://127.0.0.1:${server.port}/v1`, stop: () => server.stop(true) }
+  return {
+    baseUrl: `http://127.0.0.1:${server.port}/v1`,
+    calls,
+    stop: () => server.stop(true),
+  }
 }
 
 const songsSlice = (kicks: number[] = []): SongsSlice => ({
@@ -227,7 +237,7 @@ describe("ai routes", () => {
         payload: { kind: "style", style: "dream pop" },
       })
       expect(response.statusCode).toBe(200)
-      expect(response.json().text).toBe("lush dream pop, tape hiss")
+      expect(response.json().text).toBe(styleBrief)
     } finally {
       void fake.stop()
     }
@@ -294,13 +304,36 @@ describe("ai routes", () => {
       })
       await ai.saveConfig({
         enabled: true,
+        style: { baseUrl: fake.baseUrl, apiKey: "sk-test", model: "gpt-4o" },
         lyrics: { baseUrl: fake.baseUrl, apiKey: "sk-test", model: "gpt-4o" },
       })
       const app = makeApp({ songs, ai, status: async () => statusFixture })
       const response = await app.inject({ method: "POST", url: "/v1/ai/songs/random" })
       expect(response.statusCode).toBe(201)
-      expect(SongSchema.parse(response.json()).style).toBe("electro swing")
+      const song = SongSchema.parse(response.json())
+      expect(song.style).toBe(styleBrief)
+      expect(song.lyrics).toBe(lyricSheet)
       expect(kicks).toHaveLength(1)
+    } finally {
+      void fake.stop()
+    }
+  })
+
+  test("random song calls the style scope first, then the lyrics scope", async () => {
+    const fake = startFakeOpenAI()
+    try {
+      const ai = buildAi()
+      await ai.saveConfig({
+        enabled: true,
+        style: { baseUrl: fake.baseUrl, apiKey: "sk-test", model: "style-model" },
+        lyrics: { baseUrl: fake.baseUrl, apiKey: "sk-test", model: "lyrics-model" },
+      })
+      const app = makeApp({ songs: songsSlice(), ai, status: async () => statusFixture })
+      const response = await app.inject({ method: "POST", url: "/v1/ai/songs/random" })
+      expect(response.statusCode).toBe(201)
+      expect(fake.calls.map((call) => call.model)).toEqual(["style-model", "lyrics-model"])
+      expect(fake.calls[0]?.user).toContain("Invent a brand new musical direction")
+      expect(fake.calls[1]?.user).toContain(styleBrief)
     } finally {
       void fake.stop()
     }
@@ -322,6 +355,7 @@ describe("ai routes", () => {
       const response = await app.inject({ method: "POST", url: "/v1/ai/songs/random" })
       expect(response.statusCode).toBe(409)
       expect(response.json().detail).toContain("Pick a model")
+      expect(fake.calls).toHaveLength(0)
     } finally {
       void fake.stop()
     }

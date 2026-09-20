@@ -1,13 +1,17 @@
 import { describe, expect, test } from "bun:test"
 import {
   buildLyricsEnhancePrompt,
-  buildRandomSongPrompt,
+  buildRandomLyricsPrompt,
+  buildRandomStylePrompt,
   buildStyleEnhancePrompt,
   cleanAgentText,
+  isUsableLyrics,
+  isUsableStyleBrief,
   parseEnhanceText,
-  parseRandomSong,
-  pickStyleNudge,
 } from "./ai.prompts"
+
+const words = (count: number): string =>
+  Array.from({ length: count }, (_, index) => `word${index}`).join(" ")
 
 describe("cleanAgentText", () => {
   test("strips markdown fences", () => {
@@ -24,56 +28,36 @@ describe("cleanAgentText", () => {
   })
 })
 
-describe("pickStyleNudge", () => {
-  test("is deterministic for a given random source", () => {
-    const nudge = pickStyleNudge(() => 0.42)
-    expect(nudge).toEqual(pickStyleNudge(() => 0.42))
-    expect(nudge.voice.length).toBeGreaterThan(0)
-    expect(nudge.genre.length).toBeGreaterThan(0)
-    expect(nudge.production.length).toBeGreaterThan(0)
-    expect(nudge.register.length).toBeGreaterThan(0)
-  })
-
-  test("varies with different random values", () => {
-    const first = pickStyleNudge(() => 0)
-    const last = pickStyleNudge(() => 0.999)
-    expect(first.voice).not.toBe(last.voice)
-    expect(first.register).not.toBe(last.register)
-  })
-})
-
 describe("buildStyleEnhancePrompt", () => {
-  const nudge = {
-    genre: "a two-genre mashup",
-    voice: "male baritone",
-    production: "tape wobble",
-    register: "street slang, regional dialect",
-  }
-
-  test("embeds the style, the production dimensions, the nudge, and the register", () => {
-    const prompt = buildStyleEnhancePrompt({ style: "dark techno", nudge })
+  test("embeds the style and the production dimensions", () => {
+    const prompt = buildStyleEnhancePrompt({ style: "dark techno" })
     expect(prompt).toContain("dark techno")
     expect(prompt).toContain("Voice")
+    expect(prompt).toContain("Instrumentation")
     expect(prompt).toContain("Harmony")
-    expect(prompt).toContain("mashup")
-    expect(prompt).toContain("male baritone")
-    expect(prompt).toContain("street slang")
     expect(prompt).toContain("slurs are never allowed")
     expect(prompt).toContain("ONLY the brief")
+    expect(prompt).toContain("under 140 words")
+  })
+
+  test("ships no palette and no nudge", () => {
+    const prompt = buildStyleEnhancePrompt({ style: "dark techno" })
+    expect(prompt).not.toContain("lean toward")
+    expect(prompt).not.toContain("sun-drenched indie pop")
+    expect(prompt).not.toContain("smoky late-night croon")
   })
 
   test("includes lyrics as casting context when present", () => {
     const prompt = buildStyleEnhancePrompt({
       style: "country",
       lyrics: "[Verse]\nI lost the farm",
-      nudge,
     })
     expect(prompt).toContain("voice casting")
     expect(prompt).toContain("I lost the farm")
   })
 
   test("omits lyrics context when empty", () => {
-    const prompt = buildStyleEnhancePrompt({ style: "country", lyrics: "   ", nudge })
+    const prompt = buildStyleEnhancePrompt({ style: "country", lyrics: "   " })
     expect(prompt).not.toContain("voice casting")
   })
 })
@@ -100,38 +84,88 @@ describe("buildLyricsEnhancePrompt", () => {
     expect(prompt).toContain("own line")
     expect(prompt).toContain("Never pack a verse into one paragraph")
   })
-})
 
-describe("buildRandomSongPrompt", () => {
-  test("demands marker sections, singer variety, and register", () => {
-    const prompt = buildRandomSongPrompt({
-      nudge: {
-        genre: "one lane",
-        voice: "female mezzo",
-        production: "dry brass",
-        register: "explicit when the song earns it",
-      },
-    })
-    expect(prompt).toContain("STYLE:")
-    expect(prompt).toContain("LYRICS:")
-    expect(prompt).toContain("singer profile")
-    expect(prompt).toContain("female mezzo")
-    expect(prompt).toContain("never default to the")
-    expect(prompt).toContain("explicit when the song earns it")
-    expect(prompt).toContain("slurs are never allowed")
+  test("brand-new mode offers a menu of song structures to pick from", () => {
+    const prompt = buildLyricsEnhancePrompt({ style: "gospel", lyrics: "" })
+    expect(prompt).toContain("[Verse] → [Chorus] → [Verse] → [Chorus] → [Bridge] → [Outro]")
+    expect(prompt).toContain("[Verse] → [Chorus] → [Verse] → [Chorus] → [Outro]")
+    expect(prompt).toContain("[Verse] → [Verse] → [Chorus] → [Verse] → [Chorus] → [Outro]")
+    expect(prompt).toContain("[Verse] → [Pre-Chorus] → [Chorus]")
+    expect(prompt).toContain("Pick exactly one")
+    expect(prompt).toContain("— rap and storytelling")
   })
 
-  test("demands one line per lyric line", () => {
-    const prompt = buildRandomSongPrompt({
-      nudge: {
-        genre: "one lane",
-        voice: "female mezzo",
-        production: "dry brass",
-        register: "conversational",
-      },
+  test("rework mode keeps an existing structure, fallback menu present", () => {
+    const prompt = buildLyricsEnhancePrompt({
+      style: "gospel",
+      lyrics: "[Verse]\nexisting",
     })
+    expect(prompt).toContain("section structure YuE2 expects")
+    expect(prompt).toContain("If the LYRICS have no clear structure")
+    expect(prompt).toContain("[Verse] → [Chorus] → [Verse] → [Chorus] → [Bridge] → [Outro]")
+  })
+})
+
+describe("buildRandomStylePrompt", () => {
+  test("ships the full palette as examples, not a menu", () => {
+    const prompt = buildRandomStylePrompt()
+    expect(prompt).toContain("sun-drenched indie pop")
+    expect(prompt).toContain("smoky late-night croon")
+    expect(prompt).toContain("1974 analog")
+    expect(prompt).toContain("radio-clean throughout")
+    expect(prompt).toContain("not a menu")
+    expect(prompt).toContain("Invent beyond")
+    expect(prompt).toContain("under 140 words")
+  })
+
+  test("shuffles the palette on every call", () => {
+    expect(buildRandomStylePrompt()).not.toBe(buildRandomStylePrompt())
+  })
+})
+
+describe("buildRandomLyricsPrompt", () => {
+  test("carries the style and the lyric rules", () => {
+    const prompt = buildRandomLyricsPrompt("gospel techno, female alto")
+    expect(prompt).toContain("gospel techno, female alto")
+    expect(prompt).toContain("[Verse]")
     expect(prompt).toContain("own line")
-    expect(prompt).toContain("Never pack a verse into one paragraph")
+    expect(prompt).toContain("150 to 400 words")
+    expect(prompt).toContain("slurs are never allowed")
+    expect(prompt).toContain("ONLY the lyric sheet")
+  })
+})
+
+describe("isUsableStyleBrief", () => {
+  test("rejects empty briefs", () => {
+    expect(isUsableStyleBrief("")).toBe(false)
+    expect(isUsableStyleBrief("   ")).toBe(false)
+  })
+
+  test("rejects briefs over the word limit", () => {
+    expect(isUsableStyleBrief(words(141))).toBe(false)
+  })
+
+  test("accepts a brief at the word limit", () => {
+    expect(isUsableStyleBrief(words(140))).toBe(true)
+  })
+})
+
+describe("isUsableLyrics", () => {
+  test("requires a section tag", () => {
+    expect(isUsableLyrics(words(200))).toBe(false)
+    expect(isUsableLyrics(`[Verse]\n${words(200)}`)).toBe(true)
+  })
+
+  test("holds the sheet to 150 to 400 sung words", () => {
+    expect(isUsableLyrics(`[Verse]\n${words(149)}`)).toBe(false)
+    expect(isUsableLyrics(`[Verse]\n${words(150)}`)).toBe(true)
+    expect(isUsableLyrics(`[Verse]\n${words(400)}`)).toBe(true)
+    expect(isUsableLyrics(`[Verse]\n${words(401)}`)).toBe(false)
+  })
+
+  test("does not count section tags as words", () => {
+    expect(isUsableLyrics("[Verse]\n[Chorus]\n[Outro]")).toBe(false)
+    expect(isUsableLyrics(`[Verse]\n[Chorus]\n${words(150)}`)).toBe(true)
   })
 })
 
@@ -142,31 +176,5 @@ describe("parseEnhanceText", () => {
 
   test("null on empty replies", () => {
     expect(parseEnhanceText("   ")).toBeNull()
-  })
-})
-
-describe("parseRandomSong", () => {
-  test("parses a clean JSON reply", () => {
-    const draft = parseRandomSong(
-      '{"style":"afrobeat","lyrics":"[Verse]\\nsun up\\n[Chorus]\\ngo"}',
-    )
-    expect(draft).toEqual({ style: "afrobeat", lyrics: "[Verse]\nsun up\n[Chorus]\ngo" })
-  })
-
-  test("parses JSON buried in chatter", () => {
-    const draft = parseRandomSong(
-      'Here you go!\n```json\n{"style":"drill","lyrics":"[Chorus]\\nup"}\n```\nEnjoy.',
-    )
-    expect(draft?.style).toBe("drill")
-  })
-
-  test("falls back to STYLE/LYRICS markers", () => {
-    const draft = parseRandomSong("STYLE: coldwave\nLYRICS: [Verse]\ngray skies")
-    expect(draft?.style).toBe("coldwave")
-    expect(draft?.lyrics).toContain("gray skies")
-  })
-
-  test("null when nothing parses", () => {
-    expect(parseRandomSong("no structure at all")).toBeNull()
   })
 })

@@ -533,11 +533,13 @@ comes from the endpoint's live `/models`, and the API key is stored in
 | `GET`/`PUT /v1/ai/config` | Per-writer settings: `presetId`, `baseUrl`, `model`, `effort`, write-only `apiKey` |
 | `GET /v1/ai/models?scope=style\|lyrics` | Live model list; falls back to preset guesses with a `detail` |
 | `POST /v1/ai/enhance` | `{ kind, style?, lyrics? }` → `{ text }` |
-| `POST /v1/ai/songs/random` | Model writes style + lyrics as JSON, queued as a normal Song |
+| `POST /v1/ai/songs/random` | Style call writes the brief, lyrics call writes the sheet, queued as a normal Song |
 
-`effort` maps to `reasoning_effort` and is only sent when not `off`. Failure
+`effort` maps to `reasoning_effort` and is only sent when not `off`. Each model
+call retries up to 5 times with no backoff when the endpoint fails or the reply
+is unusable; the style brief and lyrics are validated between attempts. Failure
 modes: 409 when AI is off or a writer is missing a model/key, 502 when the
-endpoint fails or the reply does not parse. Full auto is client-side: one Song
+endpoint fails or the reply is still unusable after retries. Full auto is client-side: one Song
 generating at all times, the next one plays when the current one ends, and a
 new generation starts the moment playback begins.
 
