@@ -392,12 +392,3 @@ div::-webkit-scrollbar-thumb {
     transform: translateY(0) scale(1);
   }
 }
-
-@media (max-width: 768px) {
-  #brain-entity-container {
-    width: 380px;
-    height: 380px;
-    right: -10vw;
-    bottom: -2vh;
-  }
-}

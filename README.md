@@ -20,19 +20,19 @@ half way around the world with your fire hazard of a lava lamp casting a dangero
 across your room, winamp blasting with some sick new visualizer on your CRT monitor
 and Kazaa ripping viruses and REAL_NEW_EMINEM_FREE_NOT_FAKE.mp3 straight on to your
 5400 RPM 10GB harddrive. So anyway I made this UI for Yue2, you type a vibe and some
-words, hit the sparkle button, and watch a cybernetic orb grow while a GPU in your house
+words, hit the sparkle button, and watch the trip modes while a GPU in your house
 lights on fire.
 
 It is a **real app**, not a mockup. Under the AI skullduggery it's a Fastify server, a SQLite
-queue, a worker, and the real YuE2 CLI. The orb is just here to make the wait fun.
+queue, a worker, and the real YuE2 CLI. The visuals are just here to make the wait fun.
 
 ## 🎛️ What it does (v1)
 
-- 🪞 **Two glass boxes.** One for style, one for lyrics. The orb swells as you write.
+- 🪞 **Two glass boxes.** One for style, one for lyrics.
 - ✦ **Generate.** One click queues a Song and fires the worker.
 - 🚦 **A queue, not a stampede.** Click generate ten times if you want. The GPU still runs one Song at a time.
 - 📶 **Real progress.** Five stage pips, plus a hairline bar under them for the stages YuE2 actually counts (synthesize + decode). No fake bars for stages nobody can measure.
-- 🔊 **Plays the MP3** when the Song lands, with a real spectrum fed by an `AnalyserNode`. The orb dances to it. Yes, really.
+- 🔊 **Plays the MP3** when the Song lands, with a real spectrum fed by an `AnalyserNode`. The backdrop dances to it. Yes, really.
 - ✍️ **Lyrics in the void.** While a Song plays, its lines fade in and out at the center of the page, timed to the vocal melody from the stored score. The editor dims until you touch it.
 - 🗂️ **History drawer.** Newest first. Click to play. Click to delete. Loading a song offers to replace the editor text before it stomps your draft.
 - 🧪 **Keeps the score.** Every successful Song stores the ABC lead sheet for future features. v1 doesn't show it. Yet.
@@ -46,7 +46,7 @@ queue, a worker, and the real YuE2 CLI. The orb is just here to make the wait fu
 
 ![Generating](docs/generating.png)
 
-**Playing**: the orb dances, the spectrum pulses, the scrubber obeys. Trip mode: Quantum Stardust Vortex.
+**Playing**: the backdrop trips, the spectrum pulses, the scrubber obeys. Trip mode: Quantum Stardust Vortex.
 
 ![Playing](docs/playing.png)
 
@@ -223,10 +223,6 @@ deliberately, unapologetically **a screensaver that happens to make music**:
 - 〰️ **Phosphor Oscilloscope** — three ribbons of acid-green/violet waveform
 - ❂ **Chromatic Plasma** — sixteen bands of hue-shifting interference
 - ✧ **Quantum Stardust Vortex** — ninety particles orbiting a point that isn't there
-- 🔮 **The Orb** — 480 micro-LEDs on a Fibonacci sphere with Blinn-Phong specular glints, a smoked-obsidian core capped at 65% opacity, and dancing physics when audio plays
-
-The orb grows with your word count (non-linear, saturating at 300 words), flinches when
-you type, and pulses on every stage transition. It has no idea what music is. It loves it anyway.
 
 **Contributions to this layer are extremely welcome.** Adding a fifth trip mode is
 basically a one-function PR — see below.
@@ -239,7 +235,6 @@ too small — a typo fix, a new trip mode, a bug report with a good screenshot, 
 ### Ways to help
 
 - 🌈 **Add a trip mode.** The background engine (`packages/web/src/songs/songs.winamp.engine.ts`) has one draw function per mode. Write a new one, add a sigil, done.
-- 🔮 **Tune the orb.** More glints, different physics, smarter dancing. It's all one render loop.
 - 🎨 **Own the vibe.** Better typography, themes, a reduced-motion mode that keeps the soul but calms the visuals.
 - 🐛 **Fix bugs.** Check the issues, or open one with the `/v1/status` output and a screenshot.
 - 📝 **Write docs.** Especially real-world examples of styles/lyrics that work well.
