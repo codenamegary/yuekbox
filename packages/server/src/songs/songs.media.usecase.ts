@@ -2,6 +2,8 @@ import { referenceAudioKey, songAudioKey } from "../media/audio.keys"
 import {
   AudioStore,
   DeleteStaleReferences,
+  FindReferenceAudioBySongId,
+  FindReferenceBySongId,
   InsertSongAudio,
   ListReferenceAudio,
   ListSongAudio,
@@ -47,6 +49,22 @@ export const makePurgeStaleReferences =
   }
 
 export const missingAudioDetail = "audio file missing on disk"
+
+export type FindReferenceAudioBySongIdDeps = Readonly<{
+  findReferenceBySongId: FindReferenceBySongId
+  resolveReferenceAudioPath: (referenceId: string, contentType: string) => string
+}>
+
+export const makeFindReferenceAudioBySongId =
+  (deps: FindReferenceAudioBySongIdDeps): FindReferenceAudioBySongId =>
+  async (songId) => {
+    const reference = await deps.findReferenceBySongId(songId)
+    if (reference === null) return null
+    return {
+      reference,
+      audioPath: deps.resolveReferenceAudioPath(reference.id, reference.contentType),
+    }
+  }
 
 export type ReconcileMediaDeps = Readonly<{
   audioStore: AudioStore

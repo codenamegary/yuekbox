@@ -25,6 +25,13 @@ export type FindReferenceById = (referenceId: string) => Promise<Reference | nul
 
 export type FindReferenceBySongId = (songId: string) => Promise<Reference | null>
 
+export type TranscribeReference = Readonly<{
+  reference: Reference
+  audioPath: string
+}>
+
+export type FindReferenceAudioBySongId = (songId: string) => Promise<TranscribeReference | null>
+
 export type AttachReferenceToSong = (referenceId: string, songId: string) => Promise<boolean>
 
 export type SaveReferenceScore = (referenceId: string, scoreAbc: string) => Promise<void>
@@ -142,6 +149,7 @@ export type ListSongAudio = () => Promise<readonly SongAudioRecord[]>
 export type ListReferenceAudio = () => Promise<readonly ReferenceAudioRecord[]>
 
 export type AudioStore = Readonly<{
+  path: (key: string) => string
   put: (key: string, audio: Uint8Array) => Promise<StoredAudio>
   stat: (key: string) => Promise<StoredAudio | null>
   read: (key: string) => Promise<Uint8Array | null>

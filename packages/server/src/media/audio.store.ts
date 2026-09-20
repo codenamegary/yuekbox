@@ -1,44 +1,34 @@
-import {
-  FileHandle,
-  mkdir,
-  open,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises"
-import { dirname, join } from "node:path"
-import { AudioStore } from "../songs/songs.ports"
+import { mkdir, readdir, rename, rm, stat } from "node:fs/promises"
+import { dirname, join, resolve } from "node:path"
+import { AudioStore, StoredAudio } from "../songs/songs.ports"
 
-const fillFrom = async (
-  handle: FileHandle,
-  buffer: Buffer,
-  filled: number,
-  start: number,
-): Promise<boolean> => {
-  if (filled === buffer.byteLength) return true
-  const { bytesRead } = await handle.read(
-    buffer,
-    filled,
-    buffer.byteLength - filled,
-    start + filled,
-  )
-  if (bytesRead === 0) return false
-  return fillFrom(handle, buffer, filled + bytesRead, start)
-}
+const isMissingFile = (error: unknown): boolean =>
+  typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT"
 
 export const makeFsAudioStore = (mediaDir: string): AudioStore => {
-  const pathOf = (key: string): string => join(mediaDir, key)
+  const root = resolve(mediaDir)
+  const pathOf = (key: string): string => join(root, key)
+
+  const statOrNull = async (path: string): Promise<StoredAudio | null> => {
+    try {
+      const info = await stat(path)
+      if (!info.isFile()) return null
+      return Object.freeze({ path, byteLength: info.size })
+    } catch (error: unknown) {
+      if (isMissingFile(error)) return null
+      throw error
+    }
+  }
 
   return {
+    path: pathOf,
+
     put: async (key, audio) => {
       const path = pathOf(key)
       await mkdir(dirname(path), { recursive: true })
       const tempPath = `${path}.tmp`
       try {
-        await writeFile(tempPath, audio)
+        await Bun.write(tempPath, audio)
         await rename(tempPath, path)
       } catch (error: unknown) {
         await rm(tempPath, { force: true })
@@ -47,28 +37,25 @@ export const makeFsAudioStore = (mediaDir: string): AudioStore => {
       return Object.freeze({ path, byteLength: audio.byteLength })
     },
 
-    stat: async (key) => {
-      const path = pathOf(key)
-      const info = await stat(path).catch(() => null)
-      if (info === null || !info.isFile()) return null
-      return Object.freeze({ path, byteLength: info.size })
-    },
+    stat: (key) => statOrNull(pathOf(key)),
 
     read: async (key) => {
-      const bytes = await readFile(pathOf(key)).catch(() => null)
-      return bytes === null ? null : new Uint8Array(bytes)
+      try {
+        return new Uint8Array(await Bun.file(pathOf(key)).arrayBuffer())
+      } catch (error: unknown) {
+        if (isMissingFile(error)) return null
+        throw error
+      }
     },
 
     openRange: async (key, start, end) => {
-      const handle = await open(pathOf(key), "r").catch(() => null)
-      if (handle === null) return null
-      try {
-        const buffer = Buffer.alloc(end - start + 1)
-        const complete = await fillFrom(handle, buffer, 0, start)
-        return complete ? new Uint8Array(buffer) : null
-      } finally {
-        await handle.close()
-      }
+      const path = pathOf(key)
+      const info = await statOrNull(path)
+      if (info === null || info.byteLength < end + 1) return null
+      const bytes = await Bun.file(path)
+        .slice(start, end + 1)
+        .arrayBuffer()
+      return new Uint8Array(bytes)
     },
 
     remove: async (key) => {
@@ -77,8 +64,11 @@ export const makeFsAudioStore = (mediaDir: string): AudioStore => {
 
     list: async (): Promise<readonly string[]> => {
       const listDirectory = async (relativeDir: string): Promise<readonly string[]> => {
-        const entries = await readdir(join(mediaDir, relativeDir), { withFileTypes: true }).catch(
-          () => [],
+        const entries = await readdir(join(root, relativeDir), { withFileTypes: true }).catch(
+          (error: unknown) => {
+            if (isMissingFile(error)) return []
+            throw error
+          },
         )
         const nested = await Promise.all(
           entries.map(async (entry) => {

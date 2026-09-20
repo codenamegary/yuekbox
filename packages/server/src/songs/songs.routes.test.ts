@@ -273,7 +273,7 @@ test("audio without a range reads the whole file", async () => {
 })
 
 test("an unsatisfiable range is a 416 and reads nothing", async () => {
-  let reads = 0
+  const reads: number[] = []
   const app = makeApp(
     makeSlice({
       getSongAudio: async () =>
@@ -281,7 +281,7 @@ test("an unsatisfiable range is a 416 and reads nothing", async () => {
           contentType: "audio/mpeg",
           byteLength: 3,
           read: async () => {
-            reads += 1
+            reads.push(1)
             return new Uint8Array([1, 2, 3])
           },
         }),
@@ -296,7 +296,7 @@ test("an unsatisfiable range is a 416 and reads nothing", async () => {
 
   expect(response.statusCode).toBe(416)
   expect(response.headers["content-range"]).toBe("bytes */3")
-  expect(reads).toBe(0)
+  expect(reads).toEqual([])
 })
 
 test("list returns a contract collection", async () => {

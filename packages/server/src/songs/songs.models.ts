@@ -45,7 +45,6 @@ export type Reference = Readonly<{
   filename: string
   contentType: string
   byteLength: number
-  audioPath: string
   scoreAbc: string | null
   createdAt: string
 }>

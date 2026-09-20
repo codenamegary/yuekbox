@@ -74,6 +74,12 @@ test("openRange returns null when the file is shorter than the range", async () 
   })
 })
 
+test("store paths resolve under the media root", async () => {
+  await withStore(async (store, mediaDir) => {
+    expect(store.path("songs/one.mp3")).toBe(join(mediaDir, "songs/one.mp3"))
+  })
+})
+
 test("remove deletes the file and tolerates a missing key", async () => {
   await withStore(async (store) => {
     await store.put("songs/one.mp3", new Uint8Array([1, 2, 3]))

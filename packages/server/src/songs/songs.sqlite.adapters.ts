@@ -12,7 +12,6 @@ import {
   SQL,
 } from "drizzle-orm"
 import { SongStageSchema, SongStatusSchema } from "contracts/http/songs"
-import { referenceAudioKey } from "../media/audio.keys"
 import { Db } from "../db/client"
 import { referencesTable, songAudioTable, songsTable } from "../db/db.schema"
 import { encodeCursor } from "./songs.cursor"
@@ -58,7 +57,6 @@ const toReference = (row: typeof referencesTable.$inferSelect): Reference =>
     filename: row.filename,
     contentType: row.contentType,
     byteLength: row.byteLength,
-    audioPath: referenceAudioKey(row.id, row.contentType),
     scoreAbc: row.scoreAbc,
     createdAt: row.createdAt,
   })

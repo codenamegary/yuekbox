@@ -39,7 +39,7 @@ const newReference = (referenceId: string, createdAt: string): NewReference => (
   createdAt,
 })
 
-test("insert and find a reference round-trips its metadata and resolves the audio path", async () => {
+test("insert and find a reference round-trips its metadata", async () => {
   const handle = openDatabase({ path: ":memory:" })
   try {
     const insertReference = makeInsertReference(handle.db)
@@ -50,13 +50,11 @@ test("insert and find a reference round-trips its metadata and resolves the audi
     expect(inserted.songId).toBeNull()
     expect(inserted.scoreAbc).toBeNull()
     expect(inserted.byteLength).toBe(5)
-    expect(inserted.audioPath).toBe(`references/${id("RF")}.mp3`)
 
     const found = await findReferenceById(id("RF"))
     expect(found?.filename).toBe("demo-song.mp3")
     expect(found?.contentType).toBe("audio/mpeg")
     expect(found?.byteLength).toBe(5)
-    expect(found?.audioPath).toBe(`references/${id("RF")}.mp3`)
   } finally {
     handle.close()
   }

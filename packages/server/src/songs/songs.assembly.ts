@@ -12,6 +12,7 @@ import { makeDeleteSong } from "./songs.delete.usecase"
 import { makeGetSong } from "./songs.get.usecase"
 import { makeListSongs, ListSongsInput } from "./songs.list.usecase"
 import {
+  makeFindReferenceAudioBySongId,
   makePurgeStaleReferences,
   makeReconcileMedia,
   makeSaveSongAudio,
@@ -139,6 +140,12 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     removeReferenceAudio,
   })
 
+  const findReferenceAudioBySongId = makeFindReferenceAudioBySongId({
+    findReferenceBySongId,
+    resolveReferenceAudioPath: (referenceId, contentType) =>
+      deps.audioStore.path(referenceAudioKey(referenceId, contentType)),
+  })
+
   const reconcileMedia = makeReconcileMedia({
     audioStore: deps.audioStore,
     listSongAudio,
@@ -166,7 +173,12 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   })
   const listSongs = makeListSongs({ listSongs: listSongsPort })
   const getSong = makeGetSong({ findSongById })
-  const deleteSong = makeDeleteSong({ deleteSong: deleteSongRow, removeSongAudio })
+  const deleteSong = makeDeleteSong({
+    deleteSong: deleteSongRow,
+    findReferenceBySongId,
+    removeSongAudio,
+    removeReferenceAudio,
+  })
 
   const getSongAudio = async (
     songId: string,
@@ -206,7 +218,7 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     markSongComplete,
     markSongFailed,
     saveSongAudio,
-    findReferenceBySongId,
+    findReferenceAudioBySongId,
     runTranscribe,
     saveReferenceScore,
     runYue2Generate,

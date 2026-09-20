@@ -3,7 +3,7 @@ import {
   ClaimNextQueuedSong,
   CreateTempDir,
   EncodeFlacToMp3,
-  FindReferenceBySongId,
+  FindReferenceAudioBySongId,
   MarkSongComplete,
   MarkSongFailed,
   MarkSongProgress,
@@ -24,7 +24,7 @@ export type SongWorkerDeps = Readonly<{
   markSongComplete: MarkSongComplete
   markSongFailed: MarkSongFailed
   saveSongAudio: SaveSongAudio
-  findReferenceBySongId: FindReferenceBySongId
+  findReferenceAudioBySongId: FindReferenceAudioBySongId
   runTranscribe: RunTranscribe
   saveReferenceScore: SaveReferenceScore
   runYue2Generate: RunYue2Generate
@@ -65,21 +65,21 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
     }
 
     try {
-      const reference = await deps.findReferenceBySongId(song.id)
+      const referenceAudio = await deps.findReferenceAudioBySongId(song.id)
       let cot: SongCot = "full"
       let abc: string | null = null
 
-      if (reference !== null) {
+      if (referenceAudio !== null) {
         await deps.markSongStage(song.id, "transcribe")
         const transcribed = await deps.runTranscribe({
-          audioPath: reference.audioPath,
+          audioPath: referenceAudio.audioPath,
           outputDir: tempDir,
         })
         if (!transcribed.ok) {
           await deps.markSongFailed(song.id, toErrorDetail(transcribed.error.detail))
           return
         }
-        await deps.saveReferenceScore(reference.id, transcribed.value.scoreAbc)
+        await deps.saveReferenceScore(referenceAudio.reference.id, transcribed.value.scoreAbc)
         cot = "melody"
         abc = transcribed.value.scoreAbc
       }

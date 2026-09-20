@@ -135,9 +135,9 @@ test("a run without score.abc is a transcribe failure", async () => {
 test("a missing audio file fails before spawning", async () => {
   const outputRoot = await mkdtemp(join(tmpdir(), "yuekbox-transcribe-test-"))
   try {
-    let spawned = false
-    const runner: ProcessRunner = async () => {
-      spawned = true
+    const spawns: string[] = []
+    const runner: ProcessRunner = async (command) => {
+      spawns.push(command[2] ?? "")
       return { exitCode: 0, stdout: "", stderrTail: "" }
     }
     const runTranscribe = makeRunTranscribe(env, runner)
@@ -150,7 +150,7 @@ test("a missing audio file fails before spawning", async () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.error.detail).toContain("reference audio is missing")
-    expect(spawned).toBe(false)
+    expect(spawns).toEqual([])
   } finally {
     await rm(outputRoot, { recursive: true, force: true })
   }
@@ -159,9 +159,9 @@ test("a missing audio file fails before spawning", async () => {
 test("a missing sheetsage2 environment fails before spawning", async () => {
   const outputRoot = await mkdtemp(join(tmpdir(), "yuekbox-transcribe-test-"))
   try {
-    let spawned = false
-    const runner: ProcessRunner = async () => {
-      spawned = true
+    const spawns: string[] = []
+    const runner: ProcessRunner = async (command) => {
+      spawns.push(command[2] ?? "")
       return { exitCode: 0, stdout: "", stderrTail: "" }
     }
     const runTranscribe = makeRunTranscribe({ ...env, pythonBin: "/kit/nope/python" }, runner)
@@ -172,7 +172,7 @@ test("a missing sheetsage2 environment fails before spawning", async () => {
     })
 
     expect(result.ok).toBe(false)
-    expect(spawned).toBe(false)
+    expect(spawns).toEqual([])
   } finally {
     await rm(outputRoot, { recursive: true, force: true })
   }

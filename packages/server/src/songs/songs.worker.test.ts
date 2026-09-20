@@ -86,7 +86,7 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
       calls.push("encode")
       return ok(new Uint8Array([1, 2, 3, 4]))
     },
-    findReferenceBySongId: async () => null,
+    findReferenceAudioBySongId: async () => null,
     runTranscribe: async () => {
       calls.push("transcribe")
       return ok({ scoreAbc: "X:1\nK:C\nC D E|" })
@@ -217,13 +217,13 @@ test("reference songs transcribe first and generate from the melody ABC", async 
     filename: "demo-song.mp3",
     contentType: "audio/mpeg",
     byteLength: 3,
-    audioPath: "references/01J8K3R4P9ABCDEFGHJKMNPQRT.mp3",
     scoreAbc: null,
     createdAt: "2026-09-17T04:00:00.000Z",
   }
   const transcribedPaths: string[] = []
+  const audioPath = "/media/references/01J8K3R4P9ABCDEFGHJKMNPQRT.mp3"
   const harness = makeHarness({
-    findReferenceBySongId: async () => reference,
+    findReferenceAudioBySongId: async () => ({ reference, audioPath }),
     runTranscribe: async (input) => {
       transcribedPaths.push(input.audioPath)
       return ok({ scoreAbc: "X:1\nK:C\nC D E|" })
@@ -232,7 +232,7 @@ test("reference songs transcribe first and generate from the melody ABC", async 
 
   await harness.run()
 
-  expect(transcribedPaths).toEqual([reference.audioPath])
+  expect(transcribedPaths).toEqual([audioPath])
   expect(harness.calls).toEqual([
     "running",
     "stage:transcribe",
@@ -255,12 +255,14 @@ test("a transcription failure marks the song failed without generating", async (
     filename: "demo-song.mp3",
     contentType: "audio/mpeg",
     byteLength: 3,
-    audioPath: "references/01J8K3R4P9ABCDEFGHJKMNPQRT.mp3",
     scoreAbc: null,
     createdAt: "2026-09-17T04:00:00.000Z",
   }
   const harness = makeHarness({
-    findReferenceBySongId: async () => reference,
+    findReferenceAudioBySongId: async () => ({
+      reference,
+      audioPath: "/media/references/01J8K3R4P9ABCDEFGHJKMNPQRT.mp3",
+    }),
     runTranscribe: async () => ({
       ok: false,
       error: { kind: "transcribe_failed", detail: "SheetSage2 exploded" },

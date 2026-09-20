@@ -4,7 +4,9 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { referenceAudioKey, songAudioKey } from "../media/audio.keys"
 import { makeFsAudioStore } from "../media/audio.store"
+import { Reference } from "./songs.models"
 import {
+  makeFindReferenceAudioBySongId,
   makePurgeStaleReferences,
   makeReconcileMedia,
   makeSaveSongAudio,
@@ -165,5 +167,41 @@ test("reconcile leaves matching files and rows untouched", async () => {
     expect(failed).toEqual([])
     expect(await store.stat(songAudioKey(songId))).not.toBeNull()
     expect(await store.stat(referenceAudioKey(referenceId, "audio/wav"))).not.toBeNull()
+  })
+})
+
+test("findReferenceAudioBySongId resolves an absolute path under the media root", async () => {
+  await withStore(async (store, mediaDir) => {
+    const reference: Reference = Object.freeze({
+      id: "01J8K3R4P9ABCDEFGHJKMNPQRS",
+      songId: "01J8K3R4P9ABCDEFGHJKMNPQRT",
+      filename: "demo-song.mp3",
+      contentType: "audio/mpeg",
+      byteLength: 5,
+      scoreAbc: null,
+      createdAt: "2026-09-17T04:00:00.000Z",
+    })
+    const findReferenceAudioBySongId = makeFindReferenceAudioBySongId({
+      findReferenceBySongId: async () => reference,
+      resolveReferenceAudioPath: (referenceId, contentType) =>
+        store.path(referenceAudioKey(referenceId, contentType)),
+    })
+
+    const found = await findReferenceAudioBySongId("01J8K3R4P9ABCDEFGHJKMNPQRT")
+
+    expect(found?.reference).toEqual(reference)
+    expect(found?.audioPath).toBe(join(mediaDir, "references", `${reference.id}.mp3`))
+  })
+})
+
+test("findReferenceAudioBySongId is null when no reference is attached", async () => {
+  await withStore(async (store) => {
+    const findReferenceAudioBySongId = makeFindReferenceAudioBySongId({
+      findReferenceBySongId: async () => null,
+      resolveReferenceAudioPath: (referenceId, contentType) =>
+        store.path(referenceAudioKey(referenceId, contentType)),
+    })
+
+    expect(await findReferenceAudioBySongId("01J8K3R4P9ABCDEFGHJKMNPQRS")).toBeNull()
   })
 })
