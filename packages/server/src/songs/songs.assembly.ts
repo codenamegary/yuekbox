@@ -3,6 +3,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { CreateSongBody } from "contracts/http/songs"
 import { ulid } from "ulid"
+import { songAudioKey } from "../media/audio.keys"
 import { Db } from "../db/client"
 import { err, ok, Result } from "../shared/result"
 import { makeCreateReference } from "./references.usecase"
@@ -10,7 +11,9 @@ import { makeCreateSong } from "./songs.create.usecase"
 import { makeDeleteSong } from "./songs.delete.usecase"
 import { makeGetSong } from "./songs.get.usecase"
 import { makeListSongs, ListSongsInput } from "./songs.list.usecase"
+import { makeSaveSongAudio } from "./songs.media.usecase"
 import {
+  ByteRange,
   CreateReferenceError,
   CreateReferenceInput,
   CreateSongError,
@@ -22,6 +25,7 @@ import {
   SongAudioLookupError,
   SongsPage,
 } from "./songs.models"
+import { AudioStore } from "./songs.ports"
 import {
   makeAttachReferenceToSong,
   makeClaimNextQueuedSong,
@@ -33,6 +37,7 @@ import {
   makeFindSongById,
   makeInsertReference,
   makeInsertSong,
+  makeInsertSongAudio,
   makeListSongs as makeListSongsAdapter,
   makeMarkSongComplete,
   makeMarkSongFailed,
@@ -41,17 +46,21 @@ import {
   makeMarkSongStage,
   makeRecoverInterruptedSongs,
   makeSaveReferenceScore,
-  makeSaveSongAudio,
 } from "./songs.sqlite.adapters"
 import { makeEncodeFlacToMp3, FfmpegAdapterEnv } from "./songs.ffmpeg.adapters"
 import { makeRunTranscribe, Sheetsage2AdapterEnv } from "./songs.sheetsage2.adapters"
 import { makeRunYue2Generate, Yue2AdapterEnv } from "./songs.yue2.adapters"
 import { makeSongWorker, SongWorker } from "./songs.worker"
 
-export type SongAudioPayload = Readonly<{ mp3: Uint8Array; contentType: string }>
+export type SongAudioPayload = Readonly<{
+  contentType: string
+  byteLength: number
+  read: (range: ByteRange | null) => Promise<Uint8Array>
+}>
 
 export type SongsSliceDeps = Readonly<{
   db: Db
+  audioStore: AudioStore
   yue2: Yue2AdapterEnv
   sheetsage2: Sheetsage2AdapterEnv
   ffmpeg: FfmpegAdapterEnv
@@ -86,7 +95,7 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   const deleteStaleReferences = makeDeleteStaleReferences(deps.db)
   const findSongAudio = makeFindSongAudio(deps.db)
   const listSongsPort = makeListSongsAdapter(deps.db)
-  const saveSongAudio = makeSaveSongAudio(deps.db)
+  const insertSongAudio = makeInsertSongAudio(deps.db)
   const markSongRunning = makeMarkSongRunning(deps.db)
   const markSongStage = makeMarkSongStage(deps.db)
   const markSongProgress = makeMarkSongProgress(deps.db)
@@ -99,6 +108,17 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   const runYue2Generate = makeRunYue2Generate(deps.yue2)
   const runTranscribe = makeRunTranscribe(deps.sheetsage2)
   const encodeFlacToMp3 = makeEncodeFlacToMp3(deps.ffmpeg)
+
+  const removeSongAudio = async (songId: string): Promise<void> => {
+    await deps.audioStore.remove(songAudioKey(songId))
+  }
+
+  const saveSongAudio = makeSaveSongAudio({
+    putSongAudio: async (songId, mp3) =>
+      (await deps.audioStore.put(songAudioKey(songId), mp3)).byteLength,
+    insertSongAudio,
+    removeSongAudio,
+  })
 
   const createSong = makeCreateSong({
     insertSong,
@@ -117,7 +137,7 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   })
   const listSongs = makeListSongs({ listSongs: listSongsPort })
   const getSong = makeGetSong({ findSongById })
-  const deleteSong = makeDeleteSong({ deleteSong: deleteSongRow })
+  const deleteSong = makeDeleteSong({ deleteSong: deleteSongRow, removeSongAudio })
 
   const getSongAudio = async (
     songId: string,
@@ -125,9 +145,23 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     const song = await findSongById(songId)
     if (song === null) return err({ kind: "not_found" })
     if (song.status !== "complete") return err({ kind: "not_complete" })
-    const audio = await findSongAudio(songId)
-    if (audio === null) return err({ kind: "not_found" })
-    return ok(audio)
+    const row = await findSongAudio(songId)
+    if (row === null) return err({ kind: "not_found" })
+    const key = songAudioKey(songId)
+    const stored = await deps.audioStore.stat(key)
+    if (stored === null) return err({ kind: "not_found" })
+    return ok({
+      contentType: row.contentType,
+      byteLength: stored.byteLength,
+      read: async (range) => {
+        const bytes =
+          range === null
+            ? await deps.audioStore.read(key)
+            : await deps.audioStore.openRange(key, range.start, range.end)
+        if (bytes === null) throw new Error(`song audio is missing at ${key}`)
+        return bytes
+      },
+    })
   }
 
   const queueDepth = async (): Promise<number> => {

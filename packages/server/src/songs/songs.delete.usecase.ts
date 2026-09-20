@@ -4,6 +4,7 @@ import { DeleteSong } from "./songs.ports"
 
 export type DeleteSongDeps = Readonly<{
   deleteSong: DeleteSong
+  removeSongAudio: (songId: string) => Promise<void>
 }>
 
 export const makeDeleteSong =
@@ -13,5 +14,6 @@ export const makeDeleteSong =
     if (!deleted) {
       return err({ kind: "not_found" })
     }
+    await deps.removeSongAudio(songId)
     return ok(null)
   }

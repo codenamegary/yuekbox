@@ -27,6 +27,7 @@ import {
   FindSongById,
   InsertReference,
   InsertSong,
+  InsertSongAudio,
   ListSongs,
   MarkSongComplete,
   MarkSongFailed,
@@ -35,7 +36,6 @@ import {
   MarkSongStage,
   RecoverInterruptedSongs,
   SaveReferenceScore,
-  SaveSongAudio,
 } from "./songs.ports"
 
 const songColumns = {
@@ -172,24 +172,17 @@ export const makeListSongs =
     }
   }
 
-export const makeSaveSongAudio =
-  (db: Db): SaveSongAudio =>
-  async (input) => {
-    const mp3 = Buffer.from(input.mp3)
+export const makeInsertSongAudio =
+  (db: Db): InsertSongAudio =>
+  async (row) => {
     await db
       .insert(songAudioTable)
-      .values({
-        songId: input.songId,
-        mp3,
-        byteLength: mp3.byteLength,
-        contentType: input.contentType,
-      })
+      .values(row)
       .onConflictDoUpdate({
         target: songAudioTable.songId,
         set: {
-          mp3,
-          byteLength: mp3.byteLength,
-          contentType: input.contentType,
+          byteLength: row.byteLength,
+          contentType: row.contentType,
         },
       })
   }
@@ -198,13 +191,13 @@ export const makeFindSongAudio =
   (db: Db): FindSongAudio =>
   async (songId) => {
     const rows = await db
-      .select()
+      .select({ byteLength: songAudioTable.byteLength, contentType: songAudioTable.contentType })
       .from(songAudioTable)
       .where(eq(songAudioTable.songId, songId))
       .limit(1)
     const row = rows[0]
     if (row === undefined) return null
-    return Object.freeze({ mp3: new Uint8Array(row.mp3), contentType: row.contentType })
+    return Object.freeze({ byteLength: row.byteLength, contentType: row.contentType })
   }
 
 export const makeMarkSongRunning =

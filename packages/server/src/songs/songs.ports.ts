@@ -43,9 +43,13 @@ export type SaveSongAudio = (
   input: Readonly<{ songId: string; mp3: Uint8Array; contentType: string }>,
 ) => Promise<void>
 
+export type InsertSongAudio = (
+  row: Readonly<{ songId: string; byteLength: number; contentType: string }>,
+) => Promise<void>
+
 export type FindSongAudio = (
   songId: string,
-) => Promise<Readonly<{ mp3: Uint8Array; contentType: string }> | null>
+) => Promise<Readonly<{ byteLength: number; contentType: string }> | null>
 
 export type MarkSongRunning = (songId: string) => Promise<void>
 

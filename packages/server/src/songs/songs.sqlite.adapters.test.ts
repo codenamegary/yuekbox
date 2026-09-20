@@ -8,12 +8,12 @@ import {
   makeFindSongAudio,
   makeFindSongById,
   makeInsertSong,
+  makeInsertSongAudio,
   makeListSongs,
   makeMarkSongComplete,
   makeMarkSongProgress,
   makeMarkSongStage,
   makeRecoverInterruptedSongs,
-  makeSaveSongAudio,
 } from "./songs.sqlite.adapters"
 
 const id = (suffix: string) => `01J8K3R4P9ABCDEFGHJKMNPQ${suffix}`
@@ -33,13 +33,13 @@ test("list never carries audio bytes", async () => {
   const handle = openDatabase({ path: ":memory:" })
   try {
     const insertSong = makeInsertSong(handle.db)
-    const saveSongAudio = makeSaveSongAudio(handle.db)
+    const insertSongAudio = makeInsertSongAudio(handle.db)
     const listSongs = makeListSongs(handle.db)
 
     await insertSong(newSong(id("RS"), "2026-09-17T04:00:00.000Z"))
-    await saveSongAudio({
+    await insertSongAudio({
       songId: id("RS"),
-      mp3: new Uint8Array([1, 2, 3, 4, 5]),
+      byteLength: 5,
       contentType: "audio/mpeg",
     })
 
@@ -173,20 +173,33 @@ test("deleting a song cascades to its audio", async () => {
   const handle = openDatabase({ path: ":memory:" })
   try {
     const insertSong = makeInsertSong(handle.db)
-    const saveSongAudio = makeSaveSongAudio(handle.db)
+    const insertSongAudio = makeInsertSongAudio(handle.db)
     const findSongAudio = makeFindSongAudio(handle.db)
     const deleteSong = makeDeleteSong(handle.db)
 
     await insertSong(newSong(id("R1"), "2026-09-17T04:00:00.000Z"))
-    await saveSongAudio({
+    await insertSongAudio({
       songId: id("R1"),
-      mp3: new Uint8Array([9, 9, 9]),
+      byteLength: 3,
       contentType: "audio/mpeg",
     })
+
+    expect((await findSongAudio(id("R1")))?.byteLength).toBe(3)
 
     expect(await deleteSong(id("R1"))).toBe(true)
     expect(await deleteSong(id("R1"))).toBe(false)
     expect(await findSongAudio(id("R1"))).toBeNull()
+  } finally {
+    handle.close()
+  }
+})
+
+test("the migrated song_audio table keeps metadata without a blob column", () => {
+  const handle = openDatabase({ path: ":memory:" })
+  try {
+    const columns = handle.sqlite.query<{ name: string }, []>("PRAGMA table_info(song_audio)").all()
+
+    expect(columns.map((column) => column.name)).toEqual(["song_id", "byte_length", "content_type"])
   } finally {
     handle.close()
   }

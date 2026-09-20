@@ -24,7 +24,6 @@ export const songAudioTable = sqliteTable("song_audio", {
   songId: text("song_id")
     .primaryKey()
     .references(() => songsTable.id, { onDelete: "cascade" }),
-  mp3: blob("mp3", { mode: "buffer" }).notNull(),
   byteLength: integer("byte_length").notNull(),
   contentType: text("content_type").notNull(),
 })

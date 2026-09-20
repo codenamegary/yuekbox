@@ -107,6 +107,8 @@ export type DeleteSongError = Readonly<{ kind: "not_found" }>
 
 export type SongAudioLookupError = Readonly<{ kind: "not_found" } | { kind: "not_complete" }>
 
+export type ByteRange = Readonly<{ start: number; end: number }>
+
 export type GenerateSongError =
   | Readonly<{ kind: "yue2_failed"; detail: string }>
   | Readonly<{ kind: "yue2_missing"; detail: string }>

@@ -34,7 +34,8 @@ const makeSlice = (
     ok({ items: [], limit: 20, nextCursor: null, previousCursor: null, count: 0 }),
   getSong: async () => ok(null as never),
   deleteSong: async () => ok(null),
-  getSongAudio: async () => ok({ mp3: new Uint8Array(), contentType: "audio/mpeg" }),
+  getSongAudio: async () =>
+    ok({ contentType: "audio/mpeg", byteLength: 0, read: async () => new Uint8Array() }),
   recoverInterruptedSongs: async () => 0,
   purgeStaleReferences: async () => 0,
   queueDepth: async () => 0,

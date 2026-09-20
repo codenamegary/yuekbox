@@ -65,7 +65,12 @@ const makeSlice = (overrides: Partial<SongsSlice> = {}, kicks: number[] = []): S
     ok({ items: [queuedSong], limit: 20, nextCursor: null, previousCursor: null, count: 1 }),
   getSong: async () => ok(queuedSong),
   deleteSong: async () => ok(null),
-  getSongAudio: async () => ok({ mp3: new Uint8Array([1, 2, 3]), contentType: "audio/mpeg" }),
+  getSongAudio: async () =>
+    ok({
+      contentType: "audio/mpeg",
+      byteLength: 3,
+      read: async () => new Uint8Array([1, 2, 3]),
+    }),
   recoverInterruptedSongs: async () => 0,
   queueDepth: async () => 0,
   worker: {
@@ -208,6 +213,85 @@ test("audio for a complete song is raw mpeg bytes", async () => {
   expect(response.statusCode).toBe(200)
   expect(response.headers["content-type"]).toBe("audio/mpeg")
   expect(response.rawPayload).toEqual(Buffer.from([1, 2, 3]))
+})
+
+test("audio range reads only the requested window", async () => {
+  const ranges: (Readonly<{ start: number; end: number }> | null)[] = []
+  const app = makeApp(
+    makeSlice({
+      getSongAudio: async () =>
+        ok({
+          contentType: "audio/mpeg",
+          byteLength: 3,
+          read: async (range) => {
+            ranges.push(range)
+            return new Uint8Array([2, 3])
+          },
+        }),
+    }),
+  )
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/v1/songs/${songId}/audio`,
+    headers: { range: "bytes=1-2" },
+  })
+
+  expect(response.statusCode).toBe(206)
+  expect(response.headers["content-range"]).toBe("bytes 1-2/3")
+  expect(response.headers["content-length"]).toBe("2")
+  expect(response.rawPayload).toEqual(Buffer.from([2, 3]))
+  expect(ranges).toEqual([{ start: 1, end: 2 }])
+})
+
+test("audio without a range reads the whole file", async () => {
+  const ranges: (Readonly<{ start: number; end: number }> | null)[] = []
+  const app = makeApp(
+    makeSlice({
+      getSongAudio: async () =>
+        ok({
+          contentType: "audio/mpeg",
+          byteLength: 3,
+          read: async (range) => {
+            ranges.push(range)
+            return new Uint8Array([1, 2, 3])
+          },
+        }),
+    }),
+  )
+
+  const response = await app.inject({ method: "GET", url: `/v1/songs/${songId}/audio` })
+
+  expect(response.statusCode).toBe(200)
+  expect(response.headers["content-length"]).toBe("3")
+  expect(ranges).toEqual([null])
+})
+
+test("an unsatisfiable range is a 416 and reads nothing", async () => {
+  let reads = 0
+  const app = makeApp(
+    makeSlice({
+      getSongAudio: async () =>
+        ok({
+          contentType: "audio/mpeg",
+          byteLength: 3,
+          read: async () => {
+            reads += 1
+            return new Uint8Array([1, 2, 3])
+          },
+        }),
+    }),
+  )
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/v1/songs/${songId}/audio`,
+    headers: { range: "bytes=5-9" },
+  })
+
+  expect(response.statusCode).toBe(416)
+  expect(response.headers["content-range"]).toBe("bytes */3")
+  expect(reads).toBe(0)
 })
 
 test("list returns a contract collection", async () => {

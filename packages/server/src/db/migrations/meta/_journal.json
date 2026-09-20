@@ -29,6 +29,13 @@
       "when": 1789875693629,
       "tag": "0003_add_ai_config",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789907688418,
+      "tag": "0004_drop_song_audio_mp3",
+      "breakpoints": true
     }
   ]
 }

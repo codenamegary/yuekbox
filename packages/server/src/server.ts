@@ -6,6 +6,7 @@ import { makeAiConfigStore } from "./ai/ai.config.store"
 import { chatCompletion, listModels } from "./ai/ai.openai"
 import { buildApp } from "./app"
 import { openDatabase } from "./db/client"
+import { makeFsAudioStore } from "./media/audio.store"
 import { assembleSongsSlice } from "./songs/songs.assembly"
 import { checkFfmpeg } from "./songs/songs.ffmpeg.adapters"
 import { checkSheetsage2 } from "./songs/songs.sheetsage2.adapters"
@@ -20,6 +21,7 @@ const readEnv = () => {
     host: process.env.HOST ?? "127.0.0.1",
     port: Number(process.env.PORT ?? 8787),
     sqlitePath: process.env.SQLITE_PATH ?? "./data/yuekbox.sqlite",
+    mediaDir: process.env.MEDIA_DIR ?? "./data/media",
     kitRoot,
     pythonBin: process.env.YUE2_PYTHON ?? resolve(kitRoot, ".venv/bin/python"),
     scriptBin: resolve(kitRoot, ".venv/bin/yue2"),
@@ -41,6 +43,7 @@ const env = readEnv()
 const database = openDatabase({ path: env.sqlitePath })
 const songs = assembleSongsSlice({
   db: database.db,
+  audioStore: makeFsAudioStore(env.mediaDir),
   yue2: {
     kitRoot: env.kitRoot,
     pythonBin: env.pythonBin,
