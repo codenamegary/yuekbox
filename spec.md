@@ -584,9 +584,10 @@ One page.
   ready visualization (or a reroll in flight), its canvas replaces the trip mode. The visual
   receives audio frames every `requestAnimationFrame` and lyric cues on change; the overlay hides
   while it runs and returns on failure. A swap happens when the checksum changes.
-- Reroll: `SongPlayer` shows a reroll control whenever AI is on and the visuals writer has a
-  model. A failed authoring run or a browser-side compile/render failure shows a small badge;
-  reroll clears it and the trip mode covers the gap.
+- Reroll: `SongPlayer` always shows a reroll control beside the pulse button. It rerolls the active
+  Song when AI is on and the visuals writer has a model, pulses while a run is in flight, and opens
+  AI settings when the visuals writer is unconfigured. A failed authoring run or a browser-side
+  compile/render failure shows a small badge; reroll clears it and the trip mode covers the gap.
 - History list: newest first, click to play.
 
 Stage labels:

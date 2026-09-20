@@ -98,6 +98,11 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine, onPoke, vi
   const complete = song !== null && song.status === "complete"
   const showBadge =
     visualization.configured && (visualization.failed || visualization.status === "failed")
+  const rerollTitle = !visualization.configured
+    ? "AI visuals are off — click to open settings"
+    : visualization.failed
+      ? "Reroll the failed visualization"
+      : "Reroll Visualization"
 
   const toggle = () => {
     if (!complete) return
@@ -187,22 +192,18 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine, onPoke, vi
           ⏛
         </button>
 
-        {visualization.configured ? (
-          <button
-            type="button"
-            onClick={visualization.onReroll}
-            disabled={visualization.rerolling}
-            className={cn(
-              "text-white/40 hover:text-cyan-300 transition-colors text-xs font-mono disabled:opacity-30 disabled:pointer-events-none",
-              visualization.rerolling && "animate-pulse",
-            )}
-            title={
-              visualization.failed ? "Reroll the failed visualization" : "Reroll Visualization"
-            }
-          >
-            ↻
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={visualization.onReroll}
+          disabled={visualization.rerolling}
+          className={cn(
+            "text-white/40 hover:text-cyan-300 transition-colors text-xs font-mono disabled:opacity-30 disabled:pointer-events-none",
+            visualization.rerolling && "animate-pulse",
+          )}
+          title={rerollTitle}
+        >
+          ↻
+        </button>
       </div>
 
       <audio

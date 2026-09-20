@@ -271,6 +271,11 @@ export const SongsPage: React.FC = () => {
       visualization?.status === "rerolling" ||
       visualization?.status === "pending",
     onReroll: () => {
+      if (!visualsConfigured) {
+        setSettingsOpen(true)
+        poke()
+        return
+      }
       if (activeSongId === null) return
       rerollVisualization.mutate(activeSongId)
       poke()
