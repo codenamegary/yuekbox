@@ -113,3 +113,17 @@ export type RunTranscribe = (
 export type CreateTempDir = () => Promise<string>
 
 export type RemoveTempDir = (path: string) => Promise<void>
+
+export type StoredAudio = Readonly<{
+  path: string
+  byteLength: number
+}>
+
+export type AudioStore = Readonly<{
+  put: (key: string, audio: Uint8Array) => Promise<StoredAudio>
+  stat: (key: string) => Promise<StoredAudio | null>
+  read: (key: string) => Promise<Uint8Array | null>
+  openRange: (key: string, start: number, end: number) => Promise<Uint8Array | null>
+  remove: (key: string) => Promise<void>
+  list: () => Promise<readonly string[]>
+}>
