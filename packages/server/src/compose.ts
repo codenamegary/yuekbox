@@ -1,8 +1,5 @@
 import { ServiceState, Status } from "contracts/http/status"
-import { AiSlice } from "./ai/ai.models"
-import { assembleAiSlice } from "./ai/ai.slice"
-import { makeAiConfigStore } from "./ai/ai.config.sqlite.adapters"
-import { chatCompletion, listModels } from "./ai/ai.openai.adapters"
+import { AiSlice, assembleAiSlice } from "./ai/ai.assembly"
 import { buildApp } from "./app"
 import { Db } from "./db/client"
 import { assembleGenerationSlice, GenerationSlice } from "./generation/generation.assembly"
@@ -59,9 +56,7 @@ export const composeServer = (deps: ComposeDeps): ComposedServer => {
     logError: deps.logError,
   })
   const ai = assembleAiSlice({
-    configStore: makeAiConfigStore(deps.db),
-    chat: chatCompletion,
-    listModels,
+    db: deps.db,
     createSong: songs.createSong,
     wake: generation.worker.wake,
     logError: deps.logError,

@@ -1,4 +1,4 @@
-import { AiSlice } from "./ai.models"
+import { AiSlice } from "./ai.assembly"
 
 const notWired = (): never => {
   throw new Error("AI is not wired in this test")

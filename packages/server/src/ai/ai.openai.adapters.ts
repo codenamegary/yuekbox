@@ -1,5 +1,5 @@
-import { err, ok, Result } from "../shared/result"
-import { OpenAIError, WriterSetting } from "./ai.models"
+import { err, ok } from "../shared/result"
+import { ChatCompletion, ListModels } from "./ai.ports"
 
 export const defaultTimeoutMs = 240_000
 
@@ -33,12 +33,12 @@ const errorDetail = (status: number, body: string): string => {
 }
 
 /** One chat completion against any OpenAI-compatible endpoint. */
-export const chatCompletion = async (
-  setting: WriterSetting,
-  system: string,
-  user: string,
-  timeoutMs: number = defaultTimeoutMs,
-): Promise<Result<string, OpenAIError>> => {
+export const chatCompletion: ChatCompletion = async (
+  setting,
+  system,
+  user,
+  timeoutMs = defaultTimeoutMs,
+) => {
   const body: Record<string, unknown> = {
     model: setting.model,
     messages: [
@@ -88,10 +88,7 @@ export const chatCompletion = async (
 }
 
 /** The real model list from the endpoint's /models route. */
-export const listModels = async (
-  setting: Pick<WriterSetting, "baseUrl" | "apiKey">,
-  timeoutMs: number = 15_000,
-): Promise<Result<readonly string[], OpenAIError>> => {
+export const listModels: ListModels = async (setting, timeoutMs = 15_000) => {
   let response: Response
   try {
     response = await fetch(joinUrl(setting.baseUrl, "/models"), {
