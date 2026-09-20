@@ -13,8 +13,8 @@ import {
   EnhanceScopeSchema,
 } from "contracts/http/ai"
 import { PROBLEM_TYPES, ProblemError } from "contracts/http/error"
-import { toSongResponse } from "../songs/songs.routes"
-import { AiSlice } from "./ai.models"
+import { toSongResponse } from "../songs/songs.responses"
+import { AiSlice } from "./ai.assembly"
 
 export type AiRoutesOptions = Readonly<{
   ai: AiSlice

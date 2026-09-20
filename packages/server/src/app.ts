@@ -1,7 +1,7 @@
 import Fastify, { FastifyInstance } from "fastify"
 import { PROBLEM_TYPES } from "contracts/http/error"
 import { Status, StatusSchema, statusPath } from "contracts/http/status"
-import { AiSlice } from "./ai/ai.models"
+import { AiSlice } from "./ai/ai.assembly"
 import { aiRoutes } from "./ai/ai.routes"
 import { referencesRoutes } from "./songs/references.routes"
 import { SongsSlice } from "./songs/songs.assembly"

@@ -6,10 +6,7 @@ import { buildApp, AppDeps } from "../app"
 import { ok } from "../shared/result"
 import { makeSongsSliceFixture, songFixture } from "../songs/songs.fixtures"
 import { openDatabase } from "../db/client"
-import { makeAiConfigStore } from "./ai.config.sqlite.adapters"
-import { AiSlice } from "./ai.models"
-import { assembleAiSlice } from "./ai.slice"
-import { chatCompletion, listModels } from "./ai.openai.adapters"
+import { AiSlice, assembleAiSlice } from "./ai.assembly"
 
 const makeApp = (deps: Omit<AppDeps, "referenceMaxBytes" | "wake">, wake: () => void = () => {}) =>
   buildApp({ referenceMaxBytes: 1024, wake, ...deps })
@@ -84,9 +81,7 @@ const songsSlice = (): ReturnType<typeof makeSongsSliceFixture> =>
 
 const buildAi = (wake: () => void = () => {}): AiSlice =>
   assembleAiSlice({
-    configStore: makeAiConfigStore(openDatabase({ path: ":memory:" }).db),
-    chat: chatCompletion,
-    listModels,
+    db: openDatabase({ path: ":memory:" }).db,
     createSong: songsSlice().createSong,
     wake,
   })

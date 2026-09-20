@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { mergeStored } from "./ai.merge"
-import { defaultStoredConfig } from "./ai.config.sqlite.adapters"
+import { defaultStoredConfig } from "./ai.models"
 
 describe("mergeStored", () => {
   test("keeps base when patch is empty", () => {
