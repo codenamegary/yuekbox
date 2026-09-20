@@ -1,3 +1,4 @@
+import { songTitleFromLyrics } from "../media/audio.keys"
 import { Song, SongCot, StageProgressUpdate } from "./songs.models"
 import {
   ClaimNextQueuedSong,
@@ -10,6 +11,7 @@ import {
   MarkSongRunning,
   MarkSongStage,
   RemoveTempDir,
+  RenameReferenceAudio,
   RunTranscribe,
   RunYue2Generate,
   SaveReferenceScore,
@@ -24,6 +26,7 @@ export type SongWorkerDeps = Readonly<{
   markSongComplete: MarkSongComplete
   markSongFailed: MarkSongFailed
   saveSongAudio: SaveSongAudio
+  renameReferenceAudio: RenameReferenceAudio
   findReferenceAudioBySongId: FindReferenceAudioBySongId
   runTranscribe: RunTranscribe
   saveReferenceScore: SaveReferenceScore
@@ -65,6 +68,7 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
     }
 
     try {
+      const title = songTitleFromLyrics(song.lyrics)
       const referenceAudio = await deps.findReferenceAudioBySongId(song.id)
       let cot: SongCot = "full"
       let abc: string | null = null
@@ -109,13 +113,27 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
         return
       }
 
-      await deps.saveSongAudio({ songId: song.id, mp3: encoded.value, contentType: "audio/mpeg" })
+      await deps.saveSongAudio({
+        songId: song.id,
+        mp3: encoded.value,
+        contentType: "audio/mpeg",
+        title,
+      })
       await deps.markSongComplete({
         songId: song.id,
         scoreAbc: generated.value.scoreAbc,
         durationSeconds: generated.value.durationSeconds,
         truncated: generated.value.truncated,
       })
+      if (referenceAudio !== null) {
+        await deps
+          .renameReferenceAudio({
+            referenceId: referenceAudio.reference.id,
+            contentType: referenceAudio.reference.contentType,
+            title,
+          })
+          .catch((error) => deps.logError("reference rename failed", error))
+      }
     } finally {
       await deps
         .removeTempDir(tempDir)

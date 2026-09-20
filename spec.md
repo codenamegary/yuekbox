@@ -345,7 +345,7 @@ byte_length       integer not null
 content_type      text not null   -- always audio/mpeg in v1
 ```
 
-File: `MEDIA_DIR/songs/<song_id>.mp3`.
+File: `MEDIA_DIR/songs/<slug>_<song_id>.mp3`, where the slug is the first sung lyric line (section tags stripped, lowercased, hyphenated, 60 chars max, `untitled` when nothing is left).
 
 **references**
 
@@ -359,7 +359,10 @@ score_abc         text null       -- melody-only ABC after transcription
 created_at        text not null
 ```
 
-File: `MEDIA_DIR/references/<id><ext>`, extension derived from `content_type`.
+File: `MEDIA_DIR/references/<id><ext>` at upload, extension derived from `content_type`. Once the Song completes, the worker renames it to `MEDIA_DIR/references/<slug>_<id><ext>` so both files share the song's prefix. A failed rename is logged, never fatal.
+
+Media file names end with `_<id><ext>` or `<id><ext>`. `parseMediaKey` extracts the role and id from any key, so reconcile matches files to rows by id and does not care which shape a file uses. Temp leftovers (`<name>.tmp`) do not parse and are unlinked on the next boot.
+
 Uploads start unattached (`song_id` null). Creating a Song with `referenceId` attaches it.
 Unattached References older than 24 hours are purged on boot.
 
@@ -393,7 +396,7 @@ CLI flags must match the installed `yue2` parser. If the module form fails, call
 
 5. Worker updates `stage` when stderr progress names a known stage. If parsing fails, leave the stage until done. Status stays `running`.
 6. If the Song has a Reference, transcribe it before generation. Run `<sheetsage2-python> <kit>/skills/yue2-music/scripts/transcribe.py <MEDIA_DIR>/references/<id><ext> --output <tmp>/transcribe --task melody-full --device cuda --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`, read `score.abc`, store it on the Reference, then generate with `cot = melody` and the ABC in the request JSON. A missing file fails the Song before the script spawns; any other failure fails the Song.
-7. On success, read `audio.flac`. Encode MP3. Write it to `MEDIA_DIR/songs/<song id>.mp3` and insert the `song_audio` row. Set `score_abc` from `score.abc` if present. Mark `complete`. Delete the temp dir (FLAC does not stay on disk).
+7. On success, read `audio.flac`. Encode MP3. Write it to `MEDIA_DIR/songs/<slug>_<song id>.mp3` and insert the `song_audio` row. Rename the attached Reference file to `<slug>_<reference id><ext>`. Set `score_abc` from `score.abc` if present. Mark `complete`. Delete the temp dir (FLAC does not stay on disk).
 8. On failure, mark `failed`, store a short `errorDetail`, delete the temp dir.
 9. Claim the next queued Song.
 
@@ -448,7 +451,8 @@ Cover at least:
 - Complete path with stub `RunYue2Generate` + stub `EncodeFlacToMp3` writes the media file and `complete`.
 - Encode failure marks `failed` and leaves `song_audio` empty.
 - Saving the media unlinks the file when the row commit fails.
-- `GET /v1/songs/:id/audio` serves a range from a multi-megabyte file without reading it whole.
+- Media keys slug the first lyric line and parse both name shapes back to the id.
+- `GET /v1/songs/:id/audio` serves a range from a multi-megabyte file without reading it whole, and still serves a bare id file.
 - Deleting a Song unlinks its media; a stale purge unlinks each deleted Reference file.
 - Transcribe points the script at the stored path and fails before spawning when the file is missing.
 - Reconcile unlinks orphans and fails a complete Song whose media file is missing.

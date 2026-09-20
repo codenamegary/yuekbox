@@ -52,7 +52,11 @@ export type ListSongsQuery = Readonly<{
 export type ListSongs = (query: ListSongsQuery) => Promise<SongsPage>
 
 export type SaveSongAudio = (
-  input: Readonly<{ songId: string; mp3: Uint8Array; contentType: string }>,
+  input: Readonly<{ songId: string; mp3: Uint8Array; contentType: string; title: string }>,
+) => Promise<void>
+
+export type RenameReferenceAudio = (
+  input: Readonly<{ referenceId: string; contentType: string; title: string }>,
 ) => Promise<void>
 
 export type InsertSongAudio = (
@@ -154,6 +158,7 @@ export type AudioStore = Readonly<{
   stat: (key: string) => Promise<StoredAudio | null>
   read: (key: string) => Promise<Uint8Array | null>
   openRange: (key: string, start: number, end: number) => Promise<Uint8Array | null>
+  move: (fromKey: string, toKey: string) => Promise<void>
   remove: (key: string) => Promise<void>
   list: () => Promise<readonly string[]>
 }>

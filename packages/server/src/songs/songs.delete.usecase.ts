@@ -5,8 +5,8 @@ import { DeleteSong, FindReferenceBySongId } from "./songs.ports"
 export type DeleteSongDeps = Readonly<{
   deleteSong: DeleteSong
   findReferenceBySongId: FindReferenceBySongId
-  removeSongAudio: (songId: string) => Promise<void>
-  removeReferenceAudio: (referenceId: string, contentType: string) => Promise<void>
+  removeSongMedia: (songId: string) => Promise<void>
+  removeReferenceMedia: (referenceId: string) => Promise<void>
 }>
 
 export const makeDeleteSong =
@@ -17,9 +17,9 @@ export const makeDeleteSong =
     if (!deleted) {
       return err({ kind: "not_found" })
     }
-    await deps.removeSongAudio(songId)
+    await deps.removeSongMedia(songId)
     if (reference !== null) {
-      await deps.removeReferenceAudio(reference.id, reference.contentType)
+      await deps.removeReferenceMedia(reference.id)
     }
     return ok(null)
   }

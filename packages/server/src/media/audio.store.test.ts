@@ -90,6 +90,31 @@ test("remove deletes the file and tolerates a missing key", async () => {
   })
 })
 
+test("move renames a file onto a new key", async () => {
+  await withStore(async (store) => {
+    await store.put("references/one.mp3", new Uint8Array([1, 2, 3]))
+
+    await store.move("references/one.mp3", "references/amazing-song_one.mp3")
+
+    expect(await store.stat("references/one.mp3")).toBeNull()
+    expect(Array.from((await store.read("references/amazing-song_one.mp3")) ?? [])).toEqual([
+      1, 2, 3,
+    ])
+  })
+})
+
+test("move fails when the source does not exist", async () => {
+  await withStore(async (store) => {
+    const outcome = await store.move("references/missing.mp3", "references/one.mp3").then(
+      () => "moved",
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    )
+
+    expect(outcome).not.toBe("moved")
+    expect(await store.stat("references/one.mp3")).toBeNull()
+  })
+})
+
 test("list returns every stored key under the media root", async () => {
   await withStore(async (store) => {
     await store.put("songs/one.mp3", new Uint8Array([1]))

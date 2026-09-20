@@ -58,6 +58,11 @@ export const makeFsAudioStore = (mediaDir: string): AudioStore => {
       return new Uint8Array(bytes)
     },
 
+    move: async (fromKey, toKey) => {
+      await mkdir(dirname(pathOf(toKey)), { recursive: true })
+      await rename(pathOf(fromKey), pathOf(toKey))
+    },
+
     remove: async (key) => {
       await rm(pathOf(key), { force: true })
     },

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { CreateSongBody } from "contracts/http/songs"
 import { ulid } from "ulid"
-import { referenceAudioKey, songAudioKey } from "../media/audio.keys"
+import { referenceAudioKey, songAudioKey, songTitleFromLyrics } from "../media/audio.keys"
 import { Db } from "../db/client"
 import { err, ok, Result } from "../shared/result"
 import { makeCreateReference } from "./references.usecase"
@@ -15,6 +15,7 @@ import {
   makeFindReferenceAudioBySongId,
   makePurgeStaleReferences,
   makeReconcileMedia,
+  makeRemoveMediaById,
   makeSaveSongAudio,
   ReconcileReport,
 } from "./songs.media.usecase"
@@ -120,19 +121,20 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   const runTranscribe = makeRunTranscribe(deps.sheetsage2)
   const encodeFlacToMp3 = makeEncodeFlacToMp3(deps.ffmpeg)
 
-  const removeSongAudio = async (songId: string): Promise<void> => {
-    await deps.audioStore.remove(songAudioKey(songId))
-  }
+  const removeMediaById = makeRemoveMediaById({
+    listMediaFiles: () => deps.audioStore.list(),
+    removeMediaFile: (key) => deps.audioStore.remove(key),
+  })
 
   const removeReferenceAudio = async (referenceId: string, contentType: string): Promise<void> => {
-    await deps.audioStore.remove(referenceAudioKey(referenceId, contentType))
+    await deps.audioStore.remove(referenceAudioKey(referenceId, contentType, null))
   }
 
   const saveSongAudio = makeSaveSongAudio({
-    putSongAudio: async (songId, mp3) =>
-      (await deps.audioStore.put(songAudioKey(songId), mp3)).byteLength,
+    putSongAudio: async (songId, mp3, title) =>
+      (await deps.audioStore.put(songAudioKey(songId, title), mp3)).byteLength,
     insertSongAudio,
-    removeSongAudio,
+    removeSongAudio: (songId) => removeMediaById("song", songId),
   })
 
   const purgeStaleReferences = makePurgeStaleReferences({
@@ -140,10 +142,21 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     removeReferenceAudio,
   })
 
+  const renameReferenceAudio = async (input: {
+    referenceId: string
+    contentType: string
+    title: string
+  }): Promise<void> => {
+    await deps.audioStore.move(
+      referenceAudioKey(input.referenceId, input.contentType, null),
+      referenceAudioKey(input.referenceId, input.contentType, input.title),
+    )
+  }
+
   const findReferenceAudioBySongId = makeFindReferenceAudioBySongId({
     findReferenceBySongId,
     resolveReferenceAudioPath: (referenceId, contentType) =>
-      deps.audioStore.path(referenceAudioKey(referenceId, contentType)),
+      deps.audioStore.path(referenceAudioKey(referenceId, contentType, null)),
   })
 
   const reconcileMedia = makeReconcileMedia({
@@ -165,7 +178,8 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   })
   const createReference = makeCreateReference({
     putReferenceAudio: async (referenceId, audio, contentType) =>
-      (await deps.audioStore.put(referenceAudioKey(referenceId, contentType), audio)).byteLength,
+      (await deps.audioStore.put(referenceAudioKey(referenceId, contentType, null), audio))
+        .byteLength,
     insertReference,
     removeReferenceAudio,
     now,
@@ -176,8 +190,8 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   const deleteSong = makeDeleteSong({
     deleteSong: deleteSongRow,
     findReferenceBySongId,
-    removeSongAudio,
-    removeReferenceAudio,
+    removeSongMedia: (songId) => removeMediaById("song", songId),
+    removeReferenceMedia: (referenceId) => removeMediaById("reference", referenceId),
   })
 
   const getSongAudio = async (
@@ -188,9 +202,13 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     if (song.status !== "complete") return err({ kind: "not_complete" })
     const row = await findSongAudio(songId)
     if (row === null) return err({ kind: "not_found" })
-    const key = songAudioKey(songId)
-    const stored = await deps.audioStore.stat(key)
-    if (stored === null) return err({ kind: "not_found" })
+    const titledKey = songAudioKey(songId, songTitleFromLyrics(song.lyrics))
+    const bareKey = songAudioKey(songId, null)
+    const titled = await deps.audioStore.stat(titledKey)
+    const bare = titled === null ? await deps.audioStore.stat(bareKey) : null
+    const key = titled !== null ? titledKey : bare !== null ? bareKey : null
+    const stored = titled ?? bare
+    if (key === null || stored === null) return err({ kind: "not_found" })
     return ok({
       contentType: row.contentType,
       byteLength: stored.byteLength,
@@ -218,6 +236,7 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     markSongComplete,
     markSongFailed,
     saveSongAudio,
+    renameReferenceAudio,
     findReferenceAudioBySongId,
     runTranscribe,
     saveReferenceScore,

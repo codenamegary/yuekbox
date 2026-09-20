@@ -23,11 +23,11 @@ test("delete removes the row first, then unlinks the media", async () => {
       return true
     },
     findReferenceBySongId: async () => null,
-    removeSongAudio: async (id) => {
+    removeSongMedia: async (id) => {
       calls.push(`remove-song:${id}`)
     },
-    removeReferenceAudio: async (id, contentType) => {
-      calls.push(`remove-ref:${id}:${contentType}`)
+    removeReferenceMedia: async (id) => {
+      calls.push(`remove-ref:${id}`)
     },
   })
 
@@ -45,22 +45,18 @@ test("delete unlinks an attached reference file too", async () => {
       return true
     },
     findReferenceBySongId: async () => reference,
-    removeSongAudio: async (id) => {
+    removeSongMedia: async (id) => {
       calls.push(`remove-song:${id}`)
     },
-    removeReferenceAudio: async (id, contentType) => {
-      calls.push(`remove-ref:${id}:${contentType}`)
+    removeReferenceMedia: async (id) => {
+      calls.push(`remove-ref:${id}`)
     },
   })
 
   const result = await deleteSong(songId)
 
   expect(result.ok).toBe(true)
-  expect(calls).toEqual([
-    `delete:${songId}`,
-    `remove-song:${songId}`,
-    `remove-ref:${referenceId}:audio/mpeg`,
-  ])
+  expect(calls).toEqual([`delete:${songId}`, `remove-song:${songId}`, `remove-ref:${referenceId}`])
 })
 
 test("delete leaves media alone when the row is missing", async () => {
@@ -71,10 +67,10 @@ test("delete leaves media alone when the row is missing", async () => {
       return false
     },
     findReferenceBySongId: async () => reference,
-    removeSongAudio: async () => {
+    removeSongMedia: async () => {
       calls.push("remove-song")
     },
-    removeReferenceAudio: async () => {
+    removeReferenceMedia: async () => {
       calls.push("remove-ref")
     },
   })

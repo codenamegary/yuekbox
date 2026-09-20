@@ -1,4 +1,4 @@
-import { referenceAudioKey, songAudioKey } from "../media/audio.keys"
+import { MediaFileRef, parseMediaKey } from "../media/audio.keys"
 import {
   AudioStore,
   DeleteStaleReferences,
@@ -12,7 +12,7 @@ import {
 } from "./songs.ports"
 
 export type SaveSongAudioDeps = Readonly<{
-  putSongAudio: (songId: string, mp3: Uint8Array) => Promise<number>
+  putSongAudio: (songId: string, mp3: Uint8Array, title: string) => Promise<number>
   insertSongAudio: InsertSongAudio
   removeSongAudio: (songId: string) => Promise<void>
 }>
@@ -20,7 +20,7 @@ export type SaveSongAudioDeps = Readonly<{
 export const makeSaveSongAudio =
   (deps: SaveSongAudioDeps): SaveSongAudio =>
   async (input) => {
-    const byteLength = await deps.putSongAudio(input.songId, input.mp3)
+    const byteLength = await deps.putSongAudio(input.songId, input.mp3, input.title)
     try {
       await deps.insertSongAudio({
         songId: input.songId,
@@ -49,6 +49,22 @@ export const makePurgeStaleReferences =
   }
 
 export const missingAudioDetail = "audio file missing on disk"
+
+export type RemoveMediaByIdDeps = Readonly<{
+  listMediaFiles: () => Promise<readonly string[]>
+  removeMediaFile: (key: string) => Promise<void>
+}>
+
+export const makeRemoveMediaById =
+  (deps: RemoveMediaByIdDeps) =>
+  async (role: MediaFileRef["role"], id: string): Promise<void> => {
+    const files = await deps.listMediaFiles()
+    const matching = files.filter((file) => {
+      const match = parseMediaKey(file)
+      return match !== null && match.role === role && match.id === id
+    })
+    await Promise.all(matching.map((file) => deps.removeMediaFile(file)))
+  }
 
 export type FindReferenceAudioBySongIdDeps = Readonly<{
   findReferenceBySongId: FindReferenceBySongId
@@ -85,25 +101,31 @@ export const makeReconcileMedia =
     const songAudio = await deps.listSongAudio()
     const referenceAudio = await deps.listReferenceAudio()
 
-    const songKeys = new Set(songAudio.map((record) => songAudioKey(record.songId)))
-    const referenceKeys = new Set(
-      referenceAudio.map((record) => referenceAudioKey(record.id, record.contentType)),
-    )
-    const orphans = files.filter((file) => !songKeys.has(file) && !referenceKeys.has(file))
-    await Promise.all(orphans.map((file) => deps.audioStore.remove(file)))
+    const parsed = files.map((file) => ({ file, match: parseMediaKey(file) }))
+    const songIds = new Set(songAudio.map((record) => record.songId))
+    const referenceIds = new Set(referenceAudio.map((record) => record.id))
+    const hasRow = (match: NonNullable<ReturnType<typeof parseMediaKey>>): boolean =>
+      match.role === "song" ? songIds.has(match.id) : referenceIds.has(match.id)
 
-    const present = new Set(files)
+    const orphans = parsed.filter(({ match }) => match === null || !hasRow(match))
+    await Promise.all(orphans.map(({ file }) => deps.audioStore.remove(file)))
+
+    const presentSongIds = new Set(
+      parsed.flatMap(({ match }) => (match?.role === "song" ? [match.id] : [])),
+    )
+    const presentReferenceIds = new Set(
+      parsed.flatMap(({ match }) => (match?.role === "reference" ? [match.id] : [])),
+    )
+
     const failedSongIds = songAudio
-      .filter(
-        (record) => record.songStatus === "complete" && !present.has(songAudioKey(record.songId)),
-      )
+      .filter((record) => record.songStatus === "complete" && !presentSongIds.has(record.songId))
       .map((record) => record.songId)
     await Promise.all(
       failedSongIds.map((songId) => deps.markSongFailed(songId, missingAudioDetail)),
     )
 
     const missingReferenceCount = referenceAudio.filter(
-      (record) => !present.has(referenceAudioKey(record.id, record.contentType)),
+      (record) => !presentReferenceIds.has(record.id),
     ).length
 
     return Object.freeze({
