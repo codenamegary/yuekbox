@@ -1,6 +1,6 @@
-import { EnhanceScope } from "contracts/http/ai"
+import { WriterScope } from "contracts/http/ai"
 import { err, ok, Result } from "../shared/result"
-import { AiSettingsError, StoredConfig, StoredSetting, WriterSetting } from "./ai.models"
+import { AiNotReadyError, StoredConfig, StoredSetting, WriterSetting } from "./ai.models"
 import { LoadStoredConfig } from "./ai.ports"
 import { presetByBaseUrl, presetById } from "./ai.presets"
 
@@ -13,12 +13,12 @@ export const writerSetting = (stored: StoredSetting): WriterSetting => ({
 
 export const checkSetting = (
   stored: StoredConfig,
-  scope: EnhanceScope,
-): Result<StoredSetting, AiSettingsError> => {
+  scope: WriterScope,
+): Result<StoredSetting, AiNotReadyError> => {
   if (!stored.enabled) {
     return err({ kind: "ai_disabled", detail: "AI is disabled. Enable it in settings first." })
   }
-  const setting = scope === "style" ? stored.style : stored.lyrics
+  const setting = stored[scope]
   if (setting.model.trim() === "") {
     return err({ kind: "not_configured", detail: "Pick a model in AI settings first." })
   }
@@ -32,14 +32,20 @@ export const checkSetting = (
   return ok(setting)
 }
 
+/** The visuals writer alone, as a yes/no the visualizations slice can act on. */
+export const visualizationSetting = (stored: StoredConfig): Result<null, AiNotReadyError> => {
+  const guarded = checkSetting(stored, "visuals")
+  return guarded.ok ? ok(null) : err(guarded.error)
+}
+
 export const guardScope = async (
   loadStoredConfig: LoadStoredConfig,
-  scope: EnhanceScope,
-): Promise<Result<StoredSetting, AiSettingsError>> => checkSetting(await loadStoredConfig(), scope)
+  scope: WriterScope,
+): Promise<Result<StoredSetting, AiNotReadyError>> => checkSetting(await loadStoredConfig(), scope)
 
 export const guardBoth = async (
   loadStoredConfig: LoadStoredConfig,
-): Promise<Result<Readonly<{ style: StoredSetting; lyrics: StoredSetting }>, AiSettingsError>> => {
+): Promise<Result<Readonly<{ style: StoredSetting; lyrics: StoredSetting }>, AiNotReadyError>> => {
   const stored = await loadStoredConfig()
   const style = checkSetting(stored, "style")
   if (!style.ok) return err(style.error)

@@ -1,5 +1,7 @@
 import * as React from "react"
 import { Song } from "contracts/http/songs"
+import { VisualizationStatus } from "contracts/http/visualizations"
+import { cn } from "@/lib/cn"
 import { AudioEngine } from "./songs.audio.engine"
 import { songAudioSource } from "./songs.api"
 
@@ -48,13 +50,25 @@ const SpectrumBars: React.FC<SpectrumBarsProps> = ({ engine }) => {
   )
 }
 
+export type SongVisualizationControls = Readonly<{
+  configured: boolean
+  status: VisualizationStatus | null
+  /** A client-side compile or render failure; the server still says ready. */
+  failed: boolean
+  /** Why the visual failed, server-side or client-side. */
+  detail: string | null
+  rerolling: boolean
+  onReroll: () => void
+}>
+
 type SongPlayerProps = Readonly<{
   song: Song | null
   engine: AudioEngine
   onPoke: () => void
+  visualization: SongVisualizationControls
 }>
 
-export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine, onPoke }) => {
+export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine, onPoke, visualization }) => {
   const audioRef = React.useRef<HTMLAudioElement | null>(null)
   const scrubberRef = React.useRef<HTMLDivElement | null>(null)
   const [playing, setPlaying] = React.useState(false)
@@ -82,6 +96,8 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine, onPoke }) 
   }, [engine])
 
   const complete = song !== null && song.status === "complete"
+  const showBadge =
+    visualization.configured && (visualization.failed || visualization.status === "failed")
 
   const toggle = () => {
     if (!complete) return
@@ -102,6 +118,29 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine, onPoke }) 
 
   return (
     <div className="w-full max-w-2xl mx-auto pointer-events-auto">
+      {showBadge ? (
+        <div className="flex items-center justify-center gap-2 pb-1">
+          <span className="font-mono text-3xs tracking-[0.25em] uppercase text-amber-200/70">
+            visual failed
+          </span>
+          {visualization.detail !== null ? (
+            <span
+              className="max-w-[360px] truncate font-mono text-3xs text-white/30"
+              title={visualization.detail}
+            >
+              {visualization.detail}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            onClick={visualization.onReroll}
+            className="font-mono text-3xs tracking-[0.25em] uppercase text-white/40 hover:text-white transition-colors"
+            title="Reroll the visualization"
+          >
+            reroll ↻
+          </button>
+        </div>
+      ) : null}
       <div className="pure-transparent-player py-3 px-6 flex items-center justify-between gap-6">
         <button
           type="button"
@@ -147,6 +186,23 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine, onPoke }) 
         >
           ⏛
         </button>
+
+        {visualization.configured ? (
+          <button
+            type="button"
+            onClick={visualization.onReroll}
+            disabled={visualization.rerolling}
+            className={cn(
+              "text-white/40 hover:text-cyan-300 transition-colors text-xs font-mono disabled:opacity-30 disabled:pointer-events-none",
+              visualization.rerolling && "animate-pulse",
+            )}
+            title={
+              visualization.failed ? "Reroll the failed visualization" : "Reroll Visualization"
+            }
+          >
+            ↻
+          </button>
+        ) : null}
       </div>
 
       <audio

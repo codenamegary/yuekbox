@@ -3,7 +3,7 @@ import {
   AiConfigPatch,
   AiConfig,
   EffortLevel,
-  EnhanceScope,
+  WriterScope,
   effortLevels,
   Setting,
 } from "contracts/http/ai"
@@ -20,11 +20,12 @@ type AiSettingsProps = Readonly<{
 
 type ScopeDraft = Readonly<{ baseUrl: string | null; apiKey: string | null }>
 
-type ScopeDrafts = Readonly<{ style: ScopeDraft; lyrics: ScopeDraft }>
+type ScopeDrafts = Readonly<Record<WriterScope, ScopeDraft>>
 
 const untouched: ScopeDrafts = {
   style: { baseUrl: null, apiKey: null },
   lyrics: { baseUrl: null, apiKey: null },
+  visuals: { baseUrl: null, apiKey: null },
 }
 
 const debounceMs = 600
@@ -37,7 +38,7 @@ const keyHintOf = (raw: string): string | null => {
 type SettingPatchInput = Partial<Omit<Setting, "keyHint">> & { apiKey?: string }
 
 type SettingEditorProps = Readonly<{
-  scope: EnhanceScope
+  scope: WriterScope
   title: string
   setting: Setting
   presets: readonly {
@@ -52,11 +53,11 @@ type SettingEditorProps = Readonly<{
   modelsLive: boolean
   modelsDetail: string | null
   draft: ScopeDraft
-  onBaseUrlChange: (scope: EnhanceScope, value: string) => void
-  onApiKeyChange: (scope: EnhanceScope, value: string) => void
-  onPatch: (scope: EnhanceScope, patch: SettingPatchInput) => void
-  onRefreshModels: (scope: EnhanceScope) => void
-  onFieldBlur: (scope: EnhanceScope) => void
+  onBaseUrlChange: (scope: WriterScope, value: string) => void
+  onApiKeyChange: (scope: WriterScope, value: string) => void
+  onPatch: (scope: WriterScope, patch: SettingPatchInput) => void
+  onRefreshModels: (scope: WriterScope) => void
+  onFieldBlur: (scope: WriterScope) => void
 }>
 
 const SettingEditor: React.FC<SettingEditorProps> = ({
@@ -197,6 +198,14 @@ const SettingEditor: React.FC<SettingEditorProps> = ({
 
 type WriterPatch = Partial<Omit<Setting, "keyHint">> & { apiKey?: string }
 
+const writerScopes: readonly WriterScope[] = ["style", "lyrics", "visuals"]
+
+const writerTitles: Readonly<Record<WriterScope, string>> = {
+  style: "style · writer",
+  lyrics: "lyrics · writer",
+  visuals: "visuals · writer",
+}
+
 export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
   const presetsQuery = useAiPresetsQuery()
   const configQuery = useAiConfigQuery()
@@ -205,8 +214,11 @@ export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
   const [saveCount, setSaveCount] = React.useState(0)
   const [drafts, setDrafts] = React.useState<ScopeDrafts>(untouched)
 
-  const styleModels = useAiModelsQuery("style", true, saveCount)
-  const lyricsModels = useAiModelsQuery("lyrics", true, saveCount)
+  const modelQueries = {
+    style: useAiModelsQuery("style", true, saveCount),
+    lyrics: useAiModelsQuery("lyrics", true, saveCount),
+    visuals: useAiModelsQuery("visuals", true, saveCount),
+  }
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -219,8 +231,8 @@ export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
   const config = configQuery.data
   const presets = presetsQuery.data?.presets ?? []
 
-  const timers = React.useRef<Partial<Record<EnhanceScope, number>>>({})
-  const pendingPatches = React.useRef<Partial<Record<EnhanceScope, WriterPatch>>>({})
+  const timers = React.useRef<Partial<Record<WriterScope, number>>>({})
+  const pendingPatches = React.useRef<Partial<Record<WriterScope, WriterPatch>>>({})
   React.useEffect(
     () => () => {
       for (const timer of Object.values(timers.current)) {
@@ -232,7 +244,7 @@ export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
 
   const readConfig = () => queryClient.getQueryData<AiConfig>(queryKeys.aiConfig())
 
-  const commitScope = (scope: EnhanceScope, patch: WriterPatch, base?: AiConfig) => {
+  const commitScope = (scope: WriterScope, patch: WriterPatch, base?: AiConfig) => {
     const current = base ?? readConfig()
     if (current === undefined) return
     const scopePatch: NonNullable<AiConfigPatch["style"]> = {
@@ -247,7 +259,7 @@ export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
     saveConfig.mutate({ [scope]: scopePatch }, { onSuccess: () => setSaveCount((c) => c + 1) })
   }
 
-  const patchScope = (scope: EnhanceScope, patch: WriterPatch) => {
+  const patchScope = (scope: WriterScope, patch: WriterPatch) => {
     const current = readConfig()
     if (current === undefined) return
     const optimistic: AiConfig = {
@@ -265,14 +277,14 @@ export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
     commitScope(scope, patch, optimistic)
   }
 
-  const patchScopeDebounced = (scope: EnhanceScope, patch: WriterPatch) => {
+  const patchScopeDebounced = (scope: WriterScope, patch: WriterPatch) => {
     pendingPatches.current[scope] = { ...pendingPatches.current[scope], ...patch }
     const pending = timers.current[scope]
     if (pending !== undefined) window.clearTimeout(pending)
     timers.current[scope] = window.setTimeout(() => flushScope(scope), debounceMs)
   }
 
-  const flushScope = (scope: EnhanceScope) => {
+  const flushScope = (scope: WriterScope) => {
     const pending = timers.current[scope]
     if (pending !== undefined) {
       window.clearTimeout(pending)
@@ -292,7 +304,7 @@ export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
     >
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="ai-settings-panel hairline-glass-box relative w-full max-w-3xl rounded-2xl p-6 space-y-5 max-h-[86vh] overflow-y-auto">
+      <div className="ai-settings-panel hairline-glass-box relative w-full max-w-6xl rounded-2xl p-6 space-y-5 max-h-[86vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-white/10 pb-3">
           <span className="text-xs font-mono font-bold tracking-widest text-slate-200 uppercase">
             machine spirits
@@ -337,21 +349,17 @@ export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
                 config.enabled ? "opacity-100" : "opacity-40 pointer-events-none",
               )}
             >
-              <div className="grid gap-4 md:grid-cols-2">
-                {(["style", "lyrics"] as const).map((scope) => (
+              <div className="grid gap-4 md:grid-cols-3">
+                {writerScopes.map((scope) => (
                   <SettingEditor
                     key={scope}
                     scope={scope}
-                    title={scope === "style" ? "style · writer" : "lyrics · writer"}
+                    title={writerTitles[scope]}
                     setting={config[scope]}
                     presets={presets}
-                    models={(scope === "style" ? styleModels : lyricsModels).data?.models ?? []}
-                    modelsLive={
-                      (scope === "style" ? styleModels : lyricsModels).data?.live ?? false
-                    }
-                    modelsDetail={
-                      (scope === "style" ? styleModels : lyricsModels).data?.detail ?? null
-                    }
+                    models={modelQueries[scope].data?.models ?? []}
+                    modelsLive={modelQueries[scope].data?.live ?? false}
+                    modelsDetail={modelQueries[scope].data?.detail ?? null}
                     draft={drafts[scope]}
                     onBaseUrlChange={(changedScope, value) => {
                       setDrafts((all) => ({

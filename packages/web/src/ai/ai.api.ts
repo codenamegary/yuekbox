@@ -12,9 +12,10 @@ import {
   AiPresets,
   AiPresetsSchema,
   EnhanceBody,
-  EnhanceScope,
   EnhanceResult,
   EnhanceResultSchema,
+  EnhanceScope,
+  WriterScope,
 } from "contracts/http/ai"
 import { Song, SongSchema } from "contracts/http/songs"
 import { ProblemDetailsSchema } from "contracts/http/error"
@@ -57,7 +58,7 @@ export const saveAiConfig = async (patch: AiConfigPatch): Promise<AiConfig> => {
   return parseJson(response, (value) => AiConfigSchema.parse(value))
 }
 
-export const fetchAiModels = async (scope: EnhanceScope): Promise<AiModels> => {
+export const fetchAiModels = async (scope: WriterScope): Promise<AiModels> => {
   const response = await fetch(`${aiModelsPath}?scope=${scope}`)
   return parseJson(response, (value) => AiModelsSchema.parse(value))
 }

@@ -4,6 +4,7 @@ import { ReferenceSchema } from "contracts/http/references"
 import { unusedAiFixture } from "../ai/ai.fixtures"
 import { buildApp } from "../app"
 import { ok } from "../shared/result"
+import { unusedVisualizationsFixture } from "../visualizations/visualizations.fixtures"
 import { makeSongsSliceFixture, referenceFixture, songFixture } from "./songs.fixtures"
 import { SongsSlice } from "./songs.assembly"
 import { CreateReferenceInput } from "./songs.models"
@@ -18,6 +19,7 @@ const makeApp = (songs: SongsSlice) =>
     wake: () => {},
     referenceMaxBytes: 1024,
     ai: unusedAiFixture(),
+    visualizations: unusedVisualizationsFixture(),
     status: async () => ({
       version: "0.1.0",
       state: "online",

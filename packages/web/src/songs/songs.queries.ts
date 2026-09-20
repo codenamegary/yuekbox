@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { Song, SongStatus } from "contracts/http/songs"
 import { queryKeys } from "@/queryKeys"
-import { fetchSong, fetchSongs, fetchStatus } from "./songs.api"
+import { fetchSong, fetchSongVisualization, fetchSongs, fetchStatus } from "./songs.api"
 
 const isActiveStatus = (status: SongStatus | undefined) =>
   status === "queued" || status === "running"
@@ -30,6 +30,24 @@ export const useStatusQuery = () =>
     queryKey: queryKeys.status(),
     queryFn: fetchStatus,
     refetchInterval: 5000,
+  })
+
+/**
+ * Polls while the visual is being authored. `pending` has no code yet;
+ * `rerolling` still has the old code playing until the new checksum lands.
+ */
+export const useVisualizationQuery = (songId: string | null) =>
+  useQuery({
+    queryKey: queryKeys.visualization(songId ?? "none"),
+    queryFn: () => {
+      if (songId === null) throw new Error("song id is required")
+      return fetchSongVisualization(songId)
+    },
+    enabled: songId !== null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      return status === "pending" || status === "rerolling" ? 1000 : false
+    },
   })
 
 export const pickActiveSong = (songs: readonly Song[], activeId: string | null): Song | null => {

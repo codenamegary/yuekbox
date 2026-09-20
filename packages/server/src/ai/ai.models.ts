@@ -1,7 +1,6 @@
 import { AiModels, EffortLevel, EffortLevelSchema, EnhanceScope } from "contracts/http/ai"
 
 export type OpenAIError = Readonly<{ kind: "upstream"; detail: string }>
-
 export type WriterSetting = Readonly<{
   baseUrl: string
   apiKey: string | null
@@ -22,6 +21,7 @@ export type StoredConfig = Readonly<{
   enabled: boolean
   style: StoredSetting
   lyrics: StoredSetting
+  visuals: StoredSetting
 }>
 
 const fallbackSetting = (): StoredSetting => ({
@@ -37,6 +37,7 @@ export const defaultStoredConfig = (): StoredConfig => ({
   enabled: false,
   style: fallbackSetting(),
   lyrics: fallbackSetting(),
+  visuals: fallbackSetting(),
 })
 
 export const parseStoredSetting = (value: unknown): StoredSetting => {
@@ -62,14 +63,17 @@ export const parseStoredConfig = (value: unknown): StoredConfig => {
     enabled: record.enabled === true,
     style: parseStoredSetting(record.style),
     lyrics: parseStoredSetting(record.lyrics),
+    visuals: parseStoredSetting(record.visuals),
   }
 }
 
-export type AiSettingsError = Readonly<
-  | { kind: "ai_disabled"; detail: string }
-  | { kind: "not_configured"; detail: string }
-  | { kind: "upstream_failed"; detail: string }
+export type AiNotReadyError = Readonly<
+  { kind: "ai_disabled"; detail: string } | { kind: "not_configured"; detail: string }
 >
+
+export type AiSettingsError =
+  | AiNotReadyError
+  | Readonly<{ kind: "upstream_failed"; detail: string }>
 
 /** Failures a single prompt attempt can hand back for a retry. */
 export type AiAttemptError = Readonly<
@@ -80,6 +84,15 @@ export type EnhanceError = AiSettingsError | AiAttemptError
 
 /** Random song reuses the enhance failure vocabulary; it is two prompt runs. */
 export type RandomSongError = EnhanceError
+
+/** One canvas visualization authored from a Song's style and lyrics. */
+export type VisualizationAuthorInput = Readonly<{
+  style: string
+  lyrics: string
+}>
+
+/** Authoring reuses the enhance failure vocabulary. */
+export type VisualizationAuthorError = EnhanceError
 
 export type EnhanceInput = Readonly<{
   kind: EnhanceScope

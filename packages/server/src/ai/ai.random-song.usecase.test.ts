@@ -25,6 +25,7 @@ const storedConfig = (overrides: Partial<StoredConfig> = {}): StoredConfig => ({
   enabled: true,
   style: setting("style-model"),
   lyrics: setting("lyrics-model"),
+  visuals: setting("visuals-model"),
   ...overrides,
 })
 

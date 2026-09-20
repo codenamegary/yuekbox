@@ -8,6 +8,7 @@ import { buildApp } from "../app"
 import { err, ok } from "../shared/result"
 import { makeSongsSliceFixture, songFixture } from "./songs.fixtures"
 import { SongsSlice } from "./songs.assembly"
+import { unusedVisualizationsFixture } from "../visualizations/visualizations.fixtures"
 
 const songId = "01J8K3R4P9ABCDEFGHJKMNPQRS"
 const queuedSong = songFixture()
@@ -38,6 +39,7 @@ const makeApp = (songs: SongsSlice, wake: () => void = () => {}) =>
     wake,
     referenceMaxBytes: 1024,
     ai: unusedAiFixture(),
+    visualizations: unusedVisualizationsFixture(),
     status: async () => statusFixture,
   })
 

@@ -6,12 +6,15 @@ import { aiRoutes } from "./ai/ai.routes"
 import { referencesRoutes } from "./songs/references.routes"
 import { SongsSlice } from "./songs/songs.assembly"
 import { songsRoutes } from "./songs/songs.routes"
+import { VisualizationsSlice } from "./visualizations/visualizations.assembly"
+import { visualizationsRoutes } from "./visualizations/visualizations.routes"
 
 export type AppDeps = Readonly<{
   songs: SongsSlice
   wake: () => void
   referenceMaxBytes: number
   ai: AiSlice
+  visualizations: VisualizationsSlice
   status: () => Promise<Status>
 }>
 
@@ -83,6 +86,7 @@ export const buildApp = (deps: AppDeps): FastifyInstance => {
   app.register(songsRoutes, { songs: deps.songs, wake: deps.wake })
   app.register(referencesRoutes, { songs: deps.songs })
   app.register(aiRoutes, { ai: deps.ai })
+  app.register(visualizationsRoutes, { visualizations: deps.visualizations })
 
   app.get(statusPath, async (_request, reply) => {
     const status = await deps.status()

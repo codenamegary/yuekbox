@@ -26,20 +26,27 @@ const isFailedAttempt = (value: unknown): value is FailedAttempt =>
 export type Attempt = (
   setting: StoredSetting,
   user: string,
-  usable: (text: string) => boolean,
-  unusableDetail: string,
+  /** null when the reply is usable, otherwise the reason it is not. */
+  usable: (text: string) => string | null,
+  /** The detail for an empty reply, which never reaches `usable`. */
+  emptyDetail: string,
+  system?: string,
 ) => Promise<Result<string, AiAttemptError>>
 
 export const makeAttempt =
   (chat: ChatCompletion): Attempt =>
-  async (setting, user, usable, unusableDetail) => {
-    const result = await chat(writerSetting(setting), systemPrompt, user)
+  async (setting, user, usable, emptyDetail, system) => {
+    const result = await chat(writerSetting(setting), system ?? systemPrompt, user)
     if (!result.ok) {
       return err({ kind: "upstream_failed", detail: result.error.detail })
     }
     const text = parseEnhanceText(result.value)
-    if (text === null || !usable(text)) {
-      return err({ kind: "unusable_result", detail: unusableDetail })
+    if (text === null) {
+      return err({ kind: "unusable_result", detail: emptyDetail })
+    }
+    const problem = usable(text)
+    if (problem !== null) {
+      return err({ kind: "unusable_result", detail: problem })
     }
     return ok(text)
   }

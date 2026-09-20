@@ -1,11 +1,11 @@
 import {
   AiConfig,
   AiConfigPatch,
-  EnhanceScope,
   Setting,
   SettingPatch,
   SettingPatchSchema,
   SettingSchema,
+  WriterScope,
 } from "contracts/http/ai"
 import { StoredConfig, StoredSetting } from "./ai.models"
 
@@ -25,10 +25,10 @@ export const toWireConfig = (stored: StoredConfig): AiConfig => ({
   enabled: stored.enabled,
   style: toWireSetting(stored.style),
   lyrics: toWireSetting(stored.lyrics),
+  visuals: toWireSetting(stored.visuals),
 })
 
-export const scopeOf = (config: AiConfig, scope: EnhanceScope) =>
-  scope === "style" ? config.style : config.lyrics
+export const scopeOf = (config: AiConfig, scope: WriterScope) => config[scope]
 
 /**
  * Shallow per-scope merge: fields the patch omits keep their stored values,
@@ -38,6 +38,7 @@ export const mergeStored = (stored: StoredConfig, patch: AiConfigPatch): StoredC
   enabled: patch.enabled ?? stored.enabled,
   style: mergeScope(stored.style, patch.style),
   lyrics: mergeScope(stored.lyrics, patch.lyrics),
+  visuals: mergeScope(stored.visuals, patch.visuals),
 })
 
 const mergeScope = (current: StoredSetting, patch: SettingPatch | undefined): StoredSetting => {

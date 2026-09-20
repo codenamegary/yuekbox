@@ -35,7 +35,10 @@ export const makeEnhance = (deps: EnhanceDeps) => {
             lyrics: input.lyrics,
           })
         : buildLyricsEnhancePrompt({ style: input.style, lyrics: input.lyrics })
-    const usable = input.kind === "style" ? isUsableStyleBrief : isUsableLyrics
+    const usable =
+      input.kind === "style"
+        ? (text: string): string | null => (isUsableStyleBrief(text) ? null : styleUnusableDetail)
+        : (text: string): string | null => (isUsableLyrics(text) ? null : lyricsUnusableDetail)
     const unusableDetail = input.kind === "style" ? styleUnusableDetail : lyricsUnusableDetail
 
     return runWithRetries(() => attempt(guarded.value, user, usable, unusableDetail))

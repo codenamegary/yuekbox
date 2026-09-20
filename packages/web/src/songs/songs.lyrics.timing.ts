@@ -7,6 +7,7 @@ export type VocalTimeline = Readonly<{
 
 export type LyricCue = Readonly<{
   text: string
+  section: string | null
   startSeconds: number
   endSeconds: number
 }>
@@ -17,7 +18,7 @@ export type LyricCueInput = Readonly<{
   durationSeconds: number
 }>
 
-type WeightedLine = Readonly<{ text: string; weight: number }>
+type WeightedLine = Readonly<{ text: string; section: string | null; weight: number }>
 
 type VoiceToken =
   | Readonly<{ kind: "note"; duration: number }>
@@ -201,9 +202,10 @@ export const parseYue2VocalTimeline = (scoreAbc: string): VocalTimeline | null =
 const maxLineWords = 12
 const maxLineChars = 72
 
-const splitLyricSegments = (lyrics: string): readonly string[] =>
-  lyrics
-    .replace(/\[[^\]]*\]/g, "\n")
+const tagToken = /^\[([^\]]*)\]$/
+
+const splitSegments = (text: string): readonly string[] =>
+  text
     .split(/\n|\s+\/\s+/)
     .flatMap((segment) => segment.split(/(?<=[.!?;])\s+/))
     .flatMap((segment) => {
@@ -213,13 +215,25 @@ const splitLyricSegments = (lyrics: string): readonly string[] =>
         : [segment]
     })
     .map((segment) => segment.trim())
-    .filter((text) => text.length > 0)
+    .filter((segment) => segment.length > 0)
 
-const parseLyricLines = (lyrics: string): readonly WeightedLine[] =>
-  splitLyricSegments(lyrics).map((text) => ({
-    text,
-    weight: Math.max(1, text.split(/\s+/).length),
-  }))
+/** Lines keep the `[Tag]` that was active when they appeared, or null. */
+const parseLyricLines = (lyrics: string): readonly WeightedLine[] => {
+  const lines: WeightedLine[] = []
+  let section: string | null = null
+  for (const token of lyrics.split(/(\[[^\]]*\])/)) {
+    const tag = tagToken.exec(token)
+    if (tag !== null) {
+      const name = (tag[1] ?? "").trim()
+      section = name === "" ? null : name
+      continue
+    }
+    for (const text of splitSegments(token)) {
+      lines.push({ text, section, weight: Math.max(1, text.split(/\s+/).length) })
+    }
+  }
+  return lines
+}
 
 const allocateToSpans = (
   lines: readonly WeightedLine[],
@@ -259,7 +273,7 @@ const allocateToSpans = (
     for (const line of group) {
       const end = Math.min(span.endSeconds, cursor + (spanDuration * line.weight) / groupWeight)
       if (end - cursor > minimumCueSeconds) {
-        cues.push({ text: line.text, startSeconds: cursor, endSeconds: end })
+        cues.push({ text: line.text, section: line.section, startSeconds: cursor, endSeconds: end })
       }
       cursor = end
     }
@@ -281,7 +295,7 @@ const allocateToWindow = (
   for (const line of lines) {
     const end = Math.min(window.endSeconds, cursor + (windowDuration * line.weight) / totalWeight)
     if (end - cursor > minimumCueSeconds) {
-      cues.push({ text: line.text, startSeconds: cursor, endSeconds: end })
+      cues.push({ text: line.text, section: line.section, startSeconds: cursor, endSeconds: end })
     }
     cursor = end
   }

@@ -1,13 +1,14 @@
 import * as React from "react"
-import { Song } from "contracts/http/songs"
 import { cn } from "@/lib/cn"
 import { AudioEngine } from "./songs.audio.engine"
-import { buildLyricCues, cueIndexAt, lyricEnvelope } from "./songs.lyrics.timing"
+import { LyricCue, cueIndexAt, lyricEnvelope } from "./songs.lyrics.timing"
 
 type LyricOverlayProps = Readonly<{
-  song: Song | null
+  cues: readonly LyricCue[]
   engine: AudioEngine
   receded: boolean
+  /** The visualization owns the lyrics while it runs. */
+  muted: boolean
 }>
 
 const fontClassFor = (text: string): string => {
@@ -29,22 +30,10 @@ const lyricMotion = (progress: number) => {
   }
 }
 
-export const LyricOverlay: React.FC<LyricOverlayProps> = ({ song, engine, receded }) => {
+export const LyricOverlay: React.FC<LyricOverlayProps> = ({ cues, engine, receded, muted }) => {
   const [playing, setPlaying] = React.useState(false)
   const [cueIndex, setCueIndex] = React.useState<number | null>(null)
   const textRef = React.useRef<HTMLParagraphElement | null>(null)
-
-  const cues = React.useMemo(
-    () =>
-      song === null || song.status !== "complete"
-        ? []
-        : buildLyricCues({
-            lyrics: song.lyrics,
-            scoreAbc: song.scoreAbc ?? null,
-            durationSeconds: song.durationSeconds ?? 0,
-          }),
-    [song],
-  )
 
   React.useEffect(() => {
     return engine.subscribe(() => setPlaying(engine.isPlaying()))
@@ -82,7 +71,7 @@ export const LyricOverlay: React.FC<LyricOverlayProps> = ({ song, engine, recede
   }, [cues, engine])
 
   const activeCue = cueIndex === null ? null : (cues[cueIndex] ?? null)
-  const visible = playing && !receded && activeCue !== null
+  const visible = playing && !receded && !muted && activeCue !== null
 
   return (
     <div

@@ -37,7 +37,7 @@ export const makeRandomSong = (deps: RandomSongDeps) => {
       attempt(
         guarded.value.style,
         buildRandomStylePrompt(),
-        isUsableStyleBrief,
+        (text) => (isUsableStyleBrief(text) ? null : styleUnusableDetail),
         styleUnusableDetail,
       ),
     )
@@ -47,7 +47,7 @@ export const makeRandomSong = (deps: RandomSongDeps) => {
       attempt(
         guarded.value.lyrics,
         buildRandomLyricsPrompt(style.value),
-        isUsableLyrics,
+        (text) => (isUsableLyrics(text) ? null : lyricsUnusableDetail),
         lyricsUnusableDetail,
       ),
     )

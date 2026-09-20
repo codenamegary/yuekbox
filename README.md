@@ -38,7 +38,8 @@ queue, a worker, and the real YuE2 CLI. The visuals are just here to make the wa
 - 🧪 **Keeps the score.** Every successful Song stores the ABC lead sheet for future features. v1 doesn't show it. Yet.
 - ⌁ **Reference covers.** Attach a song file and SheetSage2 transcribes its melody first, then YuE2 sings your lyrics over that tune. Optional — without it you get the usual freeform generation.
 - 🌈 **Four trip modes** for the background visualizer. More on that below.
-- 🧠 **Optional AI** that talks to any OpenAI-compatible endpoint — enhance, random, full auto. Off by default. More below.
+- 🎨 **AI-authored backdrops.** With AI on, every new Song gets its own generated Canvas 2D visualization built from its style and lyrics while the GPU is still working. It takes the backdrop over from the trip modes and owns the lyric display; reroll any Song whenever you like.
+- 🧠 **Optional AI** that talks to any OpenAI-compatible endpoint — enhance, random, visualizations, full auto. Off by default. More below.
 
 ## 🖼️ Gallery
 
@@ -211,8 +212,15 @@ With AI on, the boxes grow little sigils:
 - **∞ full auto** hides the inputs and runs the jukebox: always one song
   playing, always the next one generating. It never asks you anything.
 
-Style and lyrics each get their own endpoint, model, and optional
+Style, lyrics, and visuals each get their own endpoint, model, and optional
 `reasoning_effort` (`off`, `low`, `medium`, `high` — only sent when not off).
+
+The **visuals writer** authors one JavaScript canvas factory per Song, in parallel
+with GPU generation. When it's configured, a selected Song with a visualization
+hands the backdrop to it: the generated code gets the live audio spectrum and the
+active lyric line and draw to a full-screen canvas. Reroll it from the player at
+any time. If authoring fails — or the generated code throws — the trip mode
+returns and a small badge offers a reroll; playback is never blocked.
 
 ## 🌌 The psychedelic bit
 
@@ -225,7 +233,9 @@ deliberately, unapologetically **a screensaver that happens to make music**:
 - ✧ **Quantum Stardust Vortex** — ninety particles orbiting a point that isn't there
 
 **Contributions to this layer are extremely welcome.** Adding a fifth trip mode is
-basically a one-function PR — see below.
+basically a one-function PR — see below. With AI on and the visuals writer
+configured, a Song's own generated visualization takes the screen instead; the
+trip modes are always the fallback.
 
 ## 🛠️ Contributing
 

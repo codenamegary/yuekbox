@@ -6,6 +6,10 @@ import { assembleGenerationSlice, GenerationSlice } from "./generation/generatio
 import { EncodeFlacToMp3, RunTranscribe, RunYue2Generate } from "./generation/generation.ports"
 import { assembleMediaSlice, MediaSlice } from "./media/media.assembly"
 import { assembleSongsSlice, SongsSlice } from "./songs/songs.assembly"
+import {
+  assembleVisualizationsSlice,
+  VisualizationsSlice,
+} from "./visualizations/visualizations.assembly"
 
 export type DependencyStates = Readonly<{
   ffmpeg: "ok" | "missing"
@@ -38,15 +42,22 @@ export type ComposedServer = Readonly<{
   songs: SongsSlice
   generation: GenerationSlice
   ai: AiSlice
+  visualizations: VisualizationsSlice
 }>
 
 export const composeServer = (deps: ComposeDeps): ComposedServer => {
   const media = assembleMediaSlice(deps.mediaDir)
+
+  // Songs is assembled before the visualizations slice it triggers, so the
+  // insert hook goes through a forwarder that compose fills in below.
+  const songQueued: { request: ((songId: string) => void) | null } = { request: null }
+
   const songs = assembleSongsSlice({
     db: deps.db,
     media,
     now: deps.now,
     logError: deps.logError,
+    onSongQueued: (songId) => songQueued.request?.(songId),
   })
   const generation = assembleGenerationSlice({
     songs: songs.capabilities,
@@ -61,6 +72,19 @@ export const composeServer = (deps: ComposeDeps): ComposedServer => {
     wake: generation.worker.wake,
     logError: deps.logError,
   })
+  const visualizations = assembleVisualizationsSlice({
+    findSongById: songs.findSongById,
+    readVisualizationFile: songs.readVisualizationFile,
+    writeVisualizationFile: songs.writeVisualizationFile,
+    canAuthorVisualizations: ai.canAuthorVisualizations,
+    authorVisualization: ai.authorVisualization,
+    logError: deps.logError,
+  })
+  songQueued.request = (songId) => {
+    visualizations.requestVisualization(songId).catch((error: unknown) => {
+      deps.logError?.("visualization request failed", error)
+    })
+  }
 
   const status = async (): Promise<Status> => ({
     version: deps.service.version,
@@ -78,8 +102,9 @@ export const composeServer = (deps: ComposeDeps): ComposedServer => {
     wake: generation.worker.wake,
     referenceMaxBytes: deps.referenceMaxBytes,
     ai,
+    visualizations,
     status,
   })
 
-  return { app, media, songs, generation, ai }
+  return { app, media, songs, generation, ai, visualizations }
 }

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { EnhanceScope } from "contracts/http/ai"
+import { WriterScope } from "contracts/http/ai"
 import { queryKeys } from "@/queryKeys"
 import { fetchAiConfig, fetchAiModels, fetchAiPresets } from "./ai.api"
 
@@ -20,7 +20,7 @@ export const useAiConfigQuery = () =>
  * Live model list for one writer, from its own endpoint. `version` bumps
  * whenever settings are saved so the list refetches with fresh credentials.
  */
-export const useAiModelsQuery = (scope: EnhanceScope, enabled: boolean, version: number) =>
+export const useAiModelsQuery = (scope: WriterScope, enabled: boolean, version: number) =>
   useQuery({
     queryKey: [...queryKeys.aiModels(scope), version],
     queryFn: () => fetchAiModels(scope),

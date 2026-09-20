@@ -272,22 +272,31 @@ packages/server/src/
 │   └── generation.sheetsage2.adapters.ts
 ├── shared/
 │   └── result.ts
-└── songs/                    # lifecycle, routes, naming; depends on media
-    ├── songs.models.ts
-    ├── songs.ports.ts
-    ├── songs.files.ts        # pure key building, folder matching, display parsing
-    ├── songs.create.usecase.ts
-    ├── songs.list.usecase.ts
-    ├── songs.get.usecase.ts
-    ├── songs.delete.usecase.ts
-    ├── songs.complete.usecase.ts
-    ├── songs.audio.usecase.ts
-    ├── songs.reference.score.usecase.ts
-    ├── references.usecase.ts
-    ├── songs.sqlite.adapters.ts
-    ├── songs.routes.ts
-    ├── references.routes.ts
-    └── songs.assembly.ts
+├── songs/                    # lifecycle, routes, naming; depends on media
+│   ├── songs.models.ts
+│   ├── songs.ports.ts
+│   ├── songs.files.ts        # pure key building, folder matching, display parsing
+│   ├── songs.create.usecase.ts
+│   ├── songs.list.usecase.ts
+│   ├── songs.get.usecase.ts
+│   ├── songs.delete.usecase.ts
+│   ├── songs.complete.usecase.ts
+│   ├── songs.audio.usecase.ts
+│   ├── songs.reference.score.usecase.ts
+│   ├── references.usecase.ts
+│   ├── songs.sqlite.adapters.ts
+│   ├── songs.routes.ts
+│   ├── references.routes.ts
+│   └── songs.assembly.ts
+└── visualizations/           # AI-authored visuals; uses songs files and AI writers
+    ├── visualizations.models.ts
+    ├── visualizations.ports.ts
+    ├── visualizations.checksum.ts
+    ├── visualizations.authoring.ts   # in-memory pending/failed state
+    ├── visualizations.get.usecase.ts
+    ├── visualizations.request.usecase.ts
+    ├── visualizations.routes.ts
+    └── visualizations.assembly.ts
 ```
 
 `server.ts` loads env, builds the real vendor adapters, calls `composeServer`, runs boot recovery, listens, and handles SIGTERM. `compose.ts` builds media, then songs, then generation, then the app and the AI slice; the process-root wiring test calls the same function.
@@ -296,11 +305,13 @@ Use cases are single-shot. The worker loop lives in `generation.worker.ts`. Rout
 
 ### Slices and dependency direction
 
-One direction only: `media` depends on nothing, `songs` depends on media, `generation` depends on songs. Nothing under `songs/` imports anything under `generation/`. Both edges are wired in `compose.ts`.
+One direction only: `media` depends on nothing, `songs` depends on media, `generation` depends on songs, and `visualizations` depends on songs and on the AI writers it is handed. Nothing under `songs/` imports anything under `generation/` or `visualizations/`. The edges are wired in `compose.ts`.
 
 - `media` is a pure file store over opaque keys. No tables, no domain rules.
-- `songs` owns the lifecycle table, the `/v1/songs` and `/v1/references` routes, file naming and folder discovery, upload to `temp/`, the reference move at create time, audio streaming, and folder removal on delete. It exposes route-facing methods plus the capabilities record the worker consumes.
+- `songs` owns the lifecycle table, the `/v1/songs` and `/v1/references` routes, file naming and folder discovery, upload to `temp/`, the reference move at create time, audio streaming, `visualization.js` reads and writes, and folder removal on delete. It exposes route-facing methods plus the capabilities record the worker consumes.
 - `generation` owns the worker loop plus the yue2, ffmpeg, and sheetsage2 adapters. It reaches songs only through the capabilities record.
+- `ai` owns the writer config, prompts, model calls, and validation for style, lyrics, and visuals. It never touches songs directly; compose hands it `createSong` and wires its visual authoring into the visualizations slice.
+- `visualizations` owns the `/v1/songs/:id/visualization` routes, the in-memory per-Song pending/failed state, single-flight rerolls, and the author flow. The file on disk is the durable record; there is no table and no boot recovery.
 - `wake` (`() => void`) starts the worker. `compose.ts` passes it to the songs POST route and the AI slice. `/v1/status` reads queue depth from songs and `isBusy` from the generation worker.
 
 ### Ports
@@ -377,7 +388,7 @@ updated_at         text not null
 completed_at       text null
 ```
 
-`ai_config` is unchanged. There is no `song_audio` table, no `references` table, and no `score_abc` column. Since the local library was wiped, the schema is a single fresh `0000_init` migration with no backfill and no legacy read path.
+`ai_config` is unchanged. There is no `song_audio` table, no `references` table, and no `score_abc` column. Visualizations store no row at all: the file is the durable state, and pending/failed live in process memory. Since the local library was wiped, the schema is a single fresh `0000_init` migration with no backfill and no legacy read path.
 
 ### Disk layout
 
@@ -386,6 +397,7 @@ completed_at       text null
   generated_<SONG_ID>.mp3
   score.abc
   reference_score.abc
+  visualization.js
   references/<uploaded>_<ulid>.<ext>    optional
 <MEDIA_DIR>/temp/<uploaded>_<ulid>.<ext>
 ```
@@ -395,13 +407,24 @@ completed_at       text null
 - The folder is created at create time, so even a freeform Song owns one from birth.
 - Uploads land in `temp/`. Creating a Song with a `referenceId` moves the file into the Song's `references/` directory. Nothing is renamed after that.
 - The uploaded name keeps its case, spaces, and unicode; path separators and control characters become `-`, the stem is capped at 120 chars, and the extension comes from the content type. The trailing `_<ulid>` is the Reference id; display names strip it (and add back the extension).
-- `reference_score.abc` is written right after transcription. `score.abc` is written at completion. `visualization.js` is a reserved name for a future feature; nothing reads or writes it yet.
+- `reference_score.abc` is written right after transcription. `score.abc` is written at completion. `visualization.js` holds one model-authored canvas factory; the visualizations slice writes it with the same temp + rename rule and reads it back for `GET /v1/songs/:id/visualization`. Deleting the Song deletes it with the folder. Nothing stores a path.
 
 There is no purge job, no boot reconcile, and no rename step. Missing files surface lazily: the audio route stats the file and 404s, transcription fails before the script spawns, and `GET /v1/songs/:id` omits `scoreAbc` when the file is gone.
 
 Writes go to `<path>.tmp`, then rename onto the final path. Deletes remove the row and the folder in parallel; either side tolerating a failure is fine, an orphan folder is harmless and a later read just reports the file as missing.
 
 On process start, one recovery runs: any row with `status = running` becomes `failed` with `errorDetail = "interrupted"`. The GPU job does not resume.
+
+### Visualizations
+
+Each Song may own one AI-authored canvas visualization.
+
+- Trigger: `createSong` fires `onSongQueued` once the row and folder exist. Compose wires it to the visualizations slice, which guards the visuals writer and starts one authoring run. AI off or the writer unconfigured is a silent no-op: no state, no file, no error on the Song.
+- Authoring runs in parallel with the GPU worker and never touches the Song's status, stage, or progress.
+- The prompt in `ai.visualization.prompts.ts` carries the host contract, a worked dancing-line example with lyric display, the rules, the style, and the lyrics. The reply is cleaned of fences and unwrapped from the shapes models actually send (`const factory = (host) => {...}`, `export default`, named functions, prose around a fenced block) back to a bare expression, then smoke-run against a stub canvas with DOM/timer/network globals shadowed to undefined. A reply that cannot be normalized, or that throws while drawing, is discarded and asked again, up to 5 attempts with no backoff; the failure detail says why. There is no token scan and no size cap.
+- `GET /v1/songs/:id/visualization` → `{ status, code?, checksum?, errorDetail? }` or 404. `ready` and `rerolling` carry the file's code and its SHA-256; `pending` means no file and a run in flight; `failed` means no file and the last run failed. The file wins whenever it exists: a failed reroll leaves the old visual playing with no error surfaced.
+- `POST /v1/songs/:id/visualization` rerolls: 202 empty, 404 unknown Song, 409 when the visuals writer is not ready. A run already in flight absorbs the request.
+- Restart mid-authoring drops the run. The Song has no visual until rerolled; nothing re-kicks and no failed badge survives. A browser-side compile or render failure shows the same badge, falls back to the trip mode, and clears on reroll.
 
 ### Generate path
 
@@ -487,6 +510,13 @@ Cover at least:
 - `GET /v1/songs/:id/audio` serves a range from a multi-megabyte file in the folder, 416s an unsatisfiable range, and 404s when the file is gone.
 - Transcribe points the script at the stored path and fails before spawning when the file is missing.
 - Deleting a Song removes the row and the folder; a folder failure is logged, not fatal.
+- Creating a Song fires the queued hook after the row and folder exist, and not when validation fails.
+- `visualization.js` round-trips through the songs slice; writing without a folder throws instead of dropping the code.
+- Visualization routes: 404 for unknown Songs, 409 when the visuals writer is not ready, pending → ready with code and checksum, a second POST during a run starts nothing, a reroll reports `rerolling` with the old code until the checksum changes, and a failure shows `failed` until a reroll clears it.
+- The authoring state machine writes the code, records upstream failures and write failures with details, absorbs a second start while in flight, and clears a failure on reroll.
+- The prompt names the host contract; the author use case strips fences, unwraps assigned or declared factories, retries replies that do not produce a runnable function (including a missing-helper throw caught by the stub-canvas smoke run) and upstream or empty replies up to 5 times, and uses the visuals writer's model.
+- The visualizations slice reports the failure detail through `GET`, and `SongPlayer` shows it beside the badge so a failed reroll says why.
+- Wiring: compose creates a Song with AI configured, the visualization lands in the Song folder while the Song is still queued, and delete takes the file with the folder.
 - Claim skips `running` and `complete`.
 - Boot recovery: `running` becomes `failed`.
 - One process-root wiring test: in-memory database, temp `MEDIA_DIR`, stubbed vendor ports, driving upload, create, complete, ranged stream, and delete through the real `composeServer`.
@@ -521,9 +551,14 @@ packages/web/src/
     ├── SongForm.tsx
     ├── SongPlayer.tsx
     ├── SongList.tsx
+    ├── VisualizationCanvas.tsx
+    ├── LyricOverlay.tsx
+    ├── WinampCanvas.tsx
     ├── songs.api.ts
     ├── songs.queries.ts
-    └── songs.mutations.ts
+    ├── songs.mutations.ts
+    ├── songs.lyrics.timing.ts
+    └── songs.visualization.ts
 ```
 
 Remote state: TanStack Query only. Parse every response with contract schemas inside `queryFn`. Query keys in `queryKeys.ts`.
@@ -544,7 +579,14 @@ One page.
 - Lyrics overlay: while a complete Song plays, its lines fade in and out at the center of the
   page. Timing comes from the stored ABC vocal melody, scaled to the audio duration; when the
   score is missing, lines spread across the Song instead. The editor dims while the overlay is
-  active and returns when the user touches it.
+  active and returns when the user touches it. Cues carry the active `[Tag]` as their section.
+- Backdrop: the four hand-written trip modes run behind everything. When the active Song has a
+  ready visualization (or a reroll in flight), its canvas replaces the trip mode. The visual
+  receives audio frames every `requestAnimationFrame` and lyric cues on change; the overlay hides
+  while it runs and returns on failure. A swap happens when the checksum changes.
+- Reroll: `SongPlayer` shows a reroll control whenever AI is on and the visuals writer has a
+  model. A failed authoring run or a browser-side compile/render failure shows a small badge;
+  reroll clears it and the trip mode covers the gap.
 - History list: newest first, click to play.
 
 Stage labels:
@@ -592,17 +634,22 @@ comes from the endpoint's live `/models`, and the API key is stored in
 |---|---|
 | `GET /v1/ai/presets` | Known endpoints (OpenAI, Anthropic, Gemini, OpenRouter, Groq, Mistral, DeepSeek, Together, Ollama, LM Studio, custom) |
 | `GET`/`PUT /v1/ai/config` | Per-writer settings: `presetId`, `baseUrl`, `model`, `effort`, write-only `apiKey` |
-| `GET /v1/ai/models?scope=style\|lyrics` | Live model list; falls back to preset guesses with a `detail` |
+| `GET /v1/ai/models?scope=style\|lyrics\|visuals` | Live model list; falls back to preset guesses with a `detail` |
 | `POST /v1/ai/enhance` | `{ kind, style?, lyrics? }` → `{ text }` |
 | `POST /v1/ai/songs/random` | Style call writes the brief, lyrics call writes the sheet, queued as a normal Song |
+| `GET /v1/songs/:id/visualization` | The Song's canvas factory: `ready`/`rerolling` with code and checksum, `pending`, `failed`, or 404 |
+| `POST /v1/songs/:id/visualization` | Reroll the canvas factory: 202, 409 when the visuals writer is not ready |
 
 `effort` maps to `reasoning_effort` and is only sent when not `off`. Each model
 call retries up to 5 times with no backoff when the endpoint fails or the reply
-is unusable; the style brief and lyrics are validated between attempts. Failure
+is unusable; the style brief and lyrics are validated between attempts, while
+the visuals writer only requires a non-empty reply because the browser compiles
+the code. Failure
 modes: 409 when AI is off or a writer is missing a model/key, 502 when the
 endpoint fails or the reply is still unusable after retries. Full auto is client-side: one Song
 generating at all times, the next one plays when the current one ends, and a
-new generation starts the moment playback begins.
+new generation starts the moment playback begins. On track end, full auto
+rotates the trip mode only when the finished Song has no ready visualization.
 
 ## Failure modes
 
@@ -619,6 +666,9 @@ new generation starts the moment playback begins.
 | Complete Song's audio file missing | Audio route 404s |
 | Complete Song's `score.abc` missing | `scoreAbc` omitted from `GET /v1/songs/:id` |
 | Reference's media file missing | Song fails before transcription spawns, detail `reference audio is missing` |
+| Visualization authoring fails or replies empty | No file; `GET .../visualization` reports `failed` with the detail until a reroll clears it |
+| Server restarts mid-authoring | The run is dropped; the Song has no visual until rerolled |
+| Visualization code throws or misses a method in the browser | The loop detaches, the trip mode returns, and the badge shows until rerolled |
 
 ## Later (not v1)
 

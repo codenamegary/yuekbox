@@ -21,6 +21,8 @@ export type CreateSongDeps = Readonly<{
   now: () => string
   generateId: () => string
   randomSeed: () => number
+  /** Fired once the Song and its folder exist; the AI visuals writer listens here. */
+  onSongQueued?: (songId: string) => void
 }>
 
 type UploadedReference = Readonly<{ key: string; fileName: string }>
@@ -87,6 +89,8 @@ export const makeCreateSong =
       await deps.removeDirectory(folderKey).catch(() => undefined)
       throw error
     }
+
+    deps.onSongQueued?.(songId)
 
     return ok(
       Object.freeze({
