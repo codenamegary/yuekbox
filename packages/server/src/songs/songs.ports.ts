@@ -127,6 +127,20 @@ export type StoredAudio = Readonly<{
   byteLength: number
 }>
 
+export type SongAudioRecord = Readonly<{
+  songId: string
+  songStatus: SongStatus
+}>
+
+export type ReferenceAudioRecord = Readonly<{
+  id: string
+  contentType: string
+}>
+
+export type ListSongAudio = () => Promise<readonly SongAudioRecord[]>
+
+export type ListReferenceAudio = () => Promise<readonly ReferenceAudioRecord[]>
+
 export type AudioStore = Readonly<{
   put: (key: string, audio: Uint8Array) => Promise<StoredAudio>
   stat: (key: string) => Promise<StoredAudio | null>

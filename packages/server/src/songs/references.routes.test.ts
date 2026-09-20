@@ -37,6 +37,11 @@ const makeSlice = (
   getSongAudio: async () =>
     ok({ contentType: "audio/mpeg", byteLength: 0, read: async () => new Uint8Array() }),
   recoverInterruptedSongs: async () => 0,
+  reconcileMedia: async () => ({
+    removedOrphanFiles: 0,
+    failedSongIds: [],
+    missingReferenceCount: 0,
+  }),
   purgeStaleReferences: async () => 0,
   queueDepth: async () => 0,
   worker: { kick: () => {}, drain: async () => {}, isBusy: () => false },

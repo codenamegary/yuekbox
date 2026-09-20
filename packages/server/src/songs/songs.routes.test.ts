@@ -72,6 +72,11 @@ const makeSlice = (overrides: Partial<SongsSlice> = {}, kicks: number[] = []): S
       read: async () => new Uint8Array([1, 2, 3]),
     }),
   recoverInterruptedSongs: async () => 0,
+  reconcileMedia: async () => ({
+    removedOrphanFiles: 0,
+    failedSongIds: [],
+    missingReferenceCount: 0,
+  }),
   queueDepth: async () => 0,
   worker: {
     kick: () => {

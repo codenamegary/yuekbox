@@ -29,6 +29,8 @@ import {
   InsertReference,
   InsertSong,
   InsertSongAudio,
+  ListReferenceAudio,
+  ListSongAudio,
   ListSongs,
   MarkSongComplete,
   MarkSongFailed,
@@ -199,6 +201,21 @@ export const makeFindSongAudio =
     const row = rows[0]
     if (row === undefined) return null
     return Object.freeze({ byteLength: row.byteLength, contentType: row.contentType })
+  }
+
+export const makeListSongAudio =
+  (db: Db): ListSongAudio =>
+  async () => {
+    const rows = await db
+      .select({ songId: songAudioTable.songId, songStatus: songsTable.status })
+      .from(songAudioTable)
+      .innerJoin(songsTable, eq(songsTable.id, songAudioTable.songId))
+    return rows.map((row) =>
+      Object.freeze({
+        songId: row.songId,
+        songStatus: SongStatusSchema.parse(row.songStatus),
+      }),
+    )
   }
 
 export const makeMarkSongRunning =
@@ -391,6 +408,15 @@ export const makeFindReferenceBySongId =
       .limit(1)
     const row = rows[0]
     return row === undefined ? null : toReference(row)
+  }
+
+export const makeListReferenceAudio =
+  (db: Db): ListReferenceAudio =>
+  async () => {
+    const rows = await db
+      .select({ id: referencesTable.id, contentType: referencesTable.contentType })
+      .from(referencesTable)
+    return rows.map((row) => Object.freeze(row))
   }
 
 export const makeAttachReferenceToSong =

@@ -11,7 +11,12 @@ import { makeCreateSong } from "./songs.create.usecase"
 import { makeDeleteSong } from "./songs.delete.usecase"
 import { makeGetSong } from "./songs.get.usecase"
 import { makeListSongs, ListSongsInput } from "./songs.list.usecase"
-import { makePurgeStaleReferences, makeSaveSongAudio } from "./songs.media.usecase"
+import {
+  makePurgeStaleReferences,
+  makeReconcileMedia,
+  makeSaveSongAudio,
+  ReconcileReport,
+} from "./songs.media.usecase"
 import {
   ByteRange,
   CreateReferenceError,
@@ -38,6 +43,8 @@ import {
   makeInsertReference,
   makeInsertSong,
   makeInsertSongAudio,
+  makeListReferenceAudio,
+  makeListSongAudio,
   makeListSongs as makeListSongsAdapter,
   makeMarkSongComplete,
   makeMarkSongFailed,
@@ -77,6 +84,7 @@ export type SongsSlice = Readonly<{
   deleteSong: (songId: string) => Promise<Result<null, DeleteSongError>>
   getSongAudio: (songId: string) => Promise<Result<SongAudioPayload, SongAudioLookupError>>
   recoverInterruptedSongs: () => Promise<number>
+  reconcileMedia: () => Promise<ReconcileReport>
   queueDepth: () => Promise<number>
   worker: SongWorker
 }>
@@ -96,6 +104,8 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   const findSongAudio = makeFindSongAudio(deps.db)
   const listSongsPort = makeListSongsAdapter(deps.db)
   const insertSongAudio = makeInsertSongAudio(deps.db)
+  const listSongAudio = makeListSongAudio(deps.db)
+  const listReferenceAudio = makeListReferenceAudio(deps.db)
   const markSongRunning = makeMarkSongRunning(deps.db)
   const markSongStage = makeMarkSongStage(deps.db)
   const markSongProgress = makeMarkSongProgress(deps.db)
@@ -127,6 +137,13 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   const purgeStaleReferences = makePurgeStaleReferences({
     deleteStaleReferences,
     removeReferenceAudio,
+  })
+
+  const reconcileMedia = makeReconcileMedia({
+    audioStore: deps.audioStore,
+    listSongAudio,
+    listReferenceAudio,
+    markSongFailed,
   })
 
   const createSong = makeCreateSong({
@@ -208,6 +225,7 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     deleteSong,
     getSongAudio,
     recoverInterruptedSongs,
+    reconcileMedia,
     queueDepth,
     worker,
   }

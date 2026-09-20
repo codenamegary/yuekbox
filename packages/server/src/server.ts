@@ -81,6 +81,21 @@ if (purgedReferences > 0) {
   console.warn(`purged ${purgedReferences} unattached reference upload(s)`)
 }
 
+const reconciled = await songs.reconcileMedia()
+if (reconciled.removedOrphanFiles > 0) {
+  console.warn(`removed ${reconciled.removedOrphanFiles} orphan media file(s)`)
+}
+if (reconciled.failedSongIds.length > 0) {
+  console.warn(
+    `marked ${reconciled.failedSongIds.length} complete song(s) failed: audio file missing`,
+  )
+}
+if (reconciled.missingReferenceCount > 0) {
+  console.warn(
+    `${reconciled.missingReferenceCount} reference audio file(s) missing; those songs fail at transcription`,
+  )
+}
+
 const ffmpegState = await checkFfmpeg(env.ffmpegBin)
 const yue2State = checkYue2({ kitRoot: env.kitRoot, pythonBin: env.pythonBin })
 const sheetsage2State = checkSheetsage2({
