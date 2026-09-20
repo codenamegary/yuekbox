@@ -1,4 +1,145 @@
 {
   "$schema": "../../node_modules/oxlint/configuration_schema.json",
-  "extends": ["../../.oxlintrc.json"]
+  "extends": ["../../.oxlintrc.json"],
+  "rules": {
+    "typescript/no-misused-promises": "error",
+    "typescript/switch-exhaustiveness-check": "error"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.usecase.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "fastify",
+                "message": "backend skill: use cases depend on ports, not transport"
+              },
+              {
+                "name": "drizzle-orm",
+                "message": "backend skill: use cases depend on ports, not persistence"
+              },
+              {
+                "name": "bun:sqlite",
+                "message": "backend skill: use cases depend on ports, not persistence"
+              }
+            ],
+            "patterns": [
+              {
+                "regex": "^node:",
+                "message": "backend skill: use cases depend on ports, not the filesystem"
+              },
+              {
+                "group": ["**/db/*"],
+                "message": "backend skill: use cases depend on ports, not database modules"
+              },
+              {
+                "group": ["**/*.adapters"],
+                "message": "backend skill: use cases depend on ports, not adapters"
+              },
+              {
+                "group": ["**/*.routes"],
+                "message": "backend skill: use cases depend on ports, not routes"
+              },
+              {
+                "group": ["**/*.assembly"],
+                "message": "backend skill: use cases depend on ports, not slice assemblies"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/*.models.ts", "**/*.ports.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "fastify",
+                "message": "backend skill: models and ports depend inward only"
+              },
+              {
+                "name": "drizzle-orm",
+                "message": "backend skill: models and ports depend inward only"
+              },
+              {
+                "name": "bun:sqlite",
+                "message": "backend skill: models and ports depend inward only"
+              }
+            ],
+            "patterns": [
+              {
+                "regex": "^node:",
+                "message": "backend skill: models and ports depend inward only"
+              },
+              {
+                "group": ["**/db/*"],
+                "message": "backend skill: models and ports depend inward only"
+              },
+              {
+                "group": ["**/*.adapters"],
+                "message": "backend skill: models and ports depend inward only"
+              },
+              {
+                "group": ["**/*.routes"],
+                "message": "backend skill: models and ports depend inward only"
+              },
+              {
+                "group": ["**/*.assembly"],
+                "message": "backend skill: models and ports depend inward only"
+              },
+              {
+                "group": ["**/*.usecase"],
+                "message": "backend skill: models and ports depend inward only"
+              },
+              {
+                "group": ["**/*.worker"],
+                "message": "backend skill: models and ports depend inward only"
+              },
+              {
+                "group": ["**/*.slice"],
+                "message": "backend skill: models and ports depend inward only"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/*.test.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "jest",
+                "message": "backend skill: tests use bun:test and inline stubs"
+              },
+              {
+                "name": "vitest",
+                "message": "backend skill: tests use bun:test and inline stubs"
+              },
+              {
+                "name": "@jest/globals",
+                "message": "backend skill: tests use bun:test and inline stubs"
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["bun:test"],
+                "importNames": ["mock", "spyOn"],
+                "message": "backend skill: tests use inline stubs, not mocks"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }
