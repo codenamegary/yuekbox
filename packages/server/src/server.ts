@@ -1,28 +1,17 @@
 import { existsSync } from "node:fs"
 import { resolve } from "node:path"
 import { ServiceState } from "contracts/http/status"
-import { assembleAiSlice } from "./ai/ai.slice"
-import { makeAiConfigStore } from "./ai/ai.config.store"
-import { chatCompletion, listModels } from "./ai/ai.openai"
-import { buildApp } from "./app"
+import { composeServer } from "./compose"
 import { openDatabase } from "./db/client"
-import { assembleSongsSlice } from "./songs/songs.assembly"
+import { checkFfmpeg, makeEncodeFlacToMp3 } from "./generation/generation.ffmpeg.adapters"
+import { checkSheetsage2, makeRunTranscribe } from "./generation/generation.sheetsage2.adapters"
 import {
-  makeAudioPath,
-  makeListMediaFiles,
-  makeMoveAudio,
-  makeOpenAudioRange,
-  makePutAudio,
-  makeReadAudio,
-  makeRemoveAudio,
-  makeStatAudio,
-} from "./songs/songs.media.adapters"
-import { checkFfmpeg } from "./songs/songs.ffmpeg.adapters"
-import { checkSheetsage2 } from "./songs/songs.sheetsage2.adapters"
-import { checkYue2, yue2ModelPath, yue2VaePath } from "./songs/songs.yue2.adapters"
+  checkYue2,
+  makeRunYue2Generate,
+  yue2ModelPath,
+  yue2VaePath,
+} from "./generation/generation.yue2.adapters"
 import { version } from "./version"
-
-const referencePurgeAgeMs = 24 * 60 * 60 * 1000
 
 const readEnv = () => {
   const kitRoot = process.env.YUE2_KIT ?? resolve(import.meta.dir, "../../../..")
@@ -50,67 +39,6 @@ const readEnv = () => {
 
 const env = readEnv()
 const database = openDatabase({ path: env.sqlitePath })
-const songs = assembleSongsSlice({
-  db: database.db,
-  audioPath: makeAudioPath(env.mediaDir),
-  putAudio: makePutAudio(env.mediaDir),
-  statAudio: makeStatAudio(env.mediaDir),
-  readAudio: makeReadAudio(env.mediaDir),
-  openAudioRange: makeOpenAudioRange(env.mediaDir),
-  moveAudio: makeMoveAudio(env.mediaDir),
-  removeAudio: makeRemoveAudio(env.mediaDir),
-  listMediaFiles: makeListMediaFiles(env.mediaDir),
-  yue2: {
-    kitRoot: env.kitRoot,
-    pythonBin: env.pythonBin,
-    scriptBin: env.scriptBin,
-    gpuBudget: env.gpuBudget,
-  },
-  sheetsage2: {
-    pythonBin: env.sheetsage2Python,
-    scriptPath: env.sheetsage2Script,
-    model: env.sheetsage2Model,
-    baseModel: env.sheetsage2BaseModel,
-    device: env.sheetsage2Device,
-    offline: env.sheetsage2Offline,
-    cwd: env.kitRoot,
-  },
-  ffmpeg: { ffmpegBin: env.ffmpegBin },
-})
-
-const ai = assembleAiSlice({
-  configStore: makeAiConfigStore(database.db),
-  chat: chatCompletion,
-  listModels,
-  songs,
-})
-
-const recoveredCount = await songs.recoverInterruptedSongs()
-if (recoveredCount > 0) {
-  console.warn(`marked ${recoveredCount} interrupted song(s) as failed`)
-}
-
-const purgedReferences = await songs.purgeStaleReferences(
-  new Date(Date.now() - referencePurgeAgeMs).toISOString(),
-)
-if (purgedReferences > 0) {
-  console.warn(`purged ${purgedReferences} unattached reference upload(s)`)
-}
-
-const reconciled = await songs.reconcileMedia()
-if (reconciled.removedOrphanFiles > 0) {
-  console.warn(`removed ${reconciled.removedOrphanFiles} orphan media file(s)`)
-}
-if (reconciled.failedSongIds.length > 0) {
-  console.warn(
-    `marked ${reconciled.failedSongIds.length} complete song(s) failed: audio file missing`,
-  )
-}
-if (reconciled.missingReferenceCount > 0) {
-  console.warn(
-    `${reconciled.missingReferenceCount} reference audio file(s) missing; those songs fail at transcription`,
-  )
-}
 
 const ffmpegState = await checkFfmpeg(env.ffmpegBin)
 const yue2State = checkYue2({ kitRoot: env.kitRoot, pythonBin: env.pythonBin })
@@ -141,21 +69,42 @@ if (sheetsage2State === "missing") {
 const startedAt = new Date().toISOString()
 const serviceState: { value: ServiceState } = { value: "starting" }
 
-const app = buildApp({
-  songs,
+const { app, songs } = composeServer({
+  db: database.db,
+  mediaDir: env.mediaDir,
+  runYue2Generate: makeRunYue2Generate({
+    kitRoot: env.kitRoot,
+    pythonBin: env.pythonBin,
+    scriptBin: env.scriptBin,
+    gpuBudget: env.gpuBudget,
+  }),
+  runTranscribe: makeRunTranscribe({
+    pythonBin: env.sheetsage2Python,
+    scriptPath: env.sheetsage2Script,
+    model: env.sheetsage2Model,
+    baseModel: env.sheetsage2BaseModel,
+    device: env.sheetsage2Device,
+    offline: env.sheetsage2Offline,
+    cwd: env.kitRoot,
+  }),
+  encodeFlacToMp3: makeEncodeFlacToMp3({ ffmpegBin: env.ffmpegBin }),
   referenceMaxBytes: env.referenceMaxBytes,
-  ai,
-  status: async () => ({
+  service: {
     version,
-    state: serviceState.value,
+    state: () => serviceState.value,
+    startedAt,
+  },
+  dependencies: {
     ffmpeg: ffmpegState,
     yue2: yue2State,
     sheetsage2: sheetsage2State,
-    queueDepth: await songs.queueDepth(),
-    gpuBusy: songs.worker.isBusy(),
-    startedAt,
-  }),
+  },
 })
+
+const recoveredCount = await songs.recoverInterruptedSongs()
+if (recoveredCount > 0) {
+  console.warn(`marked ${recoveredCount} interrupted song(s) as failed`)
+}
 
 await app.listen({ host: env.host, port: env.port })
 serviceState.value = "online"

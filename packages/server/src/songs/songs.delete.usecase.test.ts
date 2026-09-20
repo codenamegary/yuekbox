@@ -1,78 +1,40 @@
 import { expect, test } from "bun:test"
 import { makeDeleteSong } from "./songs.delete.usecase"
-import { Reference } from "./songs.models"
 
 const songId = "01J8K3R4P9ABCDEFGHJKMNPQRS"
-const referenceId = "01J8K3R4P9ABCDEFGHJKMNPQRT"
 
-const reference: Reference = Object.freeze({
-  id: referenceId,
-  songId,
-  filename: "demo-song.mp3",
-  contentType: "audio/mpeg",
-  byteLength: 5,
-  scoreAbc: null,
-  createdAt: "2026-09-17T04:00:00.000Z",
-})
-
-test("delete removes the row first, then unlinks the media", async () => {
+test("delete removes the row and the folder", async () => {
   const calls: string[] = []
   const deleteSong = makeDeleteSong({
     deleteSong: async (id) => {
       calls.push(`delete:${id}`)
       return true
     },
-    findReferenceBySongId: async () => null,
-    removeSongMedia: async (id) => {
-      calls.push(`remove-song:${id}`)
+    removeSongFolder: async (id) => {
+      calls.push(`remove-folder:${id}`)
     },
-    removeReferenceMedia: async (id) => {
-      calls.push(`remove-ref:${id}`)
-    },
-  })
-
-  const result = await deleteSong(songId)
-
-  expect(result.ok).toBe(true)
-  expect(calls).toEqual([`delete:${songId}`, `remove-song:${songId}`])
-})
-
-test("delete unlinks an attached reference file too", async () => {
-  const calls: string[] = []
-  const deleteSong = makeDeleteSong({
-    deleteSong: async (id) => {
-      calls.push(`delete:${id}`)
-      return true
-    },
-    findReferenceBySongId: async () => reference,
-    removeSongMedia: async (id) => {
-      calls.push(`remove-song:${id}`)
-    },
-    removeReferenceMedia: async (id) => {
-      calls.push(`remove-ref:${id}`)
+    logError: (message) => {
+      calls.push(`log:${message}`)
     },
   })
 
   const result = await deleteSong(songId)
 
   expect(result.ok).toBe(true)
-  expect(calls).toEqual([`delete:${songId}`, `remove-song:${songId}`, `remove-ref:${referenceId}`])
+  expect(calls).toEqual([`delete:${songId}`, `remove-folder:${songId}`])
 })
 
-test("delete leaves media alone when the row is missing", async () => {
+test("delete reports not-found but still clears the folder", async () => {
   const calls: string[] = []
   const deleteSong = makeDeleteSong({
     deleteSong: async () => {
       calls.push("delete")
       return false
     },
-    findReferenceBySongId: async () => reference,
-    removeSongMedia: async () => {
-      calls.push("remove-song")
+    removeSongFolder: async () => {
+      calls.push("remove-folder")
     },
-    removeReferenceMedia: async () => {
-      calls.push("remove-ref")
-    },
+    logError: () => {},
   })
 
   const result = await deleteSong(songId)
@@ -80,5 +42,23 @@ test("delete leaves media alone when the row is missing", async () => {
   expect(result.ok).toBe(false)
   if (result.ok) return
   expect(result.error.kind).toBe("not_found")
-  expect(calls).toEqual(["delete"])
+  expect(calls).toEqual(["delete", "remove-folder"])
+})
+
+test("a folder removal failure is logged, not fatal", async () => {
+  const logs: string[] = []
+  const deleteSong = makeDeleteSong({
+    deleteSong: async () => true,
+    removeSongFolder: async () => {
+      throw new Error("permission denied")
+    },
+    logError: (message) => {
+      logs.push(message)
+    },
+  })
+
+  const result = await deleteSong(songId)
+
+  expect(result.ok).toBe(true)
+  expect(logs).toEqual(["song folder removal failed"])
 })

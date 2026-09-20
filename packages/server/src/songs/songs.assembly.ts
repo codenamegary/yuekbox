@@ -1,58 +1,56 @@
-import { mkdtemp, rm } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
-import { CreateSongBody } from "contracts/http/songs"
 import { ulid } from "ulid"
 import { Db } from "../db/client"
-import { err, ok, Result } from "../shared/result"
-import { makeFindReferenceAudioBySongId } from "./references.audio.usecase"
+import { MediaSlice } from "../media/media.assembly"
+import { StoredFile } from "../media/media.ports"
+import { Result } from "../shared/result"
 import { makeCreateReference } from "./references.usecase"
+import { makeGetSongAudio } from "./songs.audio.usecase"
+import { makeCompleteSong } from "./songs.complete.usecase"
 import { makeCreateSong } from "./songs.create.usecase"
 import { makeDeleteSong } from "./songs.delete.usecase"
+import {
+  generatedAudioKey,
+  parseReferenceFileName,
+  referenceFileKey,
+  referenceFilesPattern,
+  scoreKey,
+  songFolderName,
+  songFolderPattern,
+  songTitleFromLyrics,
+} from "./songs.files"
 import { makeGetSong } from "./songs.get.usecase"
-import { makeListSongs, ListSongsInput } from "./songs.list.usecase"
-import { referenceAudioKey, songAudioKey, songTitleFromLyrics } from "./songs.media.keys"
-import { makePurgeStaleReferences } from "./songs.media.purge.usecase"
-import { makeReconcileMedia, ReconcileReport } from "./songs.media.reconcile.usecase"
-import { makeRemoveMediaById } from "./songs.media.remove.usecase"
-import { makeSaveSongAudio } from "./songs.media.save.usecase"
+import { ListSongsInput, makeListSongs } from "./songs.list.usecase"
+import { makeSaveReferenceScore } from "./songs.reference.score.usecase"
 import {
   ByteRange,
   CreateReferenceError,
   CreateReferenceInput,
-  CreateSongError,
   DeleteSongError,
   GetSongError,
   ListSongsError,
   Reference,
   Song,
   SongAudioLookupError,
+  SongAudioPayload,
+  SongReference,
   SongsPage,
 } from "./songs.models"
 import {
-  AudioPath,
-  ListMediaFiles,
-  MoveAudio,
-  OpenAudioRange,
-  PutAudio,
-  ReadAudio,
-  RemoveAudio,
-  StatAudio,
+  ClaimNextQueuedSong,
+  CompleteSong,
+  CreateSong,
+  FindReferenceBySongId,
+  MarkSongFailed,
+  MarkSongProgress,
+  MarkSongRunning,
+  MarkSongStage,
+  SaveReferenceScore,
 } from "./songs.ports"
 import {
-  makeAttachReferenceToSong,
   makeClaimNextQueuedSong,
   makeDeleteSong as makeDeleteSongAdapter,
-  makeDeleteStaleReferences,
-  makeFindReferenceById,
-  makeFindReferenceBySongId,
-  makeFindSongAudio,
   makeFindSongById,
-  makeInsertReference,
   makeInsertSong,
-  makeInsertSongAudio,
-  makeListReferenceAudio,
-  makeListSongAudio,
   makeListSongs as makeListSongsAdapter,
   makeMarkSongComplete,
   makeMarkSongFailed,
@@ -60,67 +58,46 @@ import {
   makeMarkSongRunning,
   makeMarkSongStage,
   makeRecoverInterruptedSongs,
-  makeSaveReferenceScore,
 } from "./songs.sqlite.adapters"
-import { makeEncodeFlacToMp3, FfmpegAdapterEnv } from "./songs.ffmpeg.adapters"
-import { makeRunTranscribe, Sheetsage2AdapterEnv } from "./songs.sheetsage2.adapters"
-import { makeRunYue2Generate, Yue2AdapterEnv } from "./songs.yue2.adapters"
-import { makeSongWorker, SongWorker } from "./songs.worker"
-
-export type SongAudioPayload = Readonly<{
-  contentType: string
-  byteLength: number
-  read: (range: ByteRange | null) => Promise<Uint8Array>
-}>
 
 export type SongsSliceDeps = Readonly<{
   db: Db
-  audioPath: AudioPath
-  putAudio: PutAudio
-  statAudio: StatAudio
-  readAudio: ReadAudio
-  openAudioRange: OpenAudioRange
-  moveAudio: MoveAudio
-  removeAudio: RemoveAudio
-  listMediaFiles: ListMediaFiles
-  yue2: Yue2AdapterEnv
-  sheetsage2: Sheetsage2AdapterEnv
-  ffmpeg: FfmpegAdapterEnv
+  media: MediaSlice
   now?: () => string
   logError?: (message: string, error: unknown) => void
 }>
 
+export type SongsCapabilities = Readonly<{
+  claimNextQueuedSong: ClaimNextQueuedSong
+  markSongRunning: MarkSongRunning
+  markSongStage: MarkSongStage
+  markSongProgress: MarkSongProgress
+  markSongFailed: MarkSongFailed
+  findReferenceBySongId: FindReferenceBySongId
+  saveReferenceScore: SaveReferenceScore
+  completeSong: CompleteSong
+}>
+
 export type SongsSlice = Readonly<{
-  createSong: (body: CreateSongBody) => Promise<Result<Song, CreateSongError>>
+  createSong: CreateSong
   createReference: (input: CreateReferenceInput) => Promise<Result<Reference, CreateReferenceError>>
-  purgeStaleReferences: (createdBefore: string) => Promise<number>
   listSongs: (input: ListSongsInput) => Promise<Result<SongsPage, ListSongsError>>
   getSong: (songId: string) => Promise<Result<Song, GetSongError>>
   deleteSong: (songId: string) => Promise<Result<null, DeleteSongError>>
   getSongAudio: (songId: string) => Promise<Result<SongAudioPayload, SongAudioLookupError>>
-  recoverInterruptedSongs: () => Promise<number>
-  reconcileMedia: () => Promise<ReconcileReport>
   queueDepth: () => Promise<number>
-  worker: SongWorker
+  recoverInterruptedSongs: () => Promise<number>
+  capabilities: SongsCapabilities
 }>
 
 export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   const now = deps.now ?? (() => new Date().toISOString())
   const logError = deps.logError ?? ((message, error) => console.error(message, error))
+  const media = deps.media
 
   const insertSong = makeInsertSong(deps.db)
   const findSongById = makeFindSongById(deps.db)
-  const insertReference = makeInsertReference(deps.db)
-  const findReferenceById = makeFindReferenceById(deps.db)
-  const findReferenceBySongId = makeFindReferenceBySongId(deps.db)
-  const attachReferenceToSong = makeAttachReferenceToSong(deps.db)
-  const saveReferenceScore = makeSaveReferenceScore(deps.db)
-  const deleteStaleReferences = makeDeleteStaleReferences(deps.db)
-  const findSongAudio = makeFindSongAudio(deps.db)
   const listSongsPort = makeListSongsAdapter(deps.db)
-  const insertSongAudio = makeInsertSongAudio(deps.db)
-  const listSongAudio = makeListSongAudio(deps.db)
-  const listReferenceAudio = makeListReferenceAudio(deps.db)
   const markSongRunning = makeMarkSongRunning(deps.db)
   const markSongStage = makeMarkSongStage(deps.db)
   const markSongProgress = makeMarkSongProgress(deps.db)
@@ -130,147 +107,136 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   const deleteSongRow = makeDeleteSongAdapter(deps.db)
   const recoverInterruptedSongs = makeRecoverInterruptedSongs(deps.db)
 
-  const runYue2Generate = makeRunYue2Generate(deps.yue2)
-  const runTranscribe = makeRunTranscribe(deps.sheetsage2)
-  const encodeFlacToMp3 = makeEncodeFlacToMp3(deps.ffmpeg)
-
-  const removeMediaById = makeRemoveMediaById({
-    listMediaFiles: deps.listMediaFiles,
-    removeAudio: deps.removeAudio,
-  })
-
-  const removeReferenceAudio = async (referenceId: string, contentType: string): Promise<void> => {
-    await deps.removeAudio(referenceAudioKey(referenceId, contentType, null))
+  const findSongFolder = async (songId: string): Promise<string | null> => {
+    const matches = await media.find(songFolderPattern(songId))
+    return matches.find((key) => !key.includes("/")) ?? null
   }
 
-  const saveSongAudio = makeSaveSongAudio({
-    putSongAudio: async (songId, mp3, title) =>
-      (await deps.putAudio(songAudioKey(songId, title), mp3)).byteLength,
-    insertSongAudio,
-    removeSongAudio: (songId) => removeMediaById("song", songId),
-  })
+  const resolveSongFolder = async (song: Song): Promise<string> => {
+    const existing = await findSongFolder(song.id)
+    return existing ?? songFolderName(songTitleFromLyrics(song.lyrics), song.id)
+  }
 
-  const purgeStaleReferences = makePurgeStaleReferences({
-    deleteStaleReferences,
-    removeReferenceAudio,
-  })
+  const findReferenceFileName = async (folderKey: string): Promise<string | null> => {
+    const matches = await media.find(referenceFilesPattern(folderKey))
+    const key = matches[0]
+    return key === undefined ? null : key.slice(key.lastIndexOf("/") + 1)
+  }
 
-  const renameReferenceAudio = async (input: {
-    referenceId: string
-    contentType: string
-    title: string
-  }): Promise<void> => {
-    await deps.moveAudio(
-      referenceAudioKey(input.referenceId, input.contentType, null),
-      referenceAudioKey(input.referenceId, input.contentType, input.title),
+  const findReferenceSummary = async (songId: string): Promise<SongReference | null> => {
+    const folderKey = await findSongFolder(songId)
+    if (folderKey === null) return null
+    const fileName = await findReferenceFileName(folderKey)
+    if (fileName === null) return null
+    const parts = parseReferenceFileName(fileName)
+    return parts === null ? null : Object.freeze({ id: parts.id, filename: parts.displayName })
+  }
+
+  const findReferenceBySongId: FindReferenceBySongId = async (songId) => {
+    const folderKey = await findSongFolder(songId)
+    if (folderKey === null) return null
+    const fileName = await findReferenceFileName(folderKey)
+    if (fileName === null) return null
+    const parts = parseReferenceFileName(fileName)
+    if (parts === null) return null
+    const stored = await media.statFile(referenceFileKey(folderKey, fileName))
+    return Object.freeze({ referenceId: parts.id, audioPath: stored?.path ?? null })
+  }
+
+  const readScoreAbc = async (songId: string): Promise<string | null> => {
+    const folderKey = await findSongFolder(songId)
+    if (folderKey === null) return null
+    const bytes = await media.readFile(scoreKey(folderKey))
+    return bytes === null ? null : new TextDecoder().decode(bytes)
+  }
+
+  const removeSongFolder = async (songId: string): Promise<void> => {
+    const matches = await media.find(songFolderPattern(songId))
+    await Promise.all(
+      matches.filter((key) => !key.includes("/")).map((key) => media.removeDirectory(key)),
     )
   }
 
-  const findReferenceAudioBySongId = makeFindReferenceAudioBySongId({
-    findReferenceBySongId,
-    resolveReferenceAudioPath: (referenceId, contentType) =>
-      deps.audioPath(referenceAudioKey(referenceId, contentType, null)),
-  })
+  const statSongAudio = async (song: Song): Promise<StoredFile | null> => {
+    const folderKey = await findSongFolder(song.id)
+    if (folderKey === null) return null
+    return media.statFile(generatedAudioKey(folderKey, song.id))
+  }
 
-  const reconcileMedia = makeReconcileMedia({
-    listMediaFiles: deps.listMediaFiles,
-    removeAudio: deps.removeAudio,
-    listSongAudio,
-    listReferenceAudio,
-    markSongFailed,
-  })
+  const readSongAudio = async (song: Song, range: ByteRange | null): Promise<Uint8Array> => {
+    const folderKey = await findSongFolder(song.id)
+    if (folderKey === null) throw new Error(`song audio is missing for ${song.id}`)
+    const key = generatedAudioKey(folderKey, song.id)
+    const bytes =
+      range === null
+        ? await media.readFile(key)
+        : await media.openFileRange(key, range.start, range.end)
+    if (bytes === null) throw new Error(`song audio is missing at ${key}`)
+    return bytes
+  }
 
   const createSong = makeCreateSong({
     insertSong,
-    findReferenceById,
-    attachReferenceToSong,
-    findSongById,
     deleteSong: deleteSongRow,
+    makeDirectory: media.makeDirectory,
+    moveFile: media.moveFile,
+    removeDirectory: media.removeDirectory,
+    find: media.find,
     now,
     generateId: () => ulid(),
     randomSeed: () => Math.floor(Math.random() * 2 ** 31),
   })
+
   const createReference = makeCreateReference({
-    putReferenceAudio: async (referenceId, audio, contentType) =>
-      (await deps.putAudio(referenceAudioKey(referenceId, contentType, null), audio)).byteLength,
-    insertReference,
-    removeReferenceAudio,
+    putFile: media.putFile,
     now,
     generateId: () => ulid(),
   })
-  const listSongs = makeListSongs({ listSongs: listSongsPort })
-  const getSong = makeGetSong({ findSongById })
-  const deleteSong = makeDeleteSong({
-    deleteSong: deleteSongRow,
-    findReferenceBySongId,
-    removeSongMedia: (songId) => removeMediaById("song", songId),
-    removeReferenceMedia: (referenceId) => removeMediaById("reference", referenceId),
+
+  const saveReferenceScore = makeSaveReferenceScore({
+    findSongById,
+    resolveSongFolder,
+    putFile: media.putFile,
   })
 
-  const getSongAudio = async (
-    songId: string,
-  ): Promise<Result<SongAudioPayload, SongAudioLookupError>> => {
-    const song = await findSongById(songId)
-    if (song === null) return err({ kind: "not_found" })
-    if (song.status !== "complete") return err({ kind: "not_complete" })
-    const row = await findSongAudio(songId)
-    if (row === null) return err({ kind: "not_found" })
-    const titledKey = songAudioKey(songId, songTitleFromLyrics(song.lyrics))
-    const bareKey = songAudioKey(songId, null)
-    const titled = await deps.statAudio(titledKey)
-    const bare = titled === null ? await deps.statAudio(bareKey) : null
-    const key = titled !== null ? titledKey : bare !== null ? bareKey : null
-    const stored = titled ?? bare
-    if (key === null || stored === null) return err({ kind: "not_found" })
-    return ok({
-      contentType: row.contentType,
-      byteLength: stored.byteLength,
-      read: async (range) => {
-        const bytes =
-          range === null
-            ? await deps.readAudio(key)
-            : await deps.openAudioRange(key, range.start, range.end)
-        if (bytes === null) throw new Error(`song audio is missing at ${key}`)
-        return bytes
-      },
-    })
-  }
+  const completeSong = makeCompleteSong({
+    findSongById,
+    resolveSongFolder,
+    putFile: media.putFile,
+    removeFile: media.removeFile,
+    markSongComplete,
+  })
+
+  const listSongs = makeListSongs({ listSongs: listSongsPort })
+  const getSong = makeGetSong({ findSongById, readScoreAbc, findReferenceSummary })
+  const deleteSong = makeDeleteSong({ deleteSong: deleteSongRow, removeSongFolder, logError })
+  const getSongAudio = makeGetSongAudio({ findSongById, statSongAudio, readSongAudio })
 
   const queueDepth = async (): Promise<number> => {
     const page = await listSongsPort({ limit: 1, cursor: null, statuses: ["queued"] })
     return page.count
   }
 
-  const worker = makeSongWorker({
+  const capabilities: SongsCapabilities = Object.freeze({
     claimNextQueuedSong,
     markSongRunning,
     markSongStage,
     markSongProgress,
-    markSongComplete,
     markSongFailed,
-    saveSongAudio,
-    renameReferenceAudio,
-    findReferenceAudioBySongId,
-    runTranscribe,
+    findReferenceBySongId,
     saveReferenceScore,
-    runYue2Generate,
-    encodeFlacToMp3,
-    createTempDir: () => mkdtemp(join(tmpdir(), "yuekbox-")),
-    removeTempDir: (path) => rm(path, { recursive: true, force: true }),
-    logError,
+    completeSong,
   })
 
   return {
     createSong,
     createReference,
-    purgeStaleReferences,
     listSongs,
     getSong,
     deleteSong,
     getSongAudio,
-    recoverInterruptedSongs,
-    reconcileMedia,
     queueDepth,
-    worker,
+    recoverInterruptedSongs,
+    capabilities,
   }
 }

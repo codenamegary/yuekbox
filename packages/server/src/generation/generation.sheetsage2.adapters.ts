@@ -3,8 +3,8 @@ import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { ProcessRunner, runProcess } from "../shared/process"
 import { err, ok, Result } from "../shared/result"
-import { TranscribeError } from "./songs.models"
-import { RunTranscribe, RunTranscribeOutput } from "./songs.ports"
+import { TranscribeError, RunTranscribeOutput } from "./generation.models"
+import { RunTranscribe } from "./generation.ports"
 
 export type Sheetsage2AdapterEnv = Readonly<{
   pythonBin: string

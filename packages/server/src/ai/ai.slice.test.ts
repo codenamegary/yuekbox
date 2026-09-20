@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
+import { CreateSongBody } from "contracts/http/songs"
 import { openDatabase } from "../db/client"
 import { err, ok, Result } from "../shared/result"
-import { SongsSlice } from "../songs/songs.assembly"
-import { Song } from "../songs/songs.models"
+import { songFixture } from "../songs/songs.fixtures"
 import { makeAiConfigStore } from "./ai.config.store"
 import { AiConfigStore } from "./ai.models"
 import { WriterSetting } from "./ai.openai"
@@ -22,46 +22,11 @@ const setting = (model: string) => ({
 
 const makeStore = (): AiConfigStore => makeAiConfigStore(openDatabase({ path: ":memory:" }).db)
 
-const songsSlice = (kicks: number[] = []): SongsSlice => ({
-  createSong: async (body) =>
-    ok({
-      id: "01J8K3R4P9ABCDEFGHJKMNPQRS",
-      status: "queued",
-      stage: null,
-      stageCompleted: null,
-      stageTotal: null,
-      lyrics: body.lyrics,
-      style: body.style,
-      seed: 1,
-      cot: "full",
-      reference: null,
-      scoreAbc: null,
-      durationSeconds: null,
-      truncatedAbc: null,
-      truncatedSemantic: null,
-      errorDetail: null,
-      createdAt: "2026-09-19T00:00:00.000Z",
-      updatedAt: "2026-09-19T00:00:00.000Z",
-      completedAt: null,
-    } satisfies Song),
-  listSongs: async () =>
-    ok({ items: [], limit: 20, nextCursor: null, previousCursor: null, count: 0 }),
-  getSong: async () => err({ kind: "not_found" }),
-  deleteSong: async () => err({ kind: "not_found" }),
-  getSongAudio: async () => err({ kind: "not_found" }),
-  createReference: async () => err({ kind: "validation_error", pointer: "/", code: "unused" }),
-  recoverInterruptedSongs: async () => 0,
-  reconcileMedia: async () => ({
-    removedOrphanFiles: 0,
-    failedSongIds: [],
-    missingReferenceCount: 0,
-  }),
-  purgeStaleReferences: async () => 0,
-  queueDepth: async () => 0,
-  worker: {
-    kick: () => kicks.push(1),
-    drain: async () => {},
-    isBusy: () => false,
+const songsDeps = (wakes: number[] = []) => ({
+  createSong: async (body: CreateSongBody) =>
+    ok(songFixture({ lyrics: body.lyrics, style: body.style })),
+  wake: () => {
+    wakes.push(1)
   },
 })
 
@@ -77,7 +42,7 @@ describe("enhance retries and validation", () => {
         return calls.length === 1 ? ok("too short") : ok(lyricSheet)
       },
       listModels: async () => ok([]),
-      songs: songsSlice(),
+      ...songsDeps(),
     })
 
     const result = await ai.enhance({
@@ -103,7 +68,7 @@ describe("enhance retries and validation", () => {
           : ok(styleBrief)
       },
       listModels: async () => ok([]),
-      songs: songsSlice(),
+      ...songsDeps(),
     })
 
     const result = await ai.enhance({ kind: "style", style: "techno", lyrics: "" })
@@ -123,7 +88,7 @@ describe("enhance retries and validation", () => {
         return ok("still much too short")
       },
       listModels: async () => ok([]),
-      songs: songsSlice(),
+      ...songsDeps(),
     })
 
     const result = await ai.enhance({ kind: "lyrics", style: "", lyrics: "[Verse]\nx" })
@@ -147,7 +112,7 @@ describe("enhance retries and validation", () => {
         return ok(styleBrief)
       },
       listModels: async () => ok([]),
-      songs: songsSlice(),
+      ...songsDeps(),
     })
 
     const result = await ai.enhance({ kind: "style", style: "techno", lyrics: "" })
@@ -183,7 +148,7 @@ describe("random song flow", () => {
       configStore: store,
       chat: chatFor(seen),
       listModels: async () => ok([]),
-      songs: songsSlice(),
+      ...songsDeps(),
     })
 
     const result = await ai.randomSong()
@@ -207,7 +172,7 @@ describe("random song flow", () => {
       configStore: store,
       chat: chatFor(seen),
       listModels: async () => ok([]),
-      songs: songsSlice(kicks),
+      ...songsDeps(kicks),
     })
 
     const result = await ai.randomSong()
@@ -225,7 +190,7 @@ describe("random song flow", () => {
       configStore: store,
       chat: chatFor(seen),
       listModels: async () => ok([]),
-      songs: songsSlice(),
+      ...songsDeps(),
     })
 
     const result = await ai.randomSong()
@@ -244,7 +209,7 @@ describe("random song flow", () => {
       configStore: store,
       chat: chatFor(seen),
       listModels: async () => ok([]),
-      songs: songsSlice(),
+      ...songsDeps(),
     })
 
     const result = await ai.randomSong()

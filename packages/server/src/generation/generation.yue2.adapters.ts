@@ -5,8 +5,9 @@ import { SongStage } from "contracts/http/songs"
 import { z } from "zod"
 import { runProcess } from "../shared/process"
 import { err, ok, Result } from "../shared/result"
-import { GenerateSongError, TruncatedFlags } from "./songs.models"
-import { RunYue2Generate, RunYue2GenerateInput, RunYue2GenerateOutput } from "./songs.ports"
+import { TruncatedFlags } from "../songs/songs.models"
+import { GenerateSongError, RunYue2GenerateInput, RunYue2GenerateOutput } from "./generation.models"
+import { RunYue2Generate } from "./generation.ports"
 
 export type Yue2AdapterEnv = Readonly<{
   kitRoot: string

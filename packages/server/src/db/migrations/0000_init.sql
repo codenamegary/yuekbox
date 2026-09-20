@@ -1,20 +1,19 @@
-CREATE TABLE `song_audio` (
-	`song_id` text PRIMARY KEY NOT NULL,
-	`mp3` blob NOT NULL,
-	`byte_length` integer NOT NULL,
-	`content_type` text NOT NULL,
-	FOREIGN KEY (`song_id`) REFERENCES `songs`(`id`) ON UPDATE no action ON DELETE cascade
+CREATE TABLE `ai_config` (
+	`id` text PRIMARY KEY NOT NULL,
+	`value` text NOT NULL,
+	`updated_at` text NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `songs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`status` text NOT NULL,
 	`stage` text,
+	`stage_completed` integer,
+	`stage_total` integer,
 	`lyrics` text NOT NULL,
 	`style` text NOT NULL,
 	`seed` integer NOT NULL,
 	`cot` text DEFAULT 'full' NOT NULL,
-	`score_abc` text,
 	`duration_seconds` real,
 	`truncated_abc` integer,
 	`truncated_semantic` integer,

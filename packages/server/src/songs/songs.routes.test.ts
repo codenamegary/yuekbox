@@ -1,40 +1,18 @@
 import { expect, test } from "bun:test"
-import { Status, StatusSchema } from "contracts/http/status"
+import { Status } from "contracts/http/status"
+import { StatusSchema } from "contracts/http/status"
 import { PROBLEM_TYPES, ProblemDetailsSchema } from "contracts/http/error"
-import { SongSchema } from "contracts/http/songs"
-import { SongsCollectionSchema } from "contracts/http/songs"
+import { SongSchema, SongsCollectionSchema } from "contracts/http/songs"
+import { unusedAiFixture } from "../ai/ai.fixtures"
 import { buildApp } from "../app"
 import { err, ok } from "../shared/result"
+import { makeSongsSliceFixture, songFixture } from "./songs.fixtures"
 import { SongsSlice } from "./songs.assembly"
-import { Song } from "./songs.models"
 
 const songId = "01J8K3R4P9ABCDEFGHJKMNPQRS"
-
-const queuedSong: Song = Object.freeze({
-  id: songId,
-  status: "queued",
-  stage: null,
-  stageCompleted: null,
-  stageTotal: null,
-  lyrics: "hello",
-  style: "pop",
-  seed: 1,
-  cot: "full",
-  reference: null,
-  scoreAbc: null,
-  durationSeconds: null,
-  truncatedAbc: null,
-  truncatedSemantic: null,
-  errorDetail: null,
-  createdAt: "2026-09-17T04:00:00.000Z",
-  updatedAt: "2026-09-17T04:00:00.000Z",
-  completedAt: null,
-})
-
+const queuedSong = songFixture()
 const scoreAbcFixture = "X:1\nM:4/4\nL:1/8\nK:C\nV: Vocal\nc8|\n"
-
-const completeSong: Song = Object.freeze({
-  ...queuedSong,
+const completeSong = songFixture({
   status: "complete",
   durationSeconds: 152.5,
   truncatedAbc: false,
@@ -54,84 +32,20 @@ const statusFixture: Status = Object.freeze({
   startedAt: "2026-09-17T04:00:00.000Z",
 })
 
-const makeSlice = (overrides: Partial<SongsSlice> = {}, kicks: number[] = []): SongsSlice => ({
-  createSong: async () => ok(queuedSong),
-  createReference: async () => ({
-    ok: false,
-    error: { kind: "validation_error", pointer: "/", code: "invalid" },
-  }),
-  purgeStaleReferences: async () => 0,
-  listSongs: async () =>
-    ok({ items: [queuedSong], limit: 20, nextCursor: null, previousCursor: null, count: 1 }),
-  getSong: async () => ok(queuedSong),
-  deleteSong: async () => ok(null),
-  getSongAudio: async () =>
-    ok({
-      contentType: "audio/mpeg",
-      byteLength: 3,
-      read: async () => new Uint8Array([1, 2, 3]),
-    }),
-  recoverInterruptedSongs: async () => 0,
-  reconcileMedia: async () => ({
-    removedOrphanFiles: 0,
-    failedSongIds: [],
-    missingReferenceCount: 0,
-  }),
-  queueDepth: async () => 0,
-  worker: {
-    kick: () => {
-      kicks.push(1)
-    },
-    drain: async () => {},
-    isBusy: () => false,
-  },
-  ...overrides,
-})
-
-const defaultSetting = {
-  presetId: "openai",
-  baseUrl: "https://api.openai.com/v1",
-  model: "gpt-4o-mini",
-  effort: "medium" as const,
-  keyHint: null,
-}
-
-const makeApp = (slice: SongsSlice) =>
+const makeApp = (songs: SongsSlice, wake: () => void = () => {}) =>
   buildApp({
-    songs: slice,
+    songs,
+    wake,
     referenceMaxBytes: 1024,
-    ai: {
-      listPresets: () => [],
-      getConfig: async () => ({
-        enabled: false,
-        style: defaultSetting,
-        lyrics: defaultSetting,
-      }),
-      saveConfig: async (patch) => ({
-        enabled: patch.enabled ?? false,
-        style: {
-          ...defaultSetting,
-          ...(patch.style !== undefined
-            ? { model: patch.style.model ?? defaultSetting.model }
-            : {}),
-        },
-        lyrics: {
-          ...defaultSetting,
-          ...(patch.lyrics !== undefined
-            ? { model: patch.lyrics.model ?? defaultSetting.model }
-            : {}),
-        },
-      }),
-      fetchModels: async () => ({ models: [], live: false }),
-      enhance: async () => err({ kind: "ai_disabled", detail: "AI is disabled" }),
-      randomSong: async () => err({ kind: "ai_disabled", detail: "AI is disabled" }),
-    },
+    ai: unusedAiFixture(),
     status: async () => statusFixture,
   })
 
-test("create returns a queued song and only kicks the worker", async () => {
-  const kicks: number[] = []
-  const app = makeApp(makeSlice({}, kicks))
+test("create returns a queued song and wakes the worker", async () => {
+  const wakes: number[] = []
+  const app = makeApp(makeSongsSliceFixture(), () => {
+    wakes.push(1)
+  })
 
   const response = await app.inject({
     method: "POST",
@@ -142,22 +56,22 @@ test("create returns a queued song and only kicks the worker", async () => {
   expect(response.statusCode).toBe(201)
   expect(response.headers.location).toBe(`/v1/songs/${songId}`)
   expect(SongSchema.parse(response.json()).status).toBe("queued")
-  expect(kicks).toHaveLength(1)
+  expect(wakes).toHaveLength(1)
 })
 
-test("create rejects empty lyrics before any insert or kick", async () => {
-  const kicks: number[] = []
+test("create rejects empty lyrics before any insert or wake", async () => {
+  const wakes: number[] = []
   const createCalls: number[] = []
   const app = makeApp(
-    makeSlice(
-      {
-        createSong: async () => {
-          createCalls.push(1)
-          return ok(queuedSong)
-        },
+    makeSongsSliceFixture({
+      createSong: async () => {
+        createCalls.push(1)
+        return ok(queuedSong)
       },
-      kicks,
-    ),
+    }),
+    () => {
+      wakes.push(1)
+    },
   )
 
   const response = await app.inject({
@@ -171,11 +85,11 @@ test("create rejects empty lyrics before any insert or kick", async () => {
   const problem = ProblemDetailsSchema.parse(response.json())
   expect(problem.type).toBe(PROBLEM_TYPES.validationError)
   expect(createCalls).toHaveLength(0)
-  expect(kicks).toHaveLength(0)
+  expect(wakes).toHaveLength(0)
 })
 
 test("create rejects malformed json with a validation problem", async () => {
-  const app = makeApp(makeSlice())
+  const app = makeApp(makeSongsSliceFixture())
 
   const response = await app.inject({
     method: "POST",
@@ -190,7 +104,9 @@ test("create rejects malformed json with a validation problem", async () => {
 
 test("unknown song id is a not-found problem", async () => {
   const app = makeApp(
-    makeSlice({ getSong: async () => ({ ok: false, error: { kind: "not_found" } }) }),
+    makeSongsSliceFixture({
+      getSong: async () => err({ kind: "not_found" }),
+    }),
   )
 
   const response = await app.inject({ method: "GET", url: `/v1/songs/${songId}` })
@@ -199,108 +115,13 @@ test("unknown song id is a not-found problem", async () => {
   expect(ProblemDetailsSchema.parse(response.json()).type).toBe(PROBLEM_TYPES.notFound)
 })
 
-test("audio before completion is a conflict problem", async () => {
-  const app = makeApp(
-    makeSlice({ getSongAudio: async () => ({ ok: false, error: { kind: "not_complete" } }) }),
-  )
-
-  const response = await app.inject({ method: "GET", url: `/v1/songs/${songId}/audio` })
-
-  expect(response.statusCode).toBe(409)
-  expect(ProblemDetailsSchema.parse(response.json()).type).toBe(PROBLEM_TYPES.conflict)
-})
-
-test("audio for a complete song is raw mpeg bytes", async () => {
-  const app = makeApp(makeSlice())
-
-  const response = await app.inject({ method: "GET", url: `/v1/songs/${songId}/audio` })
-
-  expect(response.statusCode).toBe(200)
-  expect(response.headers["content-type"]).toBe("audio/mpeg")
-  expect(response.rawPayload).toEqual(Buffer.from([1, 2, 3]))
-})
-
-test("audio range reads only the requested window", async () => {
-  const ranges: (Readonly<{ start: number; end: number }> | null)[] = []
-  const app = makeApp(
-    makeSlice({
-      getSongAudio: async () =>
-        ok({
-          contentType: "audio/mpeg",
-          byteLength: 3,
-          read: async (range) => {
-            ranges.push(range)
-            return new Uint8Array([2, 3])
-          },
-        }),
-    }),
-  )
-
-  const response = await app.inject({
-    method: "GET",
-    url: `/v1/songs/${songId}/audio`,
-    headers: { range: "bytes=1-2" },
-  })
-
-  expect(response.statusCode).toBe(206)
-  expect(response.headers["content-range"]).toBe("bytes 1-2/3")
-  expect(response.headers["content-length"]).toBe("2")
-  expect(response.rawPayload).toEqual(Buffer.from([2, 3]))
-  expect(ranges).toEqual([{ start: 1, end: 2 }])
-})
-
-test("audio without a range reads the whole file", async () => {
-  const ranges: (Readonly<{ start: number; end: number }> | null)[] = []
-  const app = makeApp(
-    makeSlice({
-      getSongAudio: async () =>
-        ok({
-          contentType: "audio/mpeg",
-          byteLength: 3,
-          read: async (range) => {
-            ranges.push(range)
-            return new Uint8Array([1, 2, 3])
-          },
-        }),
-    }),
-  )
-
-  const response = await app.inject({ method: "GET", url: `/v1/songs/${songId}/audio` })
-
-  expect(response.statusCode).toBe(200)
-  expect(response.headers["content-length"]).toBe("3")
-  expect(ranges).toEqual([null])
-})
-
-test("an unsatisfiable range is a 416 and reads nothing", async () => {
-  const reads: number[] = []
-  const app = makeApp(
-    makeSlice({
-      getSongAudio: async () =>
-        ok({
-          contentType: "audio/mpeg",
-          byteLength: 3,
-          read: async () => {
-            reads.push(1)
-            return new Uint8Array([1, 2, 3])
-          },
-        }),
-    }),
-  )
-
-  const response = await app.inject({
-    method: "GET",
-    url: `/v1/songs/${songId}/audio`,
-    headers: { range: "bytes=5-9" },
-  })
-
-  expect(response.statusCode).toBe(416)
-  expect(response.headers["content-range"]).toBe("bytes */3")
-  expect(reads).toEqual([])
-})
-
 test("list returns a contract collection", async () => {
-  const app = makeApp(makeSlice())
+  const app = makeApp(
+    makeSongsSliceFixture({
+      listSongs: async () =>
+        ok({ items: [queuedSong], limit: 20, nextCursor: null, previousCursor: null, count: 1 }),
+    }),
+  )
 
   const response = await app.inject({ method: "GET", url: "/v1/songs?limit=20" })
 
@@ -313,7 +134,7 @@ test("list returns a contract collection", async () => {
 
 test("get includes the score for a complete song", async () => {
   const app = makeApp(
-    makeSlice({
+    makeSongsSliceFixture({
       getSong: async () => ok(completeSong),
     }),
   )
@@ -326,7 +147,7 @@ test("get includes the score for a complete song", async () => {
 
 test("list omits the score", async () => {
   const app = makeApp(
-    makeSlice({
+    makeSongsSliceFixture({
       listSongs: async () =>
         ok({
           items: [completeSong],
@@ -345,7 +166,7 @@ test("list omits the score", async () => {
 })
 
 test("list rejects an unknown status filter", async () => {
-  const app = makeApp(makeSlice())
+  const app = makeApp(makeSongsSliceFixture())
 
   const response = await app.inject({ method: "GET", url: "/v1/songs?status=done" })
 
@@ -353,19 +174,19 @@ test("list rejects an unknown status filter", async () => {
 })
 
 test("delete returns 204 and missing songs are not-found", async () => {
-  const app = makeApp(makeSlice())
+  const app = makeApp(makeSongsSliceFixture())
   const deleted = await app.inject({ method: "DELETE", url: `/v1/songs/${songId}` })
   expect(deleted.statusCode).toBe(204)
 
   const missingApp = makeApp(
-    makeSlice({ deleteSong: async () => ({ ok: false, error: { kind: "not_found" } }) }),
+    makeSongsSliceFixture({ deleteSong: async () => err({ kind: "not_found" }) }),
   )
   const missing = await missingApp.inject({ method: "DELETE", url: `/v1/songs/${songId}` })
   expect(missing.statusCode).toBe(404)
 })
 
 test("status returns the contract fixture", async () => {
-  const app = makeApp(makeSlice())
+  const app = makeApp(makeSongsSliceFixture())
 
   const response = await app.inject({ method: "GET", url: "/v1/status" })
 

@@ -5,10 +5,8 @@ import { NewSong } from "./songs.models"
 import {
   makeClaimNextQueuedSong,
   makeDeleteSong,
-  makeFindSongAudio,
   makeFindSongById,
   makeInsertSong,
-  makeInsertSongAudio,
   makeListSongs,
   makeMarkSongComplete,
   makeMarkSongProgress,
@@ -24,39 +22,47 @@ const newSong = (songId: string, createdAt: string): NewSong => ({
   style: "pop",
   seed: 1,
   cot: "full",
-  referenceId: null,
   createdAt,
   updatedAt: createdAt,
 })
 
-test("list never carries audio bytes", async () => {
+test("the fresh schema keeps songs and ai_config only, without media columns", () => {
   const handle = openDatabase({ path: ":memory:" })
   try {
-    const insertSong = makeInsertSong(handle.db)
-    const insertSongAudio = makeInsertSongAudio(handle.db)
-    const listSongs = makeListSongs(handle.db)
+    const tables = handle.sqlite
+      .query<{ name: string }, []>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '__drizzle%'",
+      )
+      .all()
+    expect(tables.map((table) => table.name).toSorted()).toEqual(["ai_config", "songs"])
 
-    await insertSong(newSong(id("RS"), "2026-09-17T04:00:00.000Z"))
-    await insertSongAudio({
-      songId: id("RS"),
-      byteLength: 5,
-      contentType: "audio/mpeg",
-    })
-
-    const page = await listSongs({ limit: 20, cursor: null, statuses: [] })
-
-    expect(page.items).toHaveLength(1)
-    expect(page.count).toBe(1)
-    const item = page.items[0]
-    if (item === undefined) throw new Error("expected one song")
-    expect("mp3" in item).toBe(false)
-    expect(JSON.stringify(page)).not.toContain("mp3")
+    const columns = handle.sqlite.query<{ name: string }, []>("PRAGMA table_info(songs)").all()
+    expect(columns.map((column) => column.name)).not.toContain("score_abc")
   } finally {
     handle.close()
   }
 })
 
-test("list paginates newest first with a keyset cursor", async () => {
+test("insert and find round-trip the lifecycle fields", async () => {
+  const handle = openDatabase({ path: ":memory:" })
+  try {
+    const insertSong = makeInsertSong(handle.db)
+    const findSongById = makeFindSongById(handle.db)
+
+    const inserted = await insertSong(newSong(id("R1"), "2026-09-17T04:00:00.000Z"))
+    expect(inserted.status).toBe("queued")
+    expect(inserted.reference).toBeNull()
+    expect(inserted.scoreAbc).toBeNull()
+
+    const found = await findSongById(id("R1"))
+    expect(found?.lyrics).toBe("hello")
+    expect(found?.style).toBe("pop")
+  } finally {
+    handle.close()
+  }
+})
+
+test("list paginates newest first with a keyset cursor and no media bytes", async () => {
   const handle = openDatabase({ path: ":memory:" })
   try {
     const insertSong = makeInsertSong(handle.db)
@@ -68,6 +74,8 @@ test("list paginates newest first with a keyset cursor", async () => {
 
     const first = await listSongs({ limit: 2, cursor: null, statuses: [] })
     expect(first.items.map((song) => song.id)).toEqual([id("R3"), id("R2")])
+    expect(JSON.stringify(first)).not.toContain("mp3")
+    expect(first.items[0]?.reference).toBeNull()
     const nextCursor = first.nextCursor
     if (nextCursor === null) throw new Error("expected a next cursor")
     const decoded = decodeCursor(nextCursor)
@@ -101,7 +109,6 @@ test("claim skips running and complete songs", async () => {
 
     await markSongComplete({
       songId: id("R3"),
-      scoreAbc: null,
       durationSeconds: 12,
       truncated: { abc: false, semantic: false },
     })
@@ -169,37 +176,16 @@ test("stage progress is stored and reset when the stage changes", async () => {
   }
 })
 
-test("deleting a song cascades to its audio", async () => {
+test("delete reports whether the row existed and is idempotent", async () => {
   const handle = openDatabase({ path: ":memory:" })
   try {
     const insertSong = makeInsertSong(handle.db)
-    const insertSongAudio = makeInsertSongAudio(handle.db)
-    const findSongAudio = makeFindSongAudio(handle.db)
     const deleteSong = makeDeleteSong(handle.db)
 
     await insertSong(newSong(id("R1"), "2026-09-17T04:00:00.000Z"))
-    await insertSongAudio({
-      songId: id("R1"),
-      byteLength: 3,
-      contentType: "audio/mpeg",
-    })
-
-    expect((await findSongAudio(id("R1")))?.byteLength).toBe(3)
 
     expect(await deleteSong(id("R1"))).toBe(true)
     expect(await deleteSong(id("R1"))).toBe(false)
-    expect(await findSongAudio(id("R1"))).toBeNull()
-  } finally {
-    handle.close()
-  }
-})
-
-test("the migrated song_audio table keeps metadata without a blob column", () => {
-  const handle = openDatabase({ path: ":memory:" })
-  try {
-    const columns = handle.sqlite.query<{ name: string }, []>("PRAGMA table_info(song_audio)").all()
-
-    expect(columns.map((column) => column.name)).toEqual(["song_id", "byte_length", "content_type"])
   } finally {
     handle.close()
   }

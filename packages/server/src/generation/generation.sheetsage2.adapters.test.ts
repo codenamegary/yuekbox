@@ -7,7 +7,7 @@ import {
   makeRunTranscribe,
   Sheetsage2AdapterEnv,
   transcribeArgs,
-} from "./songs.sheetsage2.adapters"
+} from "./generation.sheetsage2.adapters"
 
 const env: Sheetsage2AdapterEnv = {
   pythonBin: process.execPath,

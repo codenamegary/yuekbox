@@ -1,35 +1,14 @@
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  getTableColumns,
-  inArray,
-  isNull,
-  lt,
-  or,
-  SQL,
-} from "drizzle-orm"
+import { and, asc, count, desc, eq, inArray, lt, or, SQL } from "drizzle-orm"
 import { SongStageSchema, SongStatusSchema } from "contracts/http/songs"
 import { Db } from "../db/client"
-import { referencesTable, songAudioTable, songsTable } from "../db/db.schema"
+import { songsTable } from "../db/db.schema"
 import { encodeCursor } from "./songs.cursor"
-import { interruptedErrorDetail, NewReference, NewSong, Reference, Song } from "./songs.models"
+import { interruptedErrorDetail, NewSong, Song } from "./songs.models"
 import {
-  AttachReferenceToSong,
   ClaimNextQueuedSong,
   DeleteSong,
-  DeleteStaleReferences,
-  FindReferenceById,
-  FindReferenceBySongId,
-  FindSongAudio,
   FindSongById,
-  InsertReference,
   InsertSong,
-  InsertSongAudio,
-  ListReferenceAudio,
-  ListSongAudio,
   ListSongs,
   MarkSongComplete,
   MarkSongFailed,
@@ -37,38 +16,12 @@ import {
   MarkSongRunning,
   MarkSongStage,
   RecoverInterruptedSongs,
-  SaveReferenceScore,
 } from "./songs.ports"
 
-const songColumns = {
-  ...getTableColumns(songsTable),
-  referenceId: referencesTable.id,
-  referenceFileName: referencesTable.filename,
-}
-
 type SongRow = typeof songsTable.$inferSelect
-type SongJoinRow = SongRow &
-  Readonly<{ referenceId: string | null; referenceFileName: string | null }>
 
-const toReference = (row: typeof referencesTable.$inferSelect): Reference =>
+const toSong = (row: SongRow): Song =>
   Object.freeze({
-    id: row.id,
-    songId: row.songId,
-    filename: row.filename,
-    contentType: row.contentType,
-    byteLength: row.byteLength,
-    scoreAbc: row.scoreAbc,
-    createdAt: row.createdAt,
-  })
-
-const toSong = (row: SongJoinRow | SongRow): Song => {
-  const joined = row as SongJoinRow
-  const reference =
-    joined.referenceId !== null && joined.referenceFileName !== null
-      ? Object.freeze({ id: joined.referenceId, filename: joined.referenceFileName })
-      : null
-
-  return Object.freeze({
     id: row.id,
     status: SongStatusSchema.parse(row.status),
     stage: row.stage === null ? null : SongStageSchema.parse(row.stage),
@@ -78,8 +31,8 @@ const toSong = (row: SongJoinRow | SongRow): Song => {
     style: row.style,
     seed: row.seed,
     cot: row.cot,
-    reference,
-    scoreAbc: row.scoreAbc,
+    reference: null,
+    scoreAbc: null,
     durationSeconds: row.durationSeconds,
     truncatedAbc: row.truncatedAbc,
     truncatedSemantic: row.truncatedSemantic,
@@ -88,7 +41,6 @@ const toSong = (row: SongJoinRow | SongRow): Song => {
     updatedAt: row.updatedAt,
     completedAt: row.completedAt,
   })
-}
 
 export const makeInsertSong =
   (db: Db): InsertSong =>
@@ -115,12 +67,7 @@ export const makeInsertSong =
 export const makeFindSongById =
   (db: Db): FindSongById =>
   async (songId) => {
-    const rows = await db
-      .select(songColumns)
-      .from(songsTable)
-      .leftJoin(referencesTable, eq(referencesTable.songId, songsTable.id))
-      .where(eq(songsTable.id, songId))
-      .limit(1)
+    const rows = await db.select().from(songsTable).where(eq(songsTable.id, songId)).limit(1)
     const row = rows[0]
     return row === undefined ? null : toSong(row)
   }
@@ -144,9 +91,8 @@ export const makeListSongs =
     const where = conditions.length === 0 ? undefined : and(...conditions)
 
     const rows = await db
-      .select(songColumns)
+      .select()
       .from(songsTable)
-      .leftJoin(referencesTable, eq(referencesTable.songId, songsTable.id))
       .where(where)
       .orderBy(desc(songsTable.createdAt), desc(songsTable.id))
       .limit(query.limit + 1)
@@ -171,49 +117,6 @@ export const makeListSongs =
       previousCursor: query.cursor === null ? null : encodeCursor(query.cursor),
       count: total,
     }
-  }
-
-export const makeInsertSongAudio =
-  (db: Db): InsertSongAudio =>
-  async (row) => {
-    await db
-      .insert(songAudioTable)
-      .values(row)
-      .onConflictDoUpdate({
-        target: songAudioTable.songId,
-        set: {
-          byteLength: row.byteLength,
-          contentType: row.contentType,
-        },
-      })
-  }
-
-export const makeFindSongAudio =
-  (db: Db): FindSongAudio =>
-  async (songId) => {
-    const rows = await db
-      .select({ byteLength: songAudioTable.byteLength, contentType: songAudioTable.contentType })
-      .from(songAudioTable)
-      .where(eq(songAudioTable.songId, songId))
-      .limit(1)
-    const row = rows[0]
-    if (row === undefined) return null
-    return Object.freeze({ byteLength: row.byteLength, contentType: row.contentType })
-  }
-
-export const makeListSongAudio =
-  (db: Db): ListSongAudio =>
-  async () => {
-    const rows = await db
-      .select({ songId: songAudioTable.songId, songStatus: songsTable.status })
-      .from(songAudioTable)
-      .innerJoin(songsTable, eq(songsTable.id, songAudioTable.songId))
-    return rows.map((row) =>
-      Object.freeze({
-        songId: row.songId,
-        songStatus: SongStatusSchema.parse(row.songStatus),
-      }),
-    )
   }
 
 export const makeMarkSongRunning =
@@ -268,7 +171,6 @@ export const makeMarkSongComplete =
         stage: null,
         stageCompleted: null,
         stageTotal: null,
-        scoreAbc: input.scoreAbc,
         durationSeconds: input.durationSeconds,
         truncatedAbc: input.truncated.abc,
         truncatedSemantic: input.truncated.semantic,
@@ -360,86 +262,4 @@ export const makeRecoverInterruptedSongs =
       .where(eq(songsTable.status, "running"))
       .returning({ id: songsTable.id })
     return rows.length
-  }
-
-export const makeInsertReference =
-  (db: Db): InsertReference =>
-  async (reference: NewReference) => {
-    const rows = await db
-      .insert(referencesTable)
-      .values({
-        id: reference.id,
-        songId: null,
-        filename: reference.filename,
-        contentType: reference.contentType,
-        byteLength: reference.byteLength,
-        scoreAbc: null,
-        createdAt: reference.createdAt,
-      })
-      .returning()
-    const row = rows[0]
-    if (row === undefined) {
-      throw new Error("insertReference returned no row")
-    }
-    return toReference(row)
-  }
-
-export const makeFindReferenceById =
-  (db: Db): FindReferenceById =>
-  async (referenceId) => {
-    const rows = await db
-      .select()
-      .from(referencesTable)
-      .where(eq(referencesTable.id, referenceId))
-      .limit(1)
-    const row = rows[0]
-    return row === undefined ? null : toReference(row)
-  }
-
-export const makeFindReferenceBySongId =
-  (db: Db): FindReferenceBySongId =>
-  async (songId) => {
-    const rows = await db
-      .select()
-      .from(referencesTable)
-      .where(eq(referencesTable.songId, songId))
-      .limit(1)
-    const row = rows[0]
-    return row === undefined ? null : toReference(row)
-  }
-
-export const makeListReferenceAudio =
-  (db: Db): ListReferenceAudio =>
-  async () => {
-    const rows = await db
-      .select({ id: referencesTable.id, contentType: referencesTable.contentType })
-      .from(referencesTable)
-    return rows.map((row) => Object.freeze(row))
-  }
-
-export const makeAttachReferenceToSong =
-  (db: Db): AttachReferenceToSong =>
-  async (referenceId, songId) => {
-    const rows = await db
-      .update(referencesTable)
-      .set({ songId })
-      .where(and(eq(referencesTable.id, referenceId), isNull(referencesTable.songId)))
-      .returning({ id: referencesTable.id })
-    return rows.length > 0
-  }
-
-export const makeSaveReferenceScore =
-  (db: Db): SaveReferenceScore =>
-  async (referenceId, scoreAbc) => {
-    await db.update(referencesTable).set({ scoreAbc }).where(eq(referencesTable.id, referenceId))
-  }
-
-export const makeDeleteStaleReferences =
-  (db: Db): DeleteStaleReferences =>
-  async (createdBefore) => {
-    const rows = await db
-      .delete(referencesTable)
-      .where(and(isNull(referencesTable.songId), lt(referencesTable.createdAt, createdBefore)))
-      .returning({ id: referencesTable.id, contentType: referencesTable.contentType })
-    return rows.map((row) => Object.freeze(row))
   }

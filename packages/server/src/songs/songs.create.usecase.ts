@@ -1,24 +1,44 @@
 import { CreateSongBody, CreateSongBodySchema } from "contracts/http/songs"
+import { FindFiles, MakeDirectory, MoveFile, RemoveDirectory } from "../media/media.ports"
 import { err, ok, Result } from "../shared/result"
-import { CreateSongError, referenceUnavailableCode, Song } from "./songs.models"
 import {
-  AttachReferenceToSong,
-  DeleteSong,
-  FindReferenceById,
-  FindSongById,
-  InsertSong,
-} from "./songs.ports"
+  parseReferenceFileName,
+  referenceFileKey,
+  songFolderName,
+  songTitleFromLyrics,
+  uploadPattern,
+} from "./songs.files"
+import { CreateSongError, referenceUnavailableCode, Song, SongReference } from "./songs.models"
+import { DeleteSong, InsertSong } from "./songs.ports"
 
 export type CreateSongDeps = Readonly<{
   insertSong: InsertSong
-  findReferenceById: FindReferenceById
-  attachReferenceToSong: AttachReferenceToSong
-  findSongById: FindSongById
   deleteSong: DeleteSong
+  makeDirectory: MakeDirectory
+  moveFile: MoveFile
+  removeDirectory: RemoveDirectory
+  find: FindFiles
   now: () => string
   generateId: () => string
   randomSeed: () => number
 }>
+
+type UploadedReference = Readonly<{ key: string; fileName: string }>
+
+const findUploadedReference = async (
+  find: FindFiles,
+  referenceId: string,
+): Promise<UploadedReference | null> => {
+  const matches = await find(uploadPattern(referenceId))
+  const key = matches[0]
+  if (key === undefined) return null
+  return Object.freeze({ key, fileName: key.slice(key.lastIndexOf("/") + 1) })
+}
+
+const toReferenceSummary = (fileName: string): SongReference | null => {
+  const parts = parseReferenceFileName(fileName)
+  return parts === null ? null : Object.freeze({ id: parts.id, filename: parts.displayName })
+}
 
 export const makeCreateSong =
   (deps: CreateSongDeps) =>
@@ -32,9 +52,10 @@ export const makeCreateSong =
     }
 
     const referenceId = parsed.data.referenceId ?? null
+    let upload: UploadedReference | null = null
     if (referenceId !== null) {
-      const reference = await deps.findReferenceById(referenceId)
-      if (reference === null || reference.songId !== null) {
+      upload = await findUploadedReference(deps.find, referenceId)
+      if (upload === null) {
         return err({
           kind: "validation_error",
           pointer: "/referenceId",
@@ -44,31 +65,33 @@ export const makeCreateSong =
     }
 
     const now = deps.now()
+    const songId = deps.generateId()
+    const folderKey = songFolderName(songTitleFromLyrics(parsed.data.lyrics), songId)
     const song = await deps.insertSong({
-      id: deps.generateId(),
+      id: songId,
       lyrics: parsed.data.lyrics,
       style: parsed.data.style,
       seed: parsed.data.seed ?? deps.randomSeed(),
       cot: referenceId === null ? "full" : "melody",
-      referenceId,
       createdAt: now,
       updatedAt: now,
     })
 
-    if (referenceId === null) {
-      return ok(song)
+    try {
+      await deps.makeDirectory(folderKey)
+      if (upload !== null) {
+        await deps.moveFile(upload.key, referenceFileKey(folderKey, upload.fileName))
+      }
+    } catch (error: unknown) {
+      await deps.deleteSong(songId).catch(() => undefined)
+      await deps.removeDirectory(folderKey).catch(() => undefined)
+      throw error
     }
 
-    const attached = await deps.attachReferenceToSong(referenceId, song.id)
-    if (!attached) {
-      await deps.deleteSong(song.id)
-      return err({
-        kind: "validation_error",
-        pointer: "/referenceId",
-        code: referenceUnavailableCode,
-      })
-    }
-
-    const created = await deps.findSongById(song.id)
-    return ok(created ?? song)
+    return ok(
+      Object.freeze({
+        ...song,
+        reference: upload === null ? null : toReferenceSummary(upload.fileName),
+      }),
+    )
   }
