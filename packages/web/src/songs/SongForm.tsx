@@ -1,4 +1,5 @@
 import * as React from "react"
+import { EnhanceScope } from "contracts/http/ai"
 import { Reference } from "contracts/http/references"
 import { Song, SongStage } from "contracts/http/songs"
 import { cn } from "@/lib/cn"
@@ -13,9 +14,16 @@ type SongFormProps = Readonly<{
   queueDepth: number | null
   style: string
   lyrics: string
+  aiEnabled: boolean
+  enhancing: EnhanceScope | null
+  enhanceError: string | null
+  randomPending: boolean
   onStyleChange: (value: string) => void
   onLyricsChange: (value: string) => void
   onCreated: (song: Song) => void
+  onEnhance: (kind: EnhanceScope) => void
+  onRandom: () => void
+  onToggleFullAuto: () => void
 }>
 
 const pipClassName = (song: Song | null, stages: readonly SongStage[], index: number): string => {
@@ -36,14 +44,45 @@ const pipClassName = (song: Song | null, stages: readonly SongStage[], index: nu
   return "w-2 h-2 rounded-full bg-white/20"
 }
 
+type EnhancePillProps = Readonly<{
+  kind: EnhanceScope
+  pending: boolean
+  disabled: boolean
+  onEnhance: (kind: EnhanceScope) => void
+}>
+
+const EnhancePill: React.FC<EnhancePillProps> = ({ kind, pending, disabled, onEnhance }) => (
+  <button
+    type="button"
+    onClick={() => onEnhance(kind)}
+    disabled={disabled}
+    className={cn("ai-enhance-pill", pending && "pending")}
+    title={
+      kind === "style"
+        ? "Enhance style with AI — sharpen the vibe you're pointing at"
+        : "Enhance lyrics with AI — extend, rework, or write them fresh"
+    }
+  >
+    <span className="ai-enhance-glyph">✧</span>
+    <span>{pending ? "dreaming" : "enhance"}</span>
+  </button>
+)
+
 export const SongForm: React.FC<SongFormProps> = ({
   activeSong,
   queueDepth,
   style,
   lyrics,
+  aiEnabled,
+  enhancing,
+  enhanceError,
+  randomPending,
   onStyleChange,
   onLyricsChange,
   onCreated,
+  onEnhance,
+  onRandom,
+  onToggleFullAuto,
 }) => {
   const createSong = useCreateSongMutation()
   const uploadReference = useUploadReferenceMutation()
@@ -115,12 +154,22 @@ export const SongForm: React.FC<SongFormProps> = ({
   return (
     <div className="w-full max-w-lg pointer-events-auto space-y-6">
       <div className="space-y-2">
-        <Label
-          htmlFor="style-input"
-          className="block font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
-        >
-          style
-        </Label>
+        <div className="flex items-center justify-between pr-1">
+          <Label
+            htmlFor="style-input"
+            className="font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
+          >
+            style
+          </Label>
+          {aiEnabled ? (
+            <EnhancePill
+              kind="style"
+              pending={enhancing === "style"}
+              disabled={enhancing !== null}
+              onEnhance={onEnhance}
+            />
+          ) : null}
+        </div>
         <div className="hairline-glass-box rounded-2xl p-4">
           <Textarea
             id="style-input"
@@ -134,12 +183,22 @@ export const SongForm: React.FC<SongFormProps> = ({
       </div>
 
       <div className="space-y-2">
-        <Label
-          htmlFor="lyrics-input"
-          className="block font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
-        >
-          lyrics
-        </Label>
+        <div className="flex items-center justify-between pr-1">
+          <Label
+            htmlFor="lyrics-input"
+            className="font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
+          >
+            lyrics
+          </Label>
+          {aiEnabled ? (
+            <EnhancePill
+              kind="lyrics"
+              pending={enhancing === "lyrics"}
+              disabled={enhancing !== null}
+              onEnhance={onEnhance}
+            />
+          ) : null}
+        </div>
         <div className="hairline-glass-box rounded-2xl p-4">
           <Textarea
             id="lyrics-input"
@@ -199,6 +258,21 @@ export const SongForm: React.FC<SongFormProps> = ({
       </div>
 
       <div className="flex items-center gap-4 pt-1">
+        {aiEnabled ? (
+          <Button
+            type="button"
+            size="icon"
+            onClick={onRandom}
+            disabled={randomPending}
+            title="Random song — AI writes it, Yuekbox plays it"
+            className="group relative w-12 h-12 rounded-full border border-white/20 bg-white/[0.04] hover:bg-fuchsia-500/20 hover:border-fuchsia-400/70 transition-all duration-500 shadow-[0_0_25px_rgba(232,121,249,0.15)] active:scale-95 disabled:opacity-30"
+          >
+            <span className="font-mono text-lg text-white/70 group-hover:text-white group-hover:rotate-180 transition-all duration-500">
+              ⚄
+            </span>
+          </Button>
+        ) : null}
+
         <Button
           type="button"
           size="icon"
@@ -242,8 +316,21 @@ export const SongForm: React.FC<SongFormProps> = ({
             queue {queueDepth}
           </span>
         ) : null}
+
+        {aiEnabled ? (
+          <button
+            type="button"
+            onClick={onToggleFullAuto}
+            className="ai-fullauto-toggle"
+            title="Full random mode — hide the inputs, generate and play forever"
+          >
+            <span className="text-sm leading-none">∞</span>
+            <span className="font-mono text-3xs tracking-[0.25em] uppercase">full auto</span>
+          </button>
+        ) : null}
       </div>
 
+      {enhanceError !== null ? <p className="text-xs text-rose-300/90">{enhanceError}</p> : null}
       {createSong.error !== null ? (
         <p className="text-xs text-rose-300/90">{createSong.error.message}</p>
       ) : null}

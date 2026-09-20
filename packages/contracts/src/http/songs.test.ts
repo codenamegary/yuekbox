@@ -68,6 +68,24 @@ test("parses a complete song fixture", () => {
   expect(SongSchema.parse(completeSong)).toEqual(completeSong)
 })
 
+test("parses a complete song that carries its score", () => {
+  const withScore: Song = { ...completeSong, scoreAbc: "X:1\nM:4/4\nL:1/8\nK:C\nV: Vocal\nc8|\n" }
+  expect(SongSchema.parse(withScore)).toEqual(withScore)
+})
+
+test("rejects a score on a song that is not complete", () => {
+  const queued: Song = {
+    id: ulid,
+    status: "queued",
+    lyrics: "hi",
+    style: "pop",
+    seed: 1,
+    createdAt,
+    updatedAt: createdAt,
+  }
+  expect(SongSchema.safeParse({ ...queued, scoreAbc: "X:1" }).success).toBe(false)
+})
+
 test("parses a running song fixture with a stage", () => {
   const running: Song = {
     id: ulid,

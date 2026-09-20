@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { PROBLEM_TYPES } from "contracts/http/error"
 import { ReferenceSchema } from "contracts/http/references"
+import { AiSlice } from "../ai/ai.models"
 import { buildApp } from "../app"
 import { ok } from "../shared/result"
 import { CreateReferenceInput, Reference } from "./songs.models"
@@ -41,10 +42,31 @@ const makeSlice = (
   ...overrides,
 })
 
+/** These tests exercise reference routes, so every AI port throws if it is ever called. */
+const unusedAi: AiSlice = {
+  listPresets: () => [],
+  getConfig: async () => {
+    throw new Error("references tests never call the AI slice")
+  },
+  saveConfig: async () => {
+    throw new Error("references tests never call the AI slice")
+  },
+  fetchModels: async () => {
+    throw new Error("references tests never call the AI slice")
+  },
+  enhance: async () => {
+    throw new Error("references tests never call the AI slice")
+  },
+  randomSong: async () => {
+    throw new Error("references tests never call the AI slice")
+  },
+}
+
 const makeApp = (slice: SongsSlice) =>
   buildApp({
     songs: slice,
     referenceMaxBytes: 1024,
+    ai: unusedAi,
     status: async () => ({
       version: "0.1.0",
       state: "online",

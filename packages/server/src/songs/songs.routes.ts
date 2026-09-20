@@ -50,7 +50,11 @@ const parseRangeHeader = (
   return { start, end: Math.min(end, total - 1) }
 }
 
-const toSongResponse = (song: Song) =>
+type SongResponseOptions = Readonly<{
+  includeScore?: boolean
+}>
+
+export const toSongResponse = (song: Song, options: SongResponseOptions = {}) =>
   SongSchema.parse({
     id: song.id,
     status: song.status,
@@ -66,6 +70,7 @@ const toSongResponse = (song: Song) =>
     ...(song.truncatedAbc !== null && song.truncatedSemantic !== null
       ? { truncated: { abc: song.truncatedAbc, semantic: song.truncatedSemantic } }
       : {}),
+    ...(options.includeScore === true && song.scoreAbc !== null ? { scoreAbc: song.scoreAbc } : {}),
     ...(song.errorDetail !== null ? { errorDetail: song.errorDetail } : {}),
     createdAt: song.createdAt,
     updatedAt: song.updatedAt,
@@ -137,7 +142,7 @@ export const songsRoutes: FastifyPluginAsync<SongsRoutesOptions> = async (fastif
     const page = result.value
     return reply.send(
       SongsCollectionSchema.parse({
-        items: page.items.map(toSongResponse),
+        items: page.items.map((song) => toSongResponse(song)),
         page: {
           limit: page.limit,
           ...(page.nextCursor !== null ? { nextCursor: page.nextCursor } : {}),
@@ -159,7 +164,7 @@ export const songsRoutes: FastifyPluginAsync<SongsRoutesOptions> = async (fastif
       return sendProblem(reply, notFoundProblem(`Song ${songId} does not exist`))
     }
 
-    return reply.send(toSongResponse(result.value))
+    return reply.send(toSongResponse(result.value, { includeScore: true }))
   })
 
   fastify.get<{ Params: { songId: string } }>(

@@ -219,6 +219,7 @@ style             string
 seed              number
 durationSeconds   number | omitted until complete
 truncated         { abc: boolean, semantic: boolean } | omitted until complete
+scoreAbc          string | omitted unless complete; only sent by GET one Song
 errorDetail       string | omitted unless failed
 createdAt         iso datetime
 updatedAt         iso datetime
@@ -479,6 +480,10 @@ One page.
 - Generate button. Submits `POST /v1/songs`. Stays enabled so the user can queue another Song. Show queue depth from `/v1/status`.
 - Active Song card: status, stage label, error text.
 - Player: native `<audio controls src="/v1/songs/{id}/audio">` when `complete`.
+- Lyrics overlay: while a complete Song plays, its lines fade in and out at the center of the
+  page. Timing comes from the stored ABC vocal melody, scaled to the audio duration; when the
+  score is missing, lines spread across the Song instead. The editor dims while the overlay is
+  active and returns when the user touches it.
 - History list: newest first, click to play.
 
 Stage labels:
@@ -514,6 +519,27 @@ v1 always sends:
 ```
 
 That is `examples/song.json` with the user's words. No `abc` field.
+
+## AI (optional, OpenAI-compatible)
+
+Disabled by default; the UI is unchanged until the settings sigil enables it.
+Any OpenAI-compatible endpoint: a preset fills the base URL, the model list
+comes from the endpoint's live `/models`, and the API key is stored in
+`ai_config` (single JSON row) and surfaced only as a `···abcd` hint.
+
+| Route | Does |
+|---|---|
+| `GET /v1/ai/presets` | Known endpoints (OpenAI, Anthropic, Gemini, OpenRouter, Groq, Mistral, DeepSeek, Together, Ollama, LM Studio, custom) |
+| `GET`/`PUT /v1/ai/config` | Per-writer settings: `presetId`, `baseUrl`, `model`, `effort`, write-only `apiKey` |
+| `GET /v1/ai/models?scope=style\|lyrics` | Live model list; falls back to preset guesses with a `detail` |
+| `POST /v1/ai/enhance` | `{ kind, style?, lyrics? }` → `{ text }` |
+| `POST /v1/ai/songs/random` | Model writes style + lyrics as JSON, queued as a normal Song |
+
+`effort` maps to `reasoning_effort` and is only sent when not `off`. Failure
+modes: 409 when AI is off or a writer is missing a model/key, 502 when the
+endpoint fails or the reply does not parse. Full auto is client-side: one Song
+generating at all times, the next one plays when the current one ends, and a
+new generation starts the moment playback begins.
 
 ## Failure modes
 

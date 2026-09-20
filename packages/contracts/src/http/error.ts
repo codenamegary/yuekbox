@@ -5,6 +5,7 @@ export const PROBLEM_TYPES = {
   internalError: "https://yuekbox.local/problems/internal-error",
   notFound: "https://yuekbox.local/problems/not-found",
   conflict: "https://yuekbox.local/problems/conflict",
+  upstreamError: "https://yuekbox.local/problems/upstream-error",
 } as const
 
 export const ProblemErrorSchema = z.strictObject({
@@ -40,11 +41,17 @@ export const ConflictProblemSchema = z.strictObject({
   type: z.literal(PROBLEM_TYPES.conflict),
 })
 
+export const UpstreamProblemSchema = z.strictObject({
+  ...InternalProblemFieldsSchema.shape,
+  type: z.literal(PROBLEM_TYPES.upstreamError),
+})
+
 export const ProblemDetailsSchema = z.discriminatedUnion("type", [
   ValidationProblemSchema,
   InternalProblemSchema,
   NotFoundProblemSchema,
   ConflictProblemSchema,
+  UpstreamProblemSchema,
 ])
 
 export type ProblemError = z.infer<typeof ProblemErrorSchema>

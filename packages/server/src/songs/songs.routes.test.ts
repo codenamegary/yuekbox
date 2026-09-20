@@ -4,7 +4,7 @@ import { PROBLEM_TYPES, ProblemDetailsSchema } from "contracts/http/error"
 import { SongSchema } from "contracts/http/songs"
 import { SongsCollectionSchema } from "contracts/http/songs"
 import { buildApp } from "../app"
-import { ok } from "../shared/result"
+import { err, ok } from "../shared/result"
 import { SongsSlice } from "./songs.assembly"
 import { Song } from "./songs.models"
 
@@ -29,6 +29,18 @@ const queuedSong: Song = Object.freeze({
   createdAt: "2026-09-17T04:00:00.000Z",
   updatedAt: "2026-09-17T04:00:00.000Z",
   completedAt: null,
+})
+
+const scoreAbcFixture = "X:1\nM:4/4\nL:1/8\nK:C\nV: Vocal\nc8|\n"
+
+const completeSong: Song = Object.freeze({
+  ...queuedSong,
+  status: "complete",
+  durationSeconds: 152.5,
+  truncatedAbc: false,
+  truncatedSemantic: false,
+  scoreAbc: scoreAbcFixture,
+  completedAt: "2026-09-17T04:05:00.000Z",
 })
 
 const statusFixture: Status = Object.freeze({
@@ -66,8 +78,46 @@ const makeSlice = (overrides: Partial<SongsSlice> = {}, kicks: number[] = []): S
   ...overrides,
 })
 
+const defaultSetting = {
+  presetId: "openai",
+  baseUrl: "https://api.openai.com/v1",
+  model: "gpt-4o-mini",
+  effort: "medium" as const,
+  keyHint: null,
+}
+
 const makeApp = (slice: SongsSlice) =>
-  buildApp({ songs: slice, referenceMaxBytes: 1024, status: async () => statusFixture })
+  buildApp({
+    songs: slice,
+    referenceMaxBytes: 1024,
+    ai: {
+      listPresets: () => [],
+      getConfig: async () => ({
+        enabled: false,
+        style: defaultSetting,
+        lyrics: defaultSetting,
+      }),
+      saveConfig: async (patch) => ({
+        enabled: patch.enabled ?? false,
+        style: {
+          ...defaultSetting,
+          ...(patch.style !== undefined
+            ? { model: patch.style.model ?? defaultSetting.model }
+            : {}),
+        },
+        lyrics: {
+          ...defaultSetting,
+          ...(patch.lyrics !== undefined
+            ? { model: patch.lyrics.model ?? defaultSetting.model }
+            : {}),
+        },
+      }),
+      fetchModels: async () => ({ models: [], live: false }),
+      enhance: async () => err({ kind: "ai_disabled", detail: "AI is disabled" }),
+      randomSong: async () => err({ kind: "ai_disabled", detail: "AI is disabled" }),
+    },
+    status: async () => statusFixture,
+  })
 
 test("create returns a queued song and only kicks the worker", async () => {
   const kicks: number[] = []
@@ -170,6 +220,39 @@ test("list returns a contract collection", async () => {
   expect(collection.items).toHaveLength(1)
   expect(collection.items[0]?.id).toBe(songId)
   expect(collection.page.count).toBe(1)
+})
+
+test("get includes the score for a complete song", async () => {
+  const app = makeApp(
+    makeSlice({
+      getSong: async () => ok(completeSong),
+    }),
+  )
+
+  const response = await app.inject({ method: "GET", url: `/v1/songs/${songId}` })
+
+  expect(response.statusCode).toBe(200)
+  expect(SongSchema.parse(response.json()).scoreAbc).toBe(scoreAbcFixture)
+})
+
+test("list omits the score", async () => {
+  const app = makeApp(
+    makeSlice({
+      listSongs: async () =>
+        ok({
+          items: [completeSong],
+          limit: 20,
+          nextCursor: null,
+          previousCursor: null,
+          count: 1,
+        }),
+    }),
+  )
+
+  const response = await app.inject({ method: "GET", url: "/v1/songs?limit=20" })
+
+  expect(response.statusCode).toBe(200)
+  expect(SongSchema.parse(response.json().items[0]).scoreAbc).toBeUndefined()
 })
 
 test("list rejects an unknown status filter", async () => {
