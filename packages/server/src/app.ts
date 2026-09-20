@@ -1,6 +1,8 @@
 import Fastify, { FastifyInstance } from "fastify"
 import { PROBLEM_TYPES } from "contracts/http/error"
 import { Status, StatusSchema, statusPath } from "contracts/http/status"
+import { AiSlice } from "./ai/ai.models"
+import { aiRoutes } from "./ai/ai.routes"
 import { referencesRoutes } from "./songs/references.routes"
 import { SongsSlice } from "./songs/songs.assembly"
 import { songsRoutes } from "./songs/songs.routes"
@@ -8,6 +10,7 @@ import { songsRoutes } from "./songs/songs.routes"
 export type AppDeps = Readonly<{
   songs: SongsSlice
   referenceMaxBytes: number
+  ai: AiSlice
   status: () => Promise<Status>
 }>
 
@@ -78,6 +81,7 @@ export const buildApp = (deps: AppDeps): FastifyInstance => {
 
   app.register(songsRoutes, { songs: deps.songs })
   app.register(referencesRoutes, { songs: deps.songs })
+  app.register(aiRoutes, { ai: deps.ai })
 
   app.get(statusPath, async (_request, reply) => {
     const status = await deps.status()

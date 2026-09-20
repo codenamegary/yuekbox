@@ -3,6 +3,7 @@ export type AudioEngine = Readonly<{
   play: () => Promise<boolean>
   pause: () => void
   isPlaying: () => boolean
+  isEnded: () => boolean
   currentTime: () => number
   duration: () => number
   seek: (seconds: number) => void
@@ -39,6 +40,8 @@ export const createAudioEngine = (): AudioEngine => {
     const element = state.element
     return element !== null && !element.paused && !element.ended
   }
+
+  const isEnded = () => state.element?.ended ?? false
 
   const ensureGraph = () => {
     const element = state.element
@@ -163,5 +166,5 @@ export const createAudioEngine = (): AudioEngine => {
     }
   }
 
-  return { attach, play, pause, isPlaying, currentTime, duration, seek, bins, subscribe }
+  return { attach, play, pause, isPlaying, isEnded, currentTime, duration, seek, bins, subscribe }
 }

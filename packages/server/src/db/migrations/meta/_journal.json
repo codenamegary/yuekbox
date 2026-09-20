@@ -22,6 +22,13 @@
       "when": 1789693106644,
       "tag": "0002_add_references",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789875693629,
+      "tag": "0003_add_ai_config",
+      "breakpoints": true
     }
   ]
 }

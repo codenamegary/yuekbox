@@ -51,6 +51,7 @@ export const SongSchema = z
     reference: ReferenceSummarySchema.optional(),
     durationSeconds: z.number().nonnegative().optional(),
     truncated: TruncatedSchema.optional(),
+    scoreAbc: z.string().optional(),
     errorDetail: z.string().optional(),
     createdAt: TimestampSchema,
     updatedAt: TimestampSchema,
@@ -109,6 +110,14 @@ export const SongSchema = z
         code: "custom",
         message: "durationSeconds and truncated are only present when complete",
         path: ["durationSeconds"],
+      })
+    }
+
+    if (song.scoreAbc !== undefined && !complete) {
+      ctx.addIssue({
+        code: "custom",
+        message: "scoreAbc is only present when complete",
+        path: ["scoreAbc"],
       })
     }
 

@@ -1,0 +1,40 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { AiConfigPatch, EnhanceScope } from "contracts/http/ai"
+import { Song } from "contracts/http/songs"
+import { queryKeys } from "@/queryKeys"
+import { createRandomSong, enhanceText, EnhanceRequest, saveAiConfig } from "./ai.api"
+
+export const useSaveAiConfigMutation = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (patch: AiConfigPatch) => saveAiConfig(patch),
+    onSuccess: async (config) => {
+      queryClient.setQueryData(queryKeys.aiConfig(), config)
+    },
+  })
+}
+
+export const useEnhanceMutation = (onDone: (kind: EnhanceScope, text: string) => void) => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: EnhanceRequest) => enhanceText(request),
+    onSuccess: async (result, request) => {
+      onDone(request.kind, result.text)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.aiConfig() })
+    },
+  })
+}
+
+export const useRandomSongMutation = (onCreated: (song: Song) => void) => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: createRandomSong,
+    onSuccess: async (song) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.songs() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.status() }),
+      ])
+      onCreated(song)
+    },
+  })
+}

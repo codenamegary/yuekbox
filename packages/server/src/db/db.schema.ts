@@ -39,3 +39,9 @@ export const referencesTable = sqliteTable("references", {
   scoreAbc: text("score_abc"),
   createdAt: text("created_at").notNull(),
 })
+
+export const aiConfigTable = sqliteTable("ai_config", {
+  id: text("id").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: text("updated_at").notNull(),
+})

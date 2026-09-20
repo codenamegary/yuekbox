@@ -1,6 +1,9 @@
 import { existsSync } from "node:fs"
 import { resolve } from "node:path"
 import { ServiceState } from "contracts/http/status"
+import { assembleAiSlice } from "./ai/ai.slice"
+import { makeAiConfigStore } from "./ai/ai.config.store"
+import { chatCompletion, listModels } from "./ai/ai.openai"
 import { buildApp } from "./app"
 import { openDatabase } from "./db/client"
 import { assembleSongsSlice } from "./songs/songs.assembly"
@@ -56,6 +59,13 @@ const songs = assembleSongsSlice({
   ffmpeg: { ffmpegBin: env.ffmpegBin },
 })
 
+const ai = assembleAiSlice({
+  configStore: makeAiConfigStore(database.db),
+  chat: chatCompletion,
+  listModels,
+  songs,
+})
+
 const recoveredCount = await songs.recoverInterruptedSongs()
 if (recoveredCount > 0) {
   console.warn(`marked ${recoveredCount} interrupted song(s) as failed`)
@@ -100,6 +110,7 @@ const serviceState: { value: ServiceState } = { value: "starting" }
 const app = buildApp({
   songs,
   referenceMaxBytes: env.referenceMaxBytes,
+  ai,
   status: async () => ({
     version,
     state: serviceState.value,

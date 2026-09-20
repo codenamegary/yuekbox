@@ -33,10 +33,12 @@ queue, a worker, and the real YuE2 CLI. The orb is just here to make the wait fu
 - 🚦 **A queue, not a stampede.** Click generate ten times if you want. The GPU still runs one Song at a time.
 - 📶 **Real progress.** Five stage pips, plus a hairline bar under them for the stages YuE2 actually counts (synthesize + decode). No fake bars for stages nobody can measure.
 - 🔊 **Plays the MP3** when the Song lands, with a real spectrum fed by an `AnalyserNode`. The orb dances to it. Yes, really.
+- ✍️ **Lyrics in the void.** While a Song plays, its lines fade in and out at the center of the page, timed to the vocal melody from the stored score. The editor dims until you touch it.
 - 🗂️ **History drawer.** Newest first. Click to play. Click to delete. Loading a song offers to replace the editor text before it stomps your draft.
 - 🧪 **Keeps the score.** Every successful Song stores the ABC lead sheet for future features. v1 doesn't show it. Yet.
 - ⌁ **Reference covers.** Attach a song file and SheetSage2 transcribes its melody first, then YuE2 sings your lyrics over that tune. Optional — without it you get the usual freeform generation.
 - 🌈 **Four trip modes** for the background visualizer. More on that below.
+- 🧠 **Optional AI** that talks to any OpenAI-compatible endpoint — enhance, random, full auto. Off by default. More below.
 
 ## 🖼️ Gallery
 
@@ -189,6 +191,29 @@ Songs move through `queued → running → complete | failed`, and while running
 a `stage` (`plan`, `semantic`, `synthesize`, `decode`, `encode`) plus `stageProgress`
 when YuE2 gives us numbers. The web app polls, whoever is active updates fastest.
 
+## 🧠 Bring your own model (optional)
+
+AI is **off by default**, and the app behaves exactly as it always has until you
+flip the switch in the settings sigil (⚙). Turn it on and Yuekbox talks to any
+**OpenAI-compatible endpoint**: OpenAI, Anthropic, Gemini, OpenRouter, Groq,
+Mistral, DeepSeek, Together — or whatever local thing you have running (Ollama,
+LM Studio, vLLM). Pick a preset, adjust the base URL if you need to, add an API
+key if the endpoint wants one, and choose a model from the endpoint's **live
+`/models` listing**. Keys stay in the local SQLite file and are never echoed
+back out of the API — only a `···abcd` hint.
+
+With AI on, the boxes grow little sigils:
+
+- **✧ enhance** on the style box sharpens the vibe you're pointing at.
+- **✧ enhance** on the lyrics box extends and reworks what's there — or writes
+  brand new lyrics when the box is empty.
+- **⚄ random** has the model write a full new song and plays it.
+- **∞ full auto** hides the inputs and runs the jukebox: always one song
+  playing, always the next one generating. It never asks you anything.
+
+Style and lyrics each get their own endpoint, model, and optional
+`reasoning_effort` (`off`, `low`, `medium`, `high` — only sent when not off).
+
 ## 🌌 The psychedelic bit
 
 The whole visual layer is a port of the project's original redline mockup, and it is
@@ -282,6 +307,11 @@ If a PR needs work, a maintainer will say so warmly and specifically.
 - `GET /v1/songs/:songId/audio` — `audio/mpeg` with Range support; `409` before completion.
 - `DELETE /v1/songs/:songId` — `204`.
 - `GET /v1/status` — version, state, `ffmpeg`, `yue2`, `queueDepth`, `gpuBusy`.
+- `GET /v1/ai/presets` — known OpenAI-compatible endpoints and icons.
+- `GET` / `PUT /v1/ai/config` — AI settings; API keys are write-only.
+- `GET /v1/ai/models?scope=style|lyrics` — live model list from that endpoint.
+- `POST /v1/ai/enhance` — `{ kind, style?, lyrics? }` → `{ text }`.
+- `POST /v1/ai/songs/random` — the model writes a Song, the queue runs it.
 
 ## 📜 License
 
