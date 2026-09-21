@@ -57,7 +57,7 @@ const makeUseCase = (options: {
   })
 
 describe("makeRandomSong", () => {
-  test("calls the style scope first, then the lyrics scope with the style brief", async () => {
+  test("calls the style scope first, then the lyrics scope without the style brief", async () => {
     const seen: Array<{ model: string; user: string }> = []
     const randomSong = makeUseCase({ chat: chatFor(seen) })
 
@@ -66,7 +66,7 @@ describe("makeRandomSong", () => {
     expect(result.ok).toBe(true)
     expect(seen.map((call) => call.model)).toEqual(["style-model", "lyrics-model"])
     expect(seen[0]?.user).toContain("Invent a brand new musical direction")
-    expect(seen[1]?.user).toContain(styleBrief)
+    expect(seen[1]?.user).not.toContain(styleBrief)
   })
 
   test("creates the song from both replies and kicks the worker", async () => {

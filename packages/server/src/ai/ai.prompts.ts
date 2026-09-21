@@ -201,17 +201,11 @@ STYLE:
 ${input.style}`
 }
 
-export const buildLyricsEnhancePrompt = (input: {
-  readonly style: string
-  readonly lyrics: string
-}): string => {
-  const styleContext =
-    input.style.trim().length > 0
-      ? `The song's style is: ${input.style.trim()}\n`
-      : "No style is given; infer one from the lyrics themselves.\n"
+/** Lyrics only — the style never enters the lyric prompt, so it cannot be sung back. */
+export const buildLyricsEnhancePrompt = (input: { readonly lyrics: string }): string => {
   const task =
     input.lyrics.trim().length === 0
-      ? `Write brand new original song lyrics that fit the style.
+      ? `Write brand new original song lyrics.
 Pick exactly one of these common song structures and follow it from start to finish:
 ${songStructures}`
       : `Rework and extend the LYRICS below. Keep their theme, voice, and language;
@@ -221,7 +215,6 @@ If the LYRICS have no clear structure, pick exactly one of these and follow it:
 ${songStructures}`
   return `You are writing for a text-to-song model (YuE2).
 ${task}
-${styleContext}
 Lyrics must use explicit section tags like [Verse], [Chorus], [Bridge], [Outro].
 ${lyricsLineRule}
 ${wordsRule}
@@ -255,16 +248,16 @@ Write one vivid paragraph under ${maxStyleWords} words. Output ONLY the brief �
 preamble, no labels, no quotes, no commentary.
 `
 
-/** A full lyric sheet for a style the model just invented. */
-export const buildRandomLyricsPrompt = (
-  style: string,
-): string => `Write the complete lyric sheet for a brand new song in the style below.
-The song's style is: ${style.trim()}
+/**
+ * A full lyric sheet with no style context. Feeding the style brief in makes the
+ * model sing its vocabulary back, so the lyrics are written style-blind.
+ */
+export const buildRandomLyricsPrompt =
+  (): string => `Write the complete lyric sheet for a brand new song.
 
 Rules, all mandatory:
 - ${lyricsLineRule}
 - 150 to 400 words.
-- Write for the voice, mood, and register the style calls for.
 - ${wordsRule}
 
 Output ONLY the lyric sheet — no preamble, no commentary.

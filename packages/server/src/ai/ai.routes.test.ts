@@ -287,7 +287,7 @@ describe("ai routes", () => {
     }
   })
 
-  test("random song calls the style scope first, then the lyrics scope", async () => {
+  test("random song calls the style scope first, then the lyrics scope without the brief", async () => {
     const fake = startFakeOpenAI()
     try {
       const ai = buildAi()
@@ -301,7 +301,7 @@ describe("ai routes", () => {
       expect(response.statusCode).toBe(201)
       expect(fake.calls.map((call) => call.model)).toEqual(["style-model", "lyrics-model"])
       expect(fake.calls[0]?.user).toContain("Invent a brand new musical direction")
-      expect(fake.calls[1]?.user).toContain(styleBrief)
+      expect(fake.calls[1]?.user).not.toContain(styleBrief)
     } finally {
       void fake.stop()
     }

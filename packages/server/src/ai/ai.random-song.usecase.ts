@@ -46,7 +46,7 @@ export const makeRandomSong = (deps: RandomSongDeps) => {
     const lyrics = await runWithRetries(() =>
       attempt(
         guarded.value.lyrics,
-        buildRandomLyricsPrompt(style.value),
+        buildRandomLyricsPrompt(),
         (text) => (isUsableLyrics(text) ? null : lyricsUnusableDetail),
         lyricsUnusableDetail,
       ),
