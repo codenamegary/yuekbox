@@ -178,6 +178,28 @@ test("anchors the first calibrated line to the first detected phrase", () => {
   })
 })
 
+test("keeps the anchored first phrase to one line", () => {
+  const spans = [
+    { startSeconds: 0, endSeconds: 3.9 },
+    { startSeconds: 3.9, endSeconds: 6.9 },
+    { startSeconds: 6.9, endSeconds: 9.9 },
+    { startSeconds: 9.9, endSeconds: 14.9 },
+  ]
+
+  const cues = buildLyricCues({
+    lyrics: "first line here\nsecond line here\nthird line here",
+    scoreAbc: null,
+    vocalSpans: spans,
+    durationSeconds: 14.9,
+  })
+
+  expect(cues).toEqual([
+    { text: "first line here", section: null, startSeconds: 0, endSeconds: 3.9 },
+    { text: "second line here", section: null, startSeconds: 3.9, endSeconds: 6.9 },
+    { text: "third line here", section: null, startSeconds: 9.9, endSeconds: 14.9 },
+  ])
+})
+
 test("falls back to the score when the detected spans are empty", () => {
   const withEmpty = buildLyricCues({
     lyrics: "first line\nsecond line",
