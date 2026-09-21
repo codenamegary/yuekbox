@@ -1,3 +1,4 @@
+import { VocalSpan } from "contracts/http/songs"
 import { Song, SongCot, StageProgressUpdate } from "../songs/songs.models"
 import {
   ClaimNextQueuedSong,
@@ -14,6 +15,7 @@ import {
   EncodeFlacToMp3,
   RemoveTempDir,
   RunTranscribe,
+  RunVocalTranscribe,
   RunYue2Generate,
 } from "./generation.ports"
 
@@ -27,6 +29,7 @@ export type SongWorkerDeps = Readonly<{
   saveReferenceScore: SaveReferenceScore
   completeSong: CompleteSong
   runTranscribe: RunTranscribe
+  runVocalTranscribe: RunVocalTranscribe
   runYue2Generate: RunYue2Generate
   encodeFlacToMp3: EncodeFlacToMp3
   createTempDir: CreateTempDir
@@ -115,10 +118,28 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
         return
       }
 
+      let calibration: readonly VocalSpan[] | null = null
+      await deps.markSongStage(song.id, "sync")
+      try {
+        const vocal = await deps.runVocalTranscribe({
+          audioPath: generated.value.flacPath,
+          outputDir: tempDir,
+          durationSeconds: generated.value.durationSeconds,
+        })
+        if (vocal.ok) {
+          calibration = vocal.value.spans
+        } else {
+          deps.logError("vocal transcription failed", vocal.error.detail)
+        }
+      } catch (error) {
+        deps.logError("vocal transcription failed", error)
+      }
+
       await deps.completeSong({
         songId: song.id,
         mp3: encoded.value,
         scoreAbc: generated.value.scoreAbc,
+        calibration,
         durationSeconds: generated.value.durationSeconds,
         truncated: generated.value.truncated,
       })

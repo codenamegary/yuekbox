@@ -136,7 +136,7 @@ export const songsRoutes: FastifyPluginAsync<SongsRoutesOptions> = async (fastif
       return sendProblem(reply, notFoundProblem(`Song ${songId} does not exist`))
     }
 
-    return reply.send(toSongResponse(result.value, { includeScore: true }))
+    return reply.send(toSongResponse(result.value, { includeFiles: true }))
   })
 
   fastify.get<{ Params: { songId: string } }>(

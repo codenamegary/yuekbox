@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test"
 import {
+  Calibration,
+  CalibrationSchema,
   CreateSongBodySchema,
   Song,
   SongSchema,
@@ -86,11 +88,84 @@ test("rejects a score on a song that is not complete", () => {
   expect(SongSchema.safeParse({ ...queued, scoreAbc: "X:1" }).success).toBe(false)
 })
 
+test("parses a calibration fixture", () => {
+  const calibration: Calibration = {
+    version: 1,
+    source: "sheetsage2",
+    spans: [{ startSeconds: 12.3, endSeconds: 16.8 }],
+  }
+  expect(CalibrationSchema.parse(calibration)).toEqual(calibration)
+})
+
+test("rejects a calibration with a bad version, source, or empty spans", () => {
+  expect(CalibrationSchema.safeParse({ version: 2, source: "sheetsage2", spans: [] }).success).toBe(
+    false,
+  )
+  expect(CalibrationSchema.safeParse({ version: 1, source: "other", spans: [] }).success).toBe(
+    false,
+  )
+  expect(
+    CalibrationSchema.safeParse({
+      version: 1,
+      source: "sheetsage2",
+      spans: [{ startSeconds: -1, endSeconds: 2 }],
+    }).success,
+  ).toBe(false)
+})
+
+test("a complete song carries its calibration", () => {
+  const withCalibration: Song = {
+    ...completeSong,
+    calibration: {
+      version: 1,
+      source: "sheetsage2",
+      spans: [{ startSeconds: 12.3, endSeconds: 16.8 }],
+    },
+  }
+  expect(SongSchema.parse(withCalibration)).toEqual(withCalibration)
+})
+
+test("rejects a calibration on a song that is not complete", () => {
+  const queued: Song = {
+    id: ulid,
+    status: "queued",
+    lyrics: "hi",
+    style: "pop",
+    seed: 1,
+    createdAt,
+    updatedAt: createdAt,
+  }
+  expect(
+    SongSchema.safeParse({
+      ...queued,
+      calibration: {
+        version: 1,
+        source: "sheetsage2",
+        spans: [{ startSeconds: 1, endSeconds: 2 }],
+      },
+    }).success,
+  ).toBe(false)
+})
+
 test("parses a running song fixture with a stage", () => {
   const running: Song = {
     id: ulid,
     status: "running",
     stage: "synthesize",
+    lyrics: "hi",
+    style: "pop",
+    seed: 1,
+    createdAt,
+    updatedAt: createdAt,
+  }
+  expect(SongSchema.parse(running)).toEqual(running)
+})
+
+test("sync is a song stage", () => {
+  const running: Song = {
+    id: ulid,
+    status: "running",
+    stage: "sync",
     lyrics: "hi",
     style: "pop",
     seed: 1,

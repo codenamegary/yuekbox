@@ -14,18 +14,26 @@ test("formatDuration pads minutes and seconds", () => {
   expect(formatDuration(194.2)).toBe("03:14")
 })
 
-test("stage order covers the five spec stages", () => {
-  expect(baseStageOrder).toEqual(["plan", "semantic", "synthesize", "decode", "encode"])
+test("stage order covers the spec stages and the lyric sync", () => {
+  expect(baseStageOrder).toEqual(["plan", "semantic", "synthesize", "decode", "encode", "sync"])
 })
 
 test("cover stage order transcribes instead of planning", () => {
   expect(stageOrderFor(false)).toEqual(baseStageOrder)
   expect(stageOrderFor(true)).toEqual(coverStageOrder)
-  expect(coverStageOrder).toEqual(["transcribe", "semantic", "synthesize", "decode", "encode"])
+  expect(coverStageOrder).toEqual([
+    "transcribe",
+    "semantic",
+    "synthesize",
+    "decode",
+    "encode",
+    "sync",
+  ])
 })
 
 test("every stage has a label", () => {
   expect(Object.keys(stageLabels).sort()).toEqual([...baseStageOrder, "transcribe"].sort())
+  expect(stageLabels.sync).toBe("Syncing lyrics")
 })
 
 test("status labels cover every status", () => {

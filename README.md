@@ -31,9 +31,9 @@ queue, a worker, and the real YuE2 CLI. The visuals are just here to make the wa
 - 🪞 **Two glass boxes.** One for style, one for lyrics.
 - ✦ **Generate.** One click queues a Song and fires the worker.
 - 🚦 **A queue, not a stampede.** Click generate ten times if you want. The GPU still runs one Song at a time.
-- 📶 **Real progress.** Five stage pips, plus a hairline bar under them for the stages YuE2 actually counts (synthesize + decode). No fake bars for stages nobody can measure.
+- 📶 **Real progress.** Six stage pips, plus a hairline bar under them for the stages YuE2 actually counts (synthesize + decode). No fake bars for stages nobody can measure.
 - 🔊 **Plays the MP3** when the Song lands, with a real spectrum fed by an `AnalyserNode`. The backdrop dances to it. Yes, really.
-- ✍️ **Lyrics in the void.** While a Song plays, its lines fade in and out at the center of the page, timed to the vocal melody from the stored score. The editor dims until you touch it.
+- ✍️ **Lyrics in the void.** While a Song plays, its lines fade in and out at the center of the page, timed to the vocal phrases detected in the rendered audio. Without a detection it falls back to the stored score. Each line settles in 0.4 s. The editor dims until you touch it.
 - 🗂️ **History drawer.** Newest first. Click to play. Click to delete. Loading a song offers to replace the editor text before it stomps your draft.
 - 🧪 **Keeps the score.** Every successful Song stores the ABC lead sheet for future features. v1 doesn't show it. Yet.
 - ⌁ **Reference covers.** Attach a song file and SheetSage2 transcribes its melody first, then YuE2 sings your lyrics over that tune. Optional — without it you get the usual freeform generation.
@@ -184,12 +184,13 @@ packages/contracts  Zod wire schemas, paths, RFC 7807 problems
 One worker claims the oldest `queued` Song, marks it `running`, and shells out to
 `python -m yue2 generate`. YuE2's stderr is parsed live: known stage names move the
 pips, numeric lines move the progress bar. Success means: encode the FLAC to MP3 with
-ffmpeg, write the MP3 and the ABC scores into the Song's own folder under `MEDIA_DIR`,
+ffmpeg, transcribe the vocals with SheetSage2 to calibrate the lyric timing, write the
+MP3, the ABC scores, and `calibration.json` into the Song's own folder under `MEDIA_DIR`,
 mark it `complete`, nuke the temp dir. Failure stores a short stderr tail and marks it
 `failed`. If the server dies mid-run, the next boot confesses: `interrupted`.
 
 Songs move through `queued → running → complete | failed`, and while running they carry
-a `stage` (`plan`, `semantic`, `synthesize`, `decode`, `encode`) plus `stageProgress`
+a `stage` (`plan`, `semantic`, `synthesize`, `decode`, `encode`, `sync`) plus `stageProgress`
 when YuE2 gives us numbers. The web app polls, whoever is active updates fastest.
 
 ## 🧠 Bring your own model (optional)

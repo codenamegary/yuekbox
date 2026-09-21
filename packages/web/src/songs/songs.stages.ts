@@ -7,6 +7,7 @@ export const stageLabels: Readonly<Record<SongStage, string>> = {
   synthesize: "Synthesizing",
   decode: "Decoding audio",
   encode: "Encoding mp3",
+  sync: "Syncing lyrics",
 }
 
 export const baseStageOrder: readonly SongStage[] = [
@@ -15,6 +16,7 @@ export const baseStageOrder: readonly SongStage[] = [
   "synthesize",
   "decode",
   "encode",
+  "sync",
 ]
 
 export const coverStageOrder: readonly SongStage[] = [
@@ -23,6 +25,7 @@ export const coverStageOrder: readonly SongStage[] = [
   "synthesize",
   "decode",
   "encode",
+  "sync",
 ]
 
 export const stageOrderFor = (hasReference: boolean): readonly SongStage[] =>

@@ -34,13 +34,14 @@ const makeHarness = (options: Readonly<{ failComplete?: boolean; song?: Song | n
   return { completeSong, calls, files, completed }
 }
 
-test("complete writes the mp3 and the score, then marks the row complete", async () => {
+test("complete writes the mp3, the score, and the calibration, then marks the row complete", async () => {
   const harness = makeHarness()
 
   await harness.completeSong({
     songId,
     mp3: new Uint8Array([1, 2, 3, 4]),
     scoreAbc: "X:1\nK:C\nC D E|",
+    calibration: [{ startSeconds: 12.3, endSeconds: 16.8 }],
     durationSeconds: 152.5,
     truncated: { abc: false, semantic: false },
   })
@@ -48,6 +49,7 @@ test("complete writes the mp3 and the score, then marks the row complete", async
   expect(harness.calls).toEqual([
     `put:${folderKey}/generated_${songId}.mp3`,
     `put:${folderKey}/score.abc`,
+    `put:${folderKey}/calibration.json`,
     "complete",
   ])
   expect(Array.from(harness.files.get(`${folderKey}/generated_${songId}.mp3`) ?? [])).toEqual([
@@ -56,18 +58,41 @@ test("complete writes the mp3 and the score, then marks the row complete", async
   expect(new TextDecoder().decode(harness.files.get(`${folderKey}/score.abc`))).toBe(
     "X:1\nK:C\nC D E|",
   )
+  expect(
+    JSON.parse(new TextDecoder().decode(harness.files.get(`${folderKey}/calibration.json`))),
+  ).toEqual({
+    version: 1,
+    source: "sheetsage2",
+    spans: [{ startSeconds: 12.3, endSeconds: 16.8 }],
+  })
   expect(harness.completed).toEqual([
     { durationSeconds: 152.5, truncated: { abc: false, semantic: false } },
   ])
 })
 
-test("complete skips the score file when yue2 wrote no score", async () => {
+test("complete skips the score and calibration files when there is nothing to write", async () => {
   const harness = makeHarness()
 
   await harness.completeSong({
     songId,
     mp3: new Uint8Array([1]),
     scoreAbc: null,
+    calibration: null,
+    durationSeconds: 10,
+    truncated: { abc: true, semantic: false },
+  })
+
+  expect(harness.calls).toEqual([`put:${folderKey}/generated_${songId}.mp3`, "complete"])
+})
+
+test("complete skips an empty calibration span list", async () => {
+  const harness = makeHarness()
+
+  await harness.completeSong({
+    songId,
+    mp3: new Uint8Array([1]),
+    scoreAbc: null,
+    calibration: [],
     durationSeconds: 10,
     truncated: { abc: true, semantic: false },
   })
@@ -83,6 +108,7 @@ test("a failed row update removes the files it wrote and rethrows", async () => 
       songId,
       mp3: new Uint8Array([1]),
       scoreAbc: "X:1",
+      calibration: [{ startSeconds: 1, endSeconds: 2 }],
       durationSeconds: 10,
       truncated: { abc: false, semantic: false },
     })
@@ -95,9 +121,11 @@ test("a failed row update removes the files it wrote and rethrows", async () => 
   expect(harness.calls).toEqual([
     `put:${folderKey}/generated_${songId}.mp3`,
     `put:${folderKey}/score.abc`,
+    `put:${folderKey}/calibration.json`,
     "complete",
     `remove:${folderKey}/generated_${songId}.mp3`,
     `remove:${folderKey}/score.abc`,
+    `remove:${folderKey}/calibration.json`,
   ])
   expect(harness.files.size).toBe(0)
 })
@@ -110,6 +138,7 @@ test("complete fails when the song row is gone", async () => {
       songId,
       mp3: new Uint8Array([1]),
       scoreAbc: null,
+      calibration: null,
       durationSeconds: 10,
       truncated: { abc: false, semantic: false },
     })

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { Calibration } from "contracts/http/songs"
 import { songFixture } from "./songs.fixtures"
 import { makeGetSong } from "./songs.get.usecase"
 
@@ -8,6 +9,7 @@ test("get returns the song when it exists", async () => {
   const getSong = makeGetSong({
     findSongById: async () => song,
     readScoreAbc: async () => null,
+    readCalibration: async () => null,
     findReferenceSummary: async () => null,
   })
 
@@ -22,6 +24,7 @@ test("get fills the score and the reference summary from disk", async () => {
   const getSong = makeGetSong({
     findSongById: async () => song,
     readScoreAbc: async () => "X:1\nK:C\nC D E|",
+    readCalibration: async () => null,
     findReferenceSummary: async () => ({ id: "01J8K3R4P9ABCDEFGHJKMNPQRT", filename: "demo.mp3" }),
   })
 
@@ -36,10 +39,31 @@ test("get fills the score and the reference summary from disk", async () => {
   })
 })
 
+test("get fills the calibration from disk", async () => {
+  const calibration: Calibration = {
+    version: 1,
+    source: "sheetsage2",
+    spans: [{ startSeconds: 12.3, endSeconds: 16.8 }],
+  }
+  const getSong = makeGetSong({
+    findSongById: async () => song,
+    readScoreAbc: async () => null,
+    readCalibration: async () => calibration,
+    findReferenceSummary: async () => null,
+  })
+
+  const result = await getSong(song.id)
+
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.value.calibration).toEqual(calibration)
+})
+
 test("get missing id is not-found", async () => {
   const getSong = makeGetSong({
     findSongById: async () => null,
     readScoreAbc: async () => null,
+    readCalibration: async () => null,
     findReferenceSummary: async () => null,
   })
 

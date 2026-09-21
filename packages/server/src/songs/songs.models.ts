@@ -1,4 +1,4 @@
-import { SongStage, SongStatus } from "contracts/http/songs"
+import { Calibration, SongStage, SongStatus, VocalSpan } from "contracts/http/songs"
 
 export type SongCot = "full" | "melody" | "off"
 
@@ -19,6 +19,7 @@ export type Song = Readonly<{
   cot: string
   reference: SongReference | null
   scoreAbc: string | null
+  calibration: Calibration | null
   durationSeconds: number | null
   truncatedAbc: boolean | null
   truncatedSemantic: boolean | null
@@ -80,6 +81,7 @@ export type CompleteSongInput = Readonly<{
   songId: string
   mp3: Uint8Array
   scoreAbc: string | null
+  calibration: readonly VocalSpan[] | null
   durationSeconds: number
   truncated: TruncatedFlags
 }>

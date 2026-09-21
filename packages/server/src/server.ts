@@ -4,7 +4,12 @@ import { ServiceState } from "contracts/http/status"
 import { composeServer } from "./compose"
 import { openDatabase } from "./db/client"
 import { checkFfmpeg, makeEncodeFlacToMp3 } from "./generation/generation.ffmpeg.adapters"
-import { checkSheetsage2, makeRunTranscribe } from "./generation/generation.sheetsage2.adapters"
+import {
+  checkSheetsage2,
+  makeRunTranscribe,
+  makeRunVocalTranscribe,
+  Sheetsage2AdapterEnv,
+} from "./generation/generation.sheetsage2.adapters"
 import {
   checkYue2,
   makeRunYue2Generate,
@@ -69,6 +74,16 @@ if (sheetsage2State === "missing") {
 const startedAt = new Date().toISOString()
 const serviceState: { value: ServiceState } = { value: "starting" }
 
+const sheetsage2Env: Sheetsage2AdapterEnv = {
+  pythonBin: env.sheetsage2Python,
+  scriptPath: env.sheetsage2Script,
+  model: env.sheetsage2Model,
+  baseModel: env.sheetsage2BaseModel,
+  device: env.sheetsage2Device,
+  offline: env.sheetsage2Offline,
+  cwd: env.kitRoot,
+}
+
 const { app, songs } = composeServer({
   db: database.db,
   mediaDir: env.mediaDir,
@@ -78,15 +93,8 @@ const { app, songs } = composeServer({
     scriptBin: env.scriptBin,
     gpuBudget: env.gpuBudget,
   }),
-  runTranscribe: makeRunTranscribe({
-    pythonBin: env.sheetsage2Python,
-    scriptPath: env.sheetsage2Script,
-    model: env.sheetsage2Model,
-    baseModel: env.sheetsage2BaseModel,
-    device: env.sheetsage2Device,
-    offline: env.sheetsage2Offline,
-    cwd: env.kitRoot,
-  }),
+  runTranscribe: makeRunTranscribe(sheetsage2Env),
+  runVocalTranscribe: makeRunVocalTranscribe(sheetsage2Env),
   encodeFlacToMp3: makeEncodeFlacToMp3({ ffmpegBin: env.ffmpegBin }),
   referenceMaxBytes: env.referenceMaxBytes,
   service: {

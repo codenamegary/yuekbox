@@ -88,6 +88,8 @@ export const generatedAudioFileName = (songId: string): string => `generated_${s
 
 export const scoreFileName = "score.abc"
 
+export const calibrationFileName = "calibration.json"
+
 export const referenceScoreFileName = "reference_score.abc"
 
 export const visualizationFileName = "visualization.js"
@@ -112,6 +114,8 @@ export const generatedAudioKey = (folderKey: string, songId: string): string =>
   `${folderKey}/${generatedAudioFileName(songId)}`
 
 export const scoreKey = (folderKey: string): string => `${folderKey}/${scoreFileName}`
+
+export const calibrationKey = (folderKey: string): string => `${folderKey}/${calibrationFileName}`
 
 export const visualizationKey = (folderKey: string): string =>
   `${folderKey}/${visualizationFileName}`

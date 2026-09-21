@@ -15,7 +15,19 @@ export const SongStageSchema = z.enum([
   "synthesize",
   "decode",
   "encode",
+  "sync",
 ])
+
+export const VocalSpanSchema = z.strictObject({
+  startSeconds: z.number().nonnegative(),
+  endSeconds: z.number().nonnegative(),
+})
+
+export const CalibrationSchema = z.strictObject({
+  version: z.literal(1),
+  source: z.literal("sheetsage2"),
+  spans: z.array(VocalSpanSchema).min(1),
+})
 
 export const CreateSongBodySchema = z.strictObject({
   lyrics: z.string().trim().min(1).max(20000),
@@ -52,6 +64,7 @@ export const SongSchema = z
     durationSeconds: z.number().nonnegative().optional(),
     truncated: TruncatedSchema.optional(),
     scoreAbc: z.string().optional(),
+    calibration: CalibrationSchema.optional(),
     errorDetail: z.string().optional(),
     createdAt: TimestampSchema,
     updatedAt: TimestampSchema,
@@ -121,6 +134,14 @@ export const SongSchema = z
       })
     }
 
+    if (song.calibration !== undefined && !complete) {
+      ctx.addIssue({
+        code: "custom",
+        message: "calibration is only present when complete",
+        path: ["calibration"],
+      })
+    }
+
     if (failed && song.errorDetail === undefined) {
       ctx.addIssue({
         code: "custom",
@@ -161,6 +182,8 @@ export const SongsCollectionSchema = createCollectionSchema(SongSchema)
 
 export type SongStatus = z.infer<typeof SongStatusSchema>
 export type SongStage = z.infer<typeof SongStageSchema>
+export type VocalSpan = z.infer<typeof VocalSpanSchema>
+export type Calibration = z.infer<typeof CalibrationSchema>
 export type CreateSongBody = z.infer<typeof CreateSongBodySchema>
 export type Truncated = z.infer<typeof TruncatedSchema>
 export type StageProgress = z.infer<typeof StageProgressSchema>

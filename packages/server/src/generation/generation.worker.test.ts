@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { VocalSpan } from "contracts/http/songs"
 import { ok } from "../shared/result"
 import { songFixture } from "../songs/songs.fixtures"
 import { Song } from "../songs/songs.models"
@@ -9,6 +10,7 @@ const queuedSong: Song = songFixture({ lyrics: "[Verse]\nhello" })
 type Artifacts = {
   completedMp3: Uint8Array | null
   completedScore: string | null
+  completedCalibration: readonly VocalSpan[] | null
   completedDuration: number | null
   completedTruncated: Readonly<{ abc: boolean; semantic: boolean }> | null
   referenceScore: string | null
@@ -19,6 +21,7 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
   const artifacts: Artifacts = {
     completedMp3: null,
     completedScore: null,
+    completedCalibration: null,
     completedDuration: null,
     completedTruncated: null,
     referenceScore: null,
@@ -48,6 +51,7 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
       calls.push("complete")
       artifacts.completedMp3 = input.mp3
       artifacts.completedScore = input.scoreAbc
+      artifacts.completedCalibration = input.calibration
       artifacts.completedDuration = input.durationSeconds
       artifacts.completedTruncated = input.truncated
     },
@@ -70,6 +74,10 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
     runTranscribe: async () => {
       calls.push("transcribe")
       return ok({ scoreAbc: "X:1\nK:C\nC D E|" })
+    },
+    runVocalTranscribe: async () => {
+      calls.push("vocal-transcribe")
+      return ok({ spans: [{ startSeconds: 12.3, endSeconds: 16.8 }] })
     },
     createTempDir: async () => "/tmp/yuekbox-test",
     removeTempDir: async () => {
@@ -103,11 +111,14 @@ test("complete path writes the mp3 and score through one capability", async () =
     "stage:semantic",
     "stage:encode",
     "encode",
+    "stage:sync",
+    "vocal-transcribe",
     "complete",
     "cleanup",
   ])
   expect(harness.artifacts.completedMp3).toEqual(new Uint8Array([1, 2, 3, 4]))
   expect(harness.artifacts.completedScore).toBe("X:1\nK:C\nC D E F|")
+  expect(harness.artifacts.completedCalibration).toEqual([{ startSeconds: 12.3, endSeconds: 16.8 }])
   expect(harness.artifacts.completedDuration).toBe(184.5)
   expect(harness.artifacts.completedTruncated).toEqual({ abc: false, semantic: false })
 })
@@ -141,6 +152,32 @@ test("encode failure marks the song failed and writes nothing", async () => {
   expect(harness.calls).toContain("stage:encode")
   expect(harness.calls).toContain("failed:ffmpeg exited 1")
   expect(harness.artifacts.completedMp3).toBeNull()
+})
+
+test("sync failure logs and completes the song with a null calibration", async () => {
+  const harness = makeHarness({
+    runVocalTranscribe: async () => {
+      await Promise.resolve()
+      return { ok: false, error: { kind: "vocal_transcribe_failed", detail: "no cuda" } }
+    },
+  })
+
+  await harness.run()
+
+  expect(harness.calls).toEqual([
+    "running",
+    "generate:full:no-abc",
+    "stage:plan",
+    "stage:semantic",
+    "stage:encode",
+    "encode",
+    "stage:sync",
+    "log:vocal transcription failed:no cuda",
+    "complete",
+    "cleanup",
+  ])
+  expect(harness.artifacts.completedCalibration).toBeNull()
+  expect(harness.artifacts.completedMp3).not.toBeNull()
 })
 
 test("progress events are persisted between the stage transitions", async () => {
@@ -209,6 +246,8 @@ test("reference songs transcribe first and generate from the melody ABC", async 
     "stage:semantic",
     "stage:encode",
     "encode",
+    "stage:sync",
+    "vocal-transcribe",
     "complete",
     "cleanup",
   ])

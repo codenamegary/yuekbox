@@ -1,7 +1,7 @@
 import * as React from "react"
 import { cn } from "@/lib/cn"
 import { AudioEngine } from "./songs.audio.engine"
-import { LyricCue, cueIndexAt, lyricEnvelope } from "./songs.lyrics.timing"
+import { LyricCue, cueIndexAt, lyricEnvelope, lyricFadeInSeconds } from "./songs.lyrics.timing"
 
 type LyricOverlayProps = Readonly<{
   cues: readonly LyricCue[]
@@ -20,9 +20,9 @@ const fontClassFor = (text: string): string => {
 const prefersReducedMotion = () =>
   typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
-const lyricMotion = (progress: number) => {
-  const opacity = lyricEnvelope(progress)
-  const appear = Math.min(1, Math.max(0, progress / 0.16))
+const lyricMotion = (progress: number, fadeInFraction: number) => {
+  const opacity = lyricEnvelope(progress, fadeInFraction)
+  const appear = Math.min(1, Math.max(0, progress / fadeInFraction))
   return {
     opacity: opacity.toFixed(3),
     transform: `translateY(${((1 - appear) * 24).toFixed(1)}px) scale(${(0.97 + appear * 0.03).toFixed(3)})`,
@@ -55,7 +55,8 @@ export const LyricOverlay: React.FC<LyricOverlayProps> = ({ cues, engine, recede
         const cue = cues[index]
         if (cue !== undefined) {
           const span = Math.max(0.001, cue.endSeconds - cue.startSeconds)
-          const motion = lyricMotion((time - cue.startSeconds) / span)
+          const fadeInFraction = Math.min(1, lyricFadeInSeconds / span)
+          const motion = lyricMotion((time - cue.startSeconds) / span, fadeInFraction)
           element.style.opacity = motion.opacity
           if (!prefersReducedMotion()) {
             element.style.transform = motion.transform
