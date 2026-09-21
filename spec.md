@@ -19,7 +19,11 @@ ABC lead sheet YuE2 wrote for the Song. Stored as `score.abc` in the Song's fold
 _Avoid_: Plan, MIDI, sheet
 
 **Calibration**:
-Vocal phrase spans SheetSage2 detected in the rendered audio, each with a note count. Stored as `calibration.json` in the Song's folder. The web app matches lyric lines to the notes actually sung; the Score is the fallback.
+Vocal phrase spans detected in the rendered audio, plus optional per-line cues, stored as
+`calibration.json` in the Song's folder. SheetSage2 spans carry a note count. Transcription
+calibrations carry cues whose text and timings come from the sung audio. When cues are present the
+overlay shows them as-is; otherwise the web app matches written lines to the phrases, and the Score
+is the fallback.
 _Avoid_: Alignment, sync data
 
 **Queue**:
@@ -225,7 +229,7 @@ seed              number
 durationSeconds   number | omitted until complete
 truncated         { abc: boolean, semantic: boolean } | omitted until complete
 scoreAbc          string | omitted unless complete; only sent by GET one Song
-calibration       { version: 1, source: "sheetsage2", spans: [{ startSeconds, endSeconds, noteCount }] } | omitted unless complete; only sent by GET one Song
+calibration       { version: 1, source: "sheetsage2" | "transcribe", spans: [{ startSeconds, endSeconds, noteCount? }], cues?: [{ text, startSeconds, endSeconds }] } | omitted unless complete; only sent by GET one Song
 errorDetail       string | omitted unless failed
 createdAt         iso datetime
 updatedAt         iso datetime
@@ -589,14 +593,16 @@ One page.
 - Active Song card: status, stage label, error text.
 - Player: native `<audio controls src="/v1/songs/{id}/audio">` when `complete`.
 - Lyrics overlay: while a complete Song plays, its lines fade in and out at the center of the
-  page. Timing prefers the calibration's detected vocal phrases when they carry note counts: lines
+  page. Timing prefers the calibration's cues and shows their text as-is, so a transcription
+  calibration displays exactly what was sung. Without cues it prefers the calibration's detected
+  vocal phrases when they carry note counts: lines
   are matched to whole runs of phrases so a line's cue starts on its first real note and ends on its
   last, pickups merge into the line they lead, and held notes stretch the line. Spans without note
   counts fall back to spreading lines across phrases by duration, with the first line anchored to
   the first phrase. Without spans it comes from the stored ABC vocal melody, scaled to the audio
   duration. When both are missing, lines spread across the Song instead. Each line settles in 0.4 s
   and fades out near its end. The editor dims while the overlay is active and returns when the user
-  touches it. Cues carry the active `[Tag]` as their section.
+  touches it. A cue carries the active `[Tag]` as its section when its text matches a written line.
 - Backdrop: the four hand-written trip modes run behind everything. When the active Song has a
   ready visualization (or a reroll in flight), its canvas replaces the trip mode. The visual
   receives audio frames every `requestAnimationFrame` and lyric cues on change; the overlay hides

@@ -115,6 +115,33 @@ test("parses a calibration whose spans carry note counts", () => {
   expect(CalibrationSchema.parse(calibration)).toEqual(calibration)
 })
 
+test("parses a transcription calibration whose cues time the lines", () => {
+  const calibration: Calibration = {
+    version: 1,
+    source: "transcribe",
+    spans: [{ startSeconds: 12.3, endSeconds: 16.8, noteCount: 4 }],
+    cues: [
+      { text: "hello world", startSeconds: 12.3, endSeconds: 14.1 },
+      { text: "second line here", startSeconds: 14.1, endSeconds: 16.8 },
+    ],
+  }
+  expect(CalibrationSchema.parse(calibration)).toEqual(calibration)
+})
+
+test("rejects a cue with empty text or a negative time", () => {
+  const parse = (cues: unknown) =>
+    CalibrationSchema.safeParse({
+      version: 1,
+      source: "transcribe",
+      spans: [{ startSeconds: 1, endSeconds: 2 }],
+      cues,
+    }).success
+
+  expect(parse([{ text: "", startSeconds: 1, endSeconds: 2 }])).toBe(false)
+  expect(parse([{ text: "hi", startSeconds: -1, endSeconds: 2 }])).toBe(false)
+  expect(parse([{ text: "hi", startSeconds: 1, endSeconds: 2 }])).toBe(true)
+})
+
 test("rejects a span with a non-positive or fractional note count", () => {
   const span = (noteCount: number) =>
     CalibrationSchema.safeParse({

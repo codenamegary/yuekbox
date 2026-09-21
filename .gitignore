@@ -39,3 +39,7 @@ packages/server/data
 
 # agent worktrees
 .worktrees/
+
+# python tooling
+__pycache__/
+*.pyc
