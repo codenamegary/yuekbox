@@ -41,7 +41,7 @@ test("complete writes the mp3, the score, and the calibration, then marks the ro
     songId,
     mp3: new Uint8Array([1, 2, 3, 4]),
     scoreAbc: "X:1\nK:C\nC D E|",
-    calibration: [{ startSeconds: 12.3, endSeconds: 16.8 }],
+    calibration: [{ startSeconds: 12.3, endSeconds: 16.8, noteCount: 9 }],
     durationSeconds: 152.5,
     truncated: { abc: false, semantic: false },
   })
@@ -63,7 +63,7 @@ test("complete writes the mp3, the score, and the calibration, then marks the ro
   ).toEqual({
     version: 1,
     source: "sheetsage2",
-    spans: [{ startSeconds: 12.3, endSeconds: 16.8 }],
+    spans: [{ startSeconds: 12.3, endSeconds: 16.8, noteCount: 9 }],
   })
   expect(harness.completed).toEqual([
     { durationSeconds: 152.5, truncated: { abc: false, semantic: false } },

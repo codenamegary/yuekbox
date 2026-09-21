@@ -19,7 +19,7 @@ ABC lead sheet YuE2 wrote for the Song. Stored as `score.abc` in the Song's fold
 _Avoid_: Plan, MIDI, sheet
 
 **Calibration**:
-Vocal phrase spans SheetSage2 detected in the rendered audio. Stored as `calibration.json` in the Song's folder. The web app times lyric cues from these spans; the Score is the fallback.
+Vocal phrase spans SheetSage2 detected in the rendered audio, each with a note count. Stored as `calibration.json` in the Song's folder. The web app matches lyric lines to the notes actually sung; the Score is the fallback.
 _Avoid_: Alignment, sync data
 
 **Queue**:
@@ -224,7 +224,7 @@ seed              number
 durationSeconds   number | omitted until complete
 truncated         { abc: boolean, semantic: boolean } | omitted until complete
 scoreAbc          string | omitted unless complete; only sent by GET one Song
-calibration       { version: 1, source: "sheetsage2", spans: [{ startSeconds, endSeconds }] } | omitted unless complete; only sent by GET one Song
+calibration       { version: 1, source: "sheetsage2", spans: [{ startSeconds, endSeconds, noteCount }] } | omitted unless complete; only sent by GET one Song
 errorDetail       string | omitted unless failed
 createdAt         iso datetime
 updatedAt         iso datetime
@@ -363,7 +363,7 @@ RemoveTempDir
 
 `RunYue2Generate` takes `{ lyrics, style, seed, cot, abc, outputDir, onStage, onProgress }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter shells out to the YuE2 venv. It does not import Python.
 
-`RunVocalTranscribe` takes `{ audioPath, outputDir, durationSeconds }` and returns the grouped vocal phrase spans or a Result error. The adapter runs the SheetSage2 script with `--task melody-vocal` and reads `melody_vocal.lab`.
+`RunVocalTranscribe` takes `{ audioPath, outputDir, durationSeconds }` and returns the grouped vocal phrase spans, each with its note count, or a Result error. The adapter runs the SheetSage2 script with `--task melody-vocal` and reads `melody_vocal.lab`.
 
 `EncodeFlacToMp3` takes a FLAC path and returns MP3 `Uint8Array`.
 
@@ -457,7 +457,7 @@ CLI flags must match the installed `yue2` parser. If the module form fails, call
 
 5. Worker updates `stage` when stderr progress names a known stage. If parsing fails, leave the stage until done. Status stays `running`.
 6. If the Song has a Reference, transcribe it before generation. Run `<sheetsage2-python> <kit>/skills/yue2-music/scripts/transcribe.py <MEDIA_DIR>/<TITLE>_<SONG_ID>/references/<name>_<ulid>.<ext> --output <tmp>/transcribe --task melody-full --device cuda --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`, read `score.abc`, write it to `reference_score.abc` in the Song folder, then generate with `cot = melody` and the ABC in the request JSON. A missing Reference file fails the Song before the script spawns; any other failure fails the Song.
-7. On success, read `audio.flac`. Encode MP3. Run `<sheetsage2-python> <kit>/skills/yue2-music/scripts/transcribe.py <FLAC> --output <tmp>/sync --task melody-vocal --device cuda --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`, read `melody_vocal.lab`, group note rows into phrase spans at a gap over 0.35 s, clamp to `durationSeconds`, and write them to `calibration.json`. A failed or empty run logs and leaves the Song without a calibration; the Song still completes. `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the Song folder and marks the row `complete` with `durationSeconds` and the truncation flags. Delete the temp dir (FLAC does not stay on disk).
+7. On success, read `audio.flac`. Encode MP3. Run `<sheetsage2-python> <kit>/skills/yue2-music/scripts/transcribe.py <FLAC> --output <tmp>/sync --task melody-vocal --device cuda --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`, read `melody_vocal.lab`, group note rows into phrase spans at a gap over 0.35 s, count the notes in each span, clamp to `durationSeconds`, and write spans with their `noteCount` to `calibration.json`. The web app uses the counts to match written lines to real notes. A failed or empty run logs and leaves the Song without a calibration; the Song still completes. `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the Song folder and marks the row `complete` with `durationSeconds` and the truncation flags. Delete the temp dir (FLAC does not stay on disk).
 8. On failure, mark `failed`, store a short `errorDetail`, delete the temp dir.
 9. Claim the next queued Song.
 
@@ -587,11 +587,14 @@ One page.
 - Active Song card: status, stage label, error text.
 - Player: native `<audio controls src="/v1/songs/{id}/audio">` when `complete`.
 - Lyrics overlay: while a complete Song plays, its lines fade in and out at the center of the
-  page. Timing prefers the calibration's detected vocal phrase spans, and the first line is
-  anchored to the first phrase. Without spans it comes from the stored ABC vocal melody, scaled to
-  the audio duration. When both are missing, lines spread across the Song instead. Each line settles
-  in 0.4 s and fades out near its end. The editor dims while the overlay is active and returns when
-  the user touches it. Cues carry the active `[Tag]` as their section.
+  page. Timing prefers the calibration's detected vocal phrases when they carry note counts: lines
+  are matched to whole runs of phrases so a line's cue starts on its first real note and ends on its
+  last, pickups merge into the line they lead, and held notes stretch the line. Spans without note
+  counts fall back to spreading lines across phrases by duration, with the first line anchored to
+  the first phrase. Without spans it comes from the stored ABC vocal melody, scaled to the audio
+  duration. When both are missing, lines spread across the Song instead. Each line settles in 0.4 s
+  and fades out near its end. The editor dims while the overlay is active and returns when the user
+  touches it. Cues carry the active `[Tag]` as their section.
 - Backdrop: the four hand-written trip modes run behind everything. When the active Song has a
   ready visualization (or a reroll in flight), its canvas replaces the trip mode. The visual
   receives audio frames every `requestAnimationFrame` and lyric cues on change; the overlay hides

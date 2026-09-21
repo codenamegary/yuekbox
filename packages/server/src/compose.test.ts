@@ -46,7 +46,7 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
       },
       runVocalTranscribe: async (input) => {
         syncPaths.push(input.audioPath)
-        return ok({ spans: [{ startSeconds: 12.3, endSeconds: 16.8 }] })
+        return ok({ spans: [{ startSeconds: 12.3, endSeconds: 16.8, noteCount: 9 }] })
       },
       encodeFlacToMp3: async () => ok(mp3Bytes),
       referenceMaxBytes: 1024 * 1024,
@@ -108,7 +108,7 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
     expect(complete.calibration).toEqual({
       version: 1,
       source: "sheetsage2",
-      spans: [{ startSeconds: 12.3, endSeconds: 16.8 }],
+      spans: [{ startSeconds: 12.3, endSeconds: 16.8, noteCount: 9 }],
     })
     expect(complete.reference).toEqual({ id: reference.id, filename: "Demo Song.mp3" })
     expect(complete.durationSeconds).toBe(152.5)

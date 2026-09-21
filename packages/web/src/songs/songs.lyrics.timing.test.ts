@@ -200,6 +200,79 @@ test("keeps the anchored first phrase to one line", () => {
   ])
 })
 
+test("keeps one line per noted phrase and merges the pickup", () => {
+  const spans = [
+    { startSeconds: 33.59, endSeconds: 37.27, noteCount: 9 },
+    { startSeconds: 40.95, endSeconds: 44.41, noteCount: 8 },
+    { startSeconds: 48.31, endSeconds: 54.3, noteCount: 11 },
+    { startSeconds: 55.67, endSeconds: 59.13, noteCount: 11 },
+    { startSeconds: 62.58, endSeconds: 63.03, noteCount: 1 },
+    { startSeconds: 63.73, endSeconds: 66.71, noteCount: 8 },
+  ]
+  const lyrics = [
+    "[Verse]",
+    "In the city lights, I'm lost in dreams,",
+    "My heart beats fast, it's hard to see.",
+    "The streets are empty, but my feet keep stepping,",
+    "Into this rhythm, where reality ends.",
+    "",
+    "[Chorus]",
+    "Oh, let me show you what I know,",
+  ].join("\n")
+
+  const cues = buildLyricCues({ lyrics, scoreAbc: null, vocalSpans: spans, durationSeconds: 197.6 })
+
+  expect(cues).toEqual([
+    {
+      text: "In the city lights, I'm lost in dreams,",
+      section: "Verse",
+      startSeconds: 33.59,
+      endSeconds: 37.27,
+    },
+    {
+      text: "My heart beats fast, it's hard to see.",
+      section: "Verse",
+      startSeconds: 40.95,
+      endSeconds: 44.41,
+    },
+    {
+      text: "The streets are empty, but my feet keep stepping,",
+      section: "Verse",
+      startSeconds: 48.31,
+      endSeconds: 54.3,
+    },
+    {
+      text: "Into this rhythm, where reality ends.",
+      section: "Verse",
+      startSeconds: 55.67,
+      endSeconds: 59.13,
+    },
+    {
+      text: "Oh, let me show you what I know,",
+      section: "Chorus",
+      startSeconds: 62.58,
+      endSeconds: 66.71,
+    },
+  ])
+})
+
+test("falls back to duration allocation when a span lacks a note count", () => {
+  const cues = buildLyricCues({
+    lyrics: "[Verse]\nfirst line here\nsecond line here",
+    scoreAbc: null,
+    vocalSpans: [
+      { startSeconds: 0, endSeconds: 4, noteCount: 5 },
+      { startSeconds: 4, endSeconds: 8 },
+    ],
+    durationSeconds: 8,
+  })
+
+  expect(cues).toEqual([
+    { text: "first line here", section: "Verse", startSeconds: 0, endSeconds: 4 },
+    { text: "second line here", section: "Verse", startSeconds: 4, endSeconds: 8 },
+  ])
+})
+
 test("falls back to the score when the detected spans are empty", () => {
   const withEmpty = buildLyricCues({
     lyrics: "first line\nsecond line",
