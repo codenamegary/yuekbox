@@ -491,7 +491,7 @@ FFMPEG_BIN              default ffmpeg
 SHEETSAGE2_PYTHON       default $YUE2_KIT/.venv-sheetsage2/bin/python
 SHEETSAGE2_SCRIPT       default $YUE2_KIT/skills/yue2-music/scripts/transcribe.py
 SHEETSAGE2_MODEL        default $YUE2_KIT/models/SheetSage2
-SHEETSAGE2_BASE_MODEL   default unset (let the snapshot resolve its MERT-v2 parent)
+SHEETSAGE2_BASE_MODEL   default <YUE2_KIT>/models/MERT-v2-FullSong when that folder exists, else unset (let the snapshot resolve its MERT-v2 parent)
 SHEETSAGE2_DEVICE       default cuda
 SHEETSAGE2_OFFLINE      default 1; set 0 to allow the Hugging Face cache to resolve
 REFERENCE_MAX_BYTES     default 26214400 (25 MiB)

@@ -8,6 +8,7 @@ import {
   checkSheetsage2,
   makeRunTranscribe,
   makeRunVocalTranscribe,
+  resolveSheetsage2BaseModel,
   Sheetsage2AdapterEnv,
 } from "./generation/generation.sheetsage2.adapters"
 import {
@@ -35,7 +36,7 @@ const readEnv = () => {
     sheetsage2Script:
       process.env.SHEETSAGE2_SCRIPT ?? resolve(kitRoot, "skills/yue2-music/scripts/transcribe.py"),
     sheetsage2Model: process.env.SHEETSAGE2_MODEL ?? resolve(kitRoot, "models/SheetSage2"),
-    sheetsage2BaseModel: process.env.SHEETSAGE2_BASE_MODEL ?? null,
+    sheetsage2BaseModel: resolveSheetsage2BaseModel(kitRoot, process.env.SHEETSAGE2_BASE_MODEL),
     sheetsage2Device: process.env.SHEETSAGE2_DEVICE ?? "cuda",
     sheetsage2Offline: process.env.SHEETSAGE2_OFFLINE !== "0",
     referenceMaxBytes: Number(process.env.REFERENCE_MAX_BYTES ?? 26214400),
