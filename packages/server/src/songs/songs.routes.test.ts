@@ -64,6 +64,7 @@ test("create returns a queued song and wakes the worker", async () => {
   expect(response.statusCode).toBe(201)
   expect(response.headers.location).toBe(`/v1/songs/${songId}`)
   expect(SongSchema.parse(response.json()).status).toBe("queued")
+  expect(SongSchema.parse(response.json()).title).toBe("hello")
   expect(wakes).toHaveLength(1)
 })
 

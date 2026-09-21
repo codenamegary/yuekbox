@@ -19,6 +19,7 @@ const completeSong: Song = {
   id: ulid,
   status: "complete",
   lyrics: "[Verse]\nhello",
+  title: "hello",
   style: "warm piano pop",
   seed: 831001,
   durationSeconds: 194.2,
@@ -70,6 +71,13 @@ test("parses a complete song fixture", () => {
   expect(SongSchema.parse(completeSong)).toEqual(completeSong)
 })
 
+test("a song requires a non-empty title", () => {
+  expect(SongSchema.safeParse({ ...completeSong, title: "" }).success).toBe(false)
+  expect(
+    SongSchema.safeParse({ ...completeSong, title: "Neon Fades Along the Lane" }).success,
+  ).toBe(true)
+})
+
 test("parses a complete song that carries its score", () => {
   const withScore: Song = { ...completeSong, scoreAbc: "X:1\nM:4/4\nL:1/8\nK:C\nV: Vocal\nc8|\n" }
   expect(SongSchema.parse(withScore)).toEqual(withScore)
@@ -80,6 +88,7 @@ test("rejects a score on a song that is not complete", () => {
     id: ulid,
     status: "queued",
     lyrics: "hi",
+    title: "hi",
     style: "pop",
     seed: 1,
     createdAt,
@@ -153,6 +162,7 @@ test("rejects a calibration on a song that is not complete", () => {
     id: ulid,
     status: "queued",
     lyrics: "hi",
+    title: "hi",
     style: "pop",
     seed: 1,
     createdAt,
@@ -176,6 +186,7 @@ test("parses a running song fixture with a stage", () => {
     status: "running",
     stage: "synthesize",
     lyrics: "hi",
+    title: "hi",
     style: "pop",
     seed: 1,
     createdAt,
@@ -190,6 +201,7 @@ test("sync is a song stage", () => {
     status: "running",
     stage: "sync",
     lyrics: "hi",
+    title: "hi",
     style: "pop",
     seed: 1,
     createdAt,
@@ -205,6 +217,7 @@ test("parses a running song fixture with stage progress", () => {
     stage: "synthesize",
     stageProgress: { completed: 12, total: 40 },
     lyrics: "hi",
+    title: "hi",
     style: "pop",
     seed: 1,
     createdAt,
@@ -228,6 +241,7 @@ test("rejects stage progress that exceeds its total", () => {
     stage: "decode",
     stageProgress: { completed: 9, total: 8 },
     lyrics: "hi",
+    title: "hi",
     style: "pop",
     seed: 1,
     createdAt,
@@ -241,6 +255,7 @@ test("parses a queued song fixture without a stage", () => {
     id: ulid,
     status: "queued",
     lyrics: "hi",
+    title: "hi",
     style: "pop",
     seed: 1,
     createdAt,
@@ -254,6 +269,7 @@ test("parses a failed song fixture with an error detail", () => {
     id: ulid,
     status: "failed",
     lyrics: "hi",
+    title: "hi",
     style: "pop",
     seed: 1,
     errorDetail: "encode: ffmpeg exited 1",
@@ -327,6 +343,7 @@ test("a cover song carries its reference summary and a transcribe stage", () => 
     status: "running",
     stage: "transcribe",
     lyrics: "hi",
+    title: "hi",
     style: "jazz",
     seed: 1,
     createdAt,

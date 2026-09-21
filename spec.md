@@ -7,11 +7,11 @@ This is v1 plus reference covers. Later score editing and agent edits stay out o
 ## Language
 
 **Song**:
-One generate request and its result. Has lyrics, style, status, and optional MP3 audio.
+One generate request and its result. Has lyrics, style, title, status, and optional MP3 audio.
 _Avoid_: Track, generation, job, run, render (in the UI and on the wire)
 
 **Request**:
-The lyrics and style the user submitted. Stored on the Song.
+The lyrics and style the user submitted, and the title derived from the first sung line. Stored on the Song.
 _Avoid_: Prompt, prompt JSON (except when talking to the YuE2 CLI)
 
 **Score**:
@@ -220,6 +220,7 @@ status            queued | running | complete | failed
 stage             plan | semantic | synthesize | decode | encode | sync   (only when running)
 lyrics            string
 style             string
+title             string
 seed              number
 durationSeconds   number | omitted until complete
 truncated         { abc: boolean, semantic: boolean } | omitted until complete
@@ -385,6 +386,7 @@ stage_completed    integer null
 stage_total        integer null
 lyrics             text not null
 style              text not null
+title              text not null
 seed               integer not null
 cot                text not null default 'full'
 duration_seconds   real null
@@ -396,7 +398,7 @@ updated_at         text not null
 completed_at       text null
 ```
 
-`ai_config` is unchanged. There is no `song_audio` table, no `references` table, and no `score_abc` column. Visualizations store no row at all: the file is the durable state, and pending/failed live in process memory. Since the local library was wiped, the schema is a single fresh `0000_init` migration with no backfill and no legacy read path.
+`ai_config` is unchanged. There is no `song_audio` table, no `references` table, and no `score_abc` column. Visualizations store no row at all: the file is the durable state, and pending/failed live in process memory. Schema history is a fresh `0000_init` plus `0001_song_title`, which recreates `songs` to add the column and backfills rows that predate it as `untitled`. There is no other legacy read path.
 
 ### Disk layout
 
@@ -411,7 +413,7 @@ completed_at       text null
 <MEDIA_DIR>/temp/<uploaded>_<ulid>.<ext>
 ```
 
-- `TITLE` is the first sung lyric line slugged the old way: section tags stripped, lowercased, hyphenated, 60 chars max, `untitled` when nothing is left.
+- `TITLE` is the Song's stored title: the first sung lyric line with section tags, markdown decoration, and label-only lines skipped, 120 chars max, `untitled` when nothing is left. The folder uses its slug: lowercased, hyphenated, 60 chars max.
 - A Song folder is found by scanning for `*_<song_id>`. No path is stored anywhere.
 - The folder is created at create time, so even a freeform Song owns one from birth.
 - Uploads land in `temp/`. Creating a Song with a `referenceId` moves the file into the Song's `references/` directory. Nothing is renamed after that.
@@ -437,7 +439,7 @@ Each Song may own one AI-authored canvas visualization.
 
 ### Generate path
 
-1. `POST /v1/songs` validates body, inserts `queued`, creates the Song folder, returns `201` and the Song JSON.
+1. `POST /v1/songs` validates body, derives the title from the first sung lyric line, inserts `queued`, creates the Song folder, returns `201` and the Song JSON.
 2. Route calls `wake()`.
 3. Worker claims the oldest queued Song, sets `running` and `stage = plan`.
 4. Adapter writes a temp request JSON and runs:
@@ -603,7 +605,7 @@ One page.
   Song when AI is on and the visuals writer has a model, pulses while a run is in flight, and opens
   AI settings when the visuals writer is unconfigured. A failed authoring run or a browser-side
   compile/render failure shows a small badge; reroll clears it and the trip mode covers the gap.
-- History list: newest first, click to play.
+- History list: newest first, the title over its style and status or duration, click to play.
 
 Stage labels:
 

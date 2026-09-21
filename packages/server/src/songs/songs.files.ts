@@ -1,11 +1,34 @@
-export const songTitleFromLyrics = (lyrics: string): string => {
-  const firstSungLine = lyrics
-    .split("\n")
-    .map((line) => line.replace(/\[[^\]]*\]/g, "").trim())
-    .find((line) => line !== "")
-  if (firstSungLine === undefined) return "untitled"
+/** Strips section tags and the markdown wrapping models add around them. */
+const cleanLine = (line: string): string =>
+  line
+    .replace(/\[[^\]]*\]/g, "")
+    .replace(/^[\s#*_`~=-]+/, "")
+    .replace(/[\s#*_`~=-]+$/, "")
 
-  const slug = firstSungLine
+/** A line that is only a section name: `[Verse]`, `### Verse 1`, `Chorus 2:`. */
+const structuralLine =
+  /^(intro|verse|pre[- ]?chorus|chorus|refrain|hook|bridge|outro|solo|instrumental|interlude|drop|break|ad[- ]?lib|spoken)(\s*\d+)?\s*[.!:;-]*$/i
+
+const firstSungLine = (lyrics: string): string | null => {
+  for (const rawLine of lyrics.split("\n")) {
+    const line = cleanLine(rawLine)
+    if (line === "") continue
+    if (structuralLine.test(line)) continue
+    if (!/[\p{L}\p{N}]/u.test(line)) continue
+    return line
+  }
+  return null
+}
+
+/** The song's display title: its first sung lyric line, tags stripped. */
+export const songTitleFromLyrics = (lyrics: string): string => {
+  const line = firstSungLine(lyrics)
+  return line === null ? "untitled" : line.slice(0, 120).trim()
+}
+
+/** The title as a filesystem-safe folder stem: lowercased and hyphenated. */
+export const songFolderSlug = (title: string): string => {
+  const slug = title
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
     .toLowerCase()

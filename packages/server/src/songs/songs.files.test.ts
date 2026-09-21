@@ -12,6 +12,7 @@ import {
   scoreKey,
   songFolderName,
   songFolderPattern,
+  songFolderSlug,
   songIdFromFolderName,
   songTitleFromLyrics,
   uploadPattern,
@@ -21,24 +22,49 @@ import {
 const id = "01M2S1S56CXT1N9PMTRNKA15WJ"
 const referenceId = "01M2S1S56CXT1N9PMTRNKA15WK"
 
-test("songTitleFromLyrics takes the first sung line and slugs it", () => {
+test("songTitleFromLyrics takes the first sung line", () => {
   expect(songTitleFromLyrics("[Verse]\nAmazing Awesome Song\nSecond line here\n")).toBe(
-    "amazing-awesome-song",
+    "Amazing Awesome Song",
   )
-  expect(songTitleFromLyrics("Amazing awesome song")).toBe("amazing-awesome-song")
-  expect(songTitleFromLyrics("[Intro]\n\n  Don't Stop Me Now!  \n")).toBe("don-t-stop-me-now")
-  expect(songTitleFromLyrics("Café del Mar")).toBe("cafe-del-mar")
+  expect(songTitleFromLyrics("Amazing awesome song")).toBe("Amazing awesome song")
+  expect(songTitleFromLyrics("[Intro]\n\n  Don't Stop Me Now!  \n")).toBe("Don't Stop Me Now!")
+  expect(songTitleFromLyrics("Café del Mar")).toBe("Café del Mar")
 })
 
 test("songTitleFromLyrics falls back to untitled", () => {
   expect(songTitleFromLyrics("[Verse]\n[Chorus]\n")).toBe("untitled")
   expect(songTitleFromLyrics("")).toBe("untitled")
-  expect(songTitleFromLyrics("!!! ???")).toBe("untitled")
 })
 
-test("songTitleFromLyrics caps the slug length", () => {
+test("songTitleFromLyrics skips markdown headings and decorated tags", () => {
+  expect(songTitleFromLyrics("### Verse 1\n[Verse]\nReal first line\n")).toBe("Real first line")
+  expect(songTitleFromLyrics("**[Verse]**\nReal first line\n")).toBe("Real first line")
+  expect(songTitleFromLyrics("Chorus 2:\nReal first line\n")).toBe("Real first line")
+  expect(songTitleFromLyrics("****\n---\nReal first line\n")).toBe("Real first line")
+})
+
+test("songTitleFromLyrics keeps lines that only look like labels", () => {
+  expect(songTitleFromLyrics("Chorus of angels\nSecond line")).toBe("Chorus of angels")
+  expect(songTitleFromLyrics("Break the chains tonight")).toBe("Break the chains tonight")
+  expect(songTitleFromLyrics("Solo dancing in the dark")).toBe("Solo dancing in the dark")
+})
+
+test("songTitleFromLyrics caps the title length", () => {
   const title = songTitleFromLyrics(`${"word ".repeat(40)}end`)
-  expect(title.length).toBeLessThanOrEqual(60)
+  expect(title.length).toBeLessThanOrEqual(120)
+})
+
+test("songFolderSlug lowercases and hyphenates the title", () => {
+  expect(songFolderSlug("Amazing Awesome Song")).toBe("amazing-awesome-song")
+  expect(songFolderSlug("Café del Mar")).toBe("cafe-del-mar")
+  expect(songFolderSlug("Don't Stop Me Now!")).toBe("don-t-stop-me-now")
+})
+
+test("songFolderSlug falls back to untitled and caps the length", () => {
+  expect(songFolderSlug("!!! ???")).toBe("untitled")
+  expect(songFolderSlug("")).toBe("untitled")
+  const slug = songFolderSlug(`${"word ".repeat(40)}end`)
+  expect(slug.length).toBeLessThanOrEqual(60)
 })
 
 test("a song folder is the title, an underscore, and the id", () => {

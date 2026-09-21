@@ -75,7 +75,7 @@ export const SongList: React.FC<SongListProps> = ({
               )}
             >
               <div className="flex items-start justify-between gap-2">
-                <div className="text-xs font-medium text-white truncate">{song.style}</div>
+                <div className="text-xs font-medium text-white truncate">{song.title}</div>
 
                 <div className="flex items-center gap-2 shrink-0">
                   {song.status === "complete" ? (
@@ -85,7 +85,7 @@ export const SongList: React.FC<SongListProps> = ({
                       onClick={(event) => event.stopPropagation()}
                       className="text-3xs font-mono text-slate-500 hover:text-cyan-300 transition-colors"
                       title="Download MP3"
-                      aria-label={`Download MP3 for ${song.id}`}
+                      aria-label={`Download MP3 for ${song.title}`}
                     >
                       ↓
                     </a>
@@ -131,8 +131,8 @@ export const SongList: React.FC<SongListProps> = ({
                 </div>
               </div>
 
-              <div className="flex justify-between items-center text-3xs font-mono text-slate-400 mt-1">
-                <span className="truncate">{song.id}</span>
+              <div className="flex justify-between items-center gap-2 text-3xs font-mono text-slate-400 mt-1">
+                <span className="truncate">{song.style}</span>
                 <span className="flex items-center gap-1.5 shrink-0">
                   <span className={statusColor(song)}>
                     {song.status === "complete" && song.durationSeconds !== undefined

@@ -5,6 +5,7 @@ import {
   parseReferenceFileName,
   referenceFileKey,
   songFolderName,
+  songFolderSlug,
   songTitleFromLyrics,
   uploadPattern,
 } from "./songs.files"
@@ -68,10 +69,12 @@ export const makeCreateSong =
 
     const now = deps.now()
     const songId = deps.generateId()
-    const folderKey = songFolderName(songTitleFromLyrics(parsed.data.lyrics), songId)
+    const title = songTitleFromLyrics(parsed.data.lyrics)
+    const folderKey = songFolderName(songFolderSlug(title), songId)
     const song = await deps.insertSong({
       id: songId,
       lyrics: parsed.data.lyrics,
+      title,
       style: parsed.data.style,
       seed: parsed.data.seed ?? deps.randomSeed(),
       cot: referenceId === null ? "full" : "melody",

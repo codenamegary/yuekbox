@@ -16,6 +16,7 @@ export const toSongResponse = (song: Song, options: SongResponseOptions = {}) =>
       : {}),
     lyrics: song.lyrics,
     style: song.style,
+    title: song.title,
     seed: song.seed,
     ...(song.reference !== null ? { reference: song.reference } : {}),
     ...(song.durationSeconds !== null ? { durationSeconds: song.durationSeconds } : {}),

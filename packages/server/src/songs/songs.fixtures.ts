@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { ok } from "../shared/result"
-import { songFolderName, songTitleFromLyrics } from "./songs.files"
+import { songFolderName, songFolderSlug, songTitleFromLyrics } from "./songs.files"
 import { SongsCapabilities, SongsSlice } from "./songs.assembly"
 import { Reference, Song } from "./songs.models"
 
@@ -13,6 +13,7 @@ export const songFixture = (overrides: Partial<Song> = {}): Song =>
     stageCompleted: null,
     stageTotal: null,
     lyrics: "hello",
+    title: "hello",
     style: "pop",
     seed: 1,
     cot: "full",
@@ -72,7 +73,7 @@ export const makeSongsSliceFixture = (overrides: Partial<SongsSlice> = {}): Song
 })
 
 export const songFolderKey = (lyrics: string, songId: string): string =>
-  songFolderName(songTitleFromLyrics(lyrics), songId)
+  songFolderName(songFolderSlug(songTitleFromLyrics(lyrics)), songId)
 
 export const writeMediaFile = async (
   mediaDir: string,
