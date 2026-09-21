@@ -255,18 +255,19 @@ const allocateToSpans = (
   const counts = quotas.map((quota) => Math.floor(quota))
   let leftover = lines.length - counts.reduce((total, count) => total + count, 0)
   const firstSpan = spans[0]
-  if (
+  const anchored =
     anchorFirstSpan &&
     lines.length > 0 &&
     (counts[0] ?? 0) === 0 &&
     firstSpan !== undefined &&
     firstSpan.endSeconds > firstSpan.startSeconds
-  ) {
+  if (anchored) {
     counts[0] = 1
     leftover -= 1
   }
   const byRemainder = quotas
     .map((quota, index) => ({ index, remainder: quota - Math.floor(quota) }))
+    .filter((entry) => !anchored || entry.index !== 0)
     .sort((left, right) => right.remainder - left.remainder || left.index - right.index)
   for (let extra = 0; extra < leftover; extra += 1) {
     const target = byRemainder[extra]
