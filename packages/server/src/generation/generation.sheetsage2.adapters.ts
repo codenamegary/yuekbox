@@ -26,6 +26,24 @@ export const checkSheetsage2 = (
   env: Pick<Sheetsage2AdapterEnv, "pythonBin" | "scriptPath">,
 ): "ok" | "missing" => (existsSync(env.pythonBin) && existsSync(env.scriptPath) ? "ok" : "missing")
 
+export const sheetsage2BaseModelPath = (kitRoot: string): string =>
+  join(kitRoot, "models", "MERT-v2-FullSong")
+
+/**
+ * A configured base model wins. Without one, use the kit's local MERT
+ * snapshot when it exists, so offline runs work without extra setup.
+ */
+export const resolveSheetsage2BaseModel = (
+  kitRoot: string,
+  configured: string | undefined,
+): string | null => {
+  const trimmed = configured?.trim() ?? ""
+  if (trimmed !== "") return trimmed
+
+  const local = sheetsage2BaseModelPath(kitRoot)
+  return existsSync(local) ? local : null
+}
+
 export type TranscribeArgsInput = Readonly<{
   audioPath: string
   outputDir: string

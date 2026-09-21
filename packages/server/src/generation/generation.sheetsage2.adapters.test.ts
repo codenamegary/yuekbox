@@ -7,7 +7,9 @@ import {
   groupVocalSpans,
   makeRunTranscribe,
   makeRunVocalTranscribe,
+  resolveSheetsage2BaseModel,
   Sheetsage2AdapterEnv,
+  sheetsage2BaseModelPath,
   transcribeArgs,
   vocalTranscribeArgs,
 } from "./generation.sheetsage2.adapters"
@@ -40,6 +42,46 @@ test("transcribe args omit optional flags when unset", () => {
 
   expect(args).not.toContain("--base-model")
   expect(args).not.toContain("--offline")
+})
+
+test("sheetsage2BaseModelPath points at the kit's MERT snapshot", () => {
+  expect(sheetsage2BaseModelPath("/kit")).toBe("/kit/models/MERT-v2-FullSong")
+})
+
+const withKitRoot = async (run: (kitRoot: string) => Promise<void>): Promise<void> => {
+  const kitRoot = await mkdtemp(join(tmpdir(), "yuekbox-base-model-test-"))
+  try {
+    await run(kitRoot)
+  } finally {
+    await rm(kitRoot, { recursive: true, force: true })
+  }
+}
+
+test("resolveSheetsage2BaseModel prefers the configured path", async () => {
+  await withKitRoot(async (kitRoot) => {
+    await mkdir(join(kitRoot, "models", "MERT-v2-FullSong"), { recursive: true })
+
+    expect(resolveSheetsage2BaseModel(kitRoot, "/custom/MERT")).toBe("/custom/MERT")
+  })
+})
+
+test("resolveSheetsage2BaseModel falls back to the kit snapshot when present", async () => {
+  await withKitRoot(async (kitRoot) => {
+    await mkdir(join(kitRoot, "models", "MERT-v2-FullSong"), { recursive: true })
+
+    expect(resolveSheetsage2BaseModel(kitRoot, undefined)).toBe(
+      join(kitRoot, "models", "MERT-v2-FullSong"),
+    )
+    expect(resolveSheetsage2BaseModel(kitRoot, "  ")).toBe(
+      join(kitRoot, "models", "MERT-v2-FullSong"),
+    )
+  })
+})
+
+test("resolveSheetsage2BaseModel stays unset when no snapshot exists", async () => {
+  await withKitRoot(async (kitRoot) => {
+    expect(resolveSheetsage2BaseModel(kitRoot, undefined)).toBeNull()
+  })
 })
 
 test("vocal transcribe args select melody-vocal into the sync folder", () => {

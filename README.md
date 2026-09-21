@@ -107,10 +107,11 @@ python3.11 -m venv .venv-sheetsage2
 .venv-sheetsage2/bin/python -m pip install -r models/SheetSage2/requirements.txt
 ```
 
-The app finds that layout by default. Override with `SHEETSAGE2_PYTHON`, `SHEETSAGE2_SCRIPT`,
-`SHEETSAGE2_MODEL`, or `SHEETSAGE2_BASE_MODEL` if yours differs. `SHEETSAGE2_OFFLINE=0` allows
-first-run downloads through the Hugging Face cache. Uploads are capped at 25 MB
-(`REFERENCE_MAX_BYTES`).
+The app finds that layout by default. When the kit has `models/MERT-v2-FullSong`, the app
+uses it as the offline base model with no env var. Override with `SHEETSAGE2_PYTHON`,
+`SHEETSAGE2_SCRIPT`, `SHEETSAGE2_MODEL`, or `SHEETSAGE2_BASE_MODEL` if yours differs.
+`SHEETSAGE2_OFFLINE=0` allows first-run downloads through the Hugging Face cache. Uploads are
+capped at 25 MB (`REFERENCE_MAX_BYTES`).
 
 ## 🤖 The "just make it work" prompt
 
