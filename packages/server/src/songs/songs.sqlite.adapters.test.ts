@@ -19,6 +19,7 @@ const id = (suffix: string) => `01J8K3R4P9ABCDEFGHJKMNPQ${suffix}`
 const newSong = (songId: string, createdAt: string): NewSong => ({
   id: songId,
   lyrics: "hello",
+  title: "hello",
   style: "pop",
   seed: 1,
   cot: "full",
@@ -37,6 +38,7 @@ test("the fresh schema keeps songs and ai_config only, without media columns", (
     expect(tables.map((table) => table.name).toSorted()).toEqual(["ai_config", "songs"])
 
     const columns = handle.sqlite.query<{ name: string }, []>("PRAGMA table_info(songs)").all()
+    expect(columns.map((column) => column.name)).toContain("title")
     expect(columns.map((column) => column.name)).not.toContain("score_abc")
   } finally {
     handle.close()
@@ -56,6 +58,7 @@ test("insert and find round-trip the lifecycle fields", async () => {
 
     const found = await findSongById(id("R1"))
     expect(found?.lyrics).toBe("hello")
+    expect(found?.title).toBe("hello")
     expect(found?.style).toBe("pop")
   } finally {
     handle.close()

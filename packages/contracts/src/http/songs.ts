@@ -61,6 +61,7 @@ export const SongSchema = z
     stageProgress: StageProgressSchema.optional(),
     lyrics: z.string(),
     style: z.string(),
+    title: z.string().min(1),
     seed: z.number().int(),
     reference: ReferenceSummarySchema.optional(),
     durationSeconds: z.number().nonnegative().optional(),

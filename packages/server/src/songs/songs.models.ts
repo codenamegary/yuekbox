@@ -15,6 +15,7 @@ export type Song = Readonly<{
   stageTotal: number | null
   lyrics: string
   style: string
+  title: string
   seed: number
   cot: string
   reference: SongReference | null
@@ -33,6 +34,7 @@ export type NewSong = Readonly<{
   id: string
   lyrics: string
   style: string
+  title: string
   seed: number
   cot: SongCot
   createdAt: string

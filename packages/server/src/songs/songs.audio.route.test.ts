@@ -49,6 +49,7 @@ const withCompleteSongRow = async (
     await makeInsertSong(handle.db)({
       id: songId,
       lyrics,
+      title: lyrics,
       style: "pop",
       seed: 1,
       cot: "full",

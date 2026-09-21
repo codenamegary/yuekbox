@@ -10,6 +10,7 @@ const toQueuedSong = (song: NewSong): Song =>
   songFixture({
     id: song.id,
     lyrics: song.lyrics,
+    title: song.title,
     style: song.style,
     seed: song.seed,
     cot: song.cot,
@@ -76,6 +77,34 @@ test("create inserts a queued song and makes its folder", async () => {
   expect(result.value.reference).toBeNull()
   expect(harness.inserted).toHaveLength(1)
   expect(harness.calls).toEqual([`mkdir:hello_${fixedSongId}`])
+})
+
+test("create stores the first sung line as the title and slugs the folder", async () => {
+  const harness = makeHarness()
+  const createSong = makeCreateSong(harness.deps)
+
+  const result = await createSong({
+    lyrics: "[Verse]\n  Neon Fades Along the Lane  \nFootsteps keep the time of rain",
+    style: "synthwave",
+  })
+
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.value.title).toBe("Neon Fades Along the Lane")
+  expect(harness.inserted[0]?.title).toBe("Neon Fades Along the Lane")
+  expect(harness.calls).toEqual([`mkdir:neon-fades-along-the-lane_${fixedSongId}`])
+})
+
+test("create titles a song with no sung line as untitled", async () => {
+  const harness = makeHarness()
+  const createSong = makeCreateSong(harness.deps)
+
+  const result = await createSong({ lyrics: "[Verse]\n[Chorus]", style: "synthwave" })
+
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.value.title).toBe("untitled")
+  expect(harness.calls).toEqual([`mkdir:untitled_${fixedSongId}`])
 })
 
 test("create moves an uploaded reference into the folder and returns its summary", async () => {

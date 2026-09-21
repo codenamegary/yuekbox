@@ -7,6 +7,7 @@ const song: Song = Object.freeze({
   status: "complete",
   lyrics: "neon fades",
   style: "warm piano pop",
+  title: "neon fades",
   seed: 1,
   durationSeconds: 12,
   truncated: { abc: false, semantic: false },

@@ -8,6 +8,7 @@ export const songsTable = sqliteTable("songs", {
   stageTotal: integer("stage_total"),
   lyrics: text("lyrics").notNull(),
   style: text("style").notNull(),
+  title: text("title").notNull(),
   seed: integer("seed").notNull(),
   cot: text("cot").notNull().default("full"),
   durationSeconds: real("duration_seconds"),
