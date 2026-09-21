@@ -21,6 +21,8 @@ export const SongStageSchema = z.enum([
 export const VocalSpanSchema = z.strictObject({
   startSeconds: z.number().nonnegative(),
   endSeconds: z.number().nonnegative(),
+  /** Notes sung inside the span, used to line lyric lines up with real notes. */
+  noteCount: z.number().int().positive().optional(),
 })
 
 export const CalibrationSchema = z.strictObject({

@@ -97,6 +97,29 @@ test("parses a calibration fixture", () => {
   expect(CalibrationSchema.parse(calibration)).toEqual(calibration)
 })
 
+test("parses a calibration whose spans carry note counts", () => {
+  const calibration: Calibration = {
+    version: 1,
+    source: "sheetsage2",
+    spans: [{ startSeconds: 12.3, endSeconds: 16.8, noteCount: 9 }],
+  }
+  expect(CalibrationSchema.parse(calibration)).toEqual(calibration)
+})
+
+test("rejects a span with a non-positive or fractional note count", () => {
+  const span = (noteCount: number) =>
+    CalibrationSchema.safeParse({
+      version: 1,
+      source: "sheetsage2",
+      spans: [{ startSeconds: 1, endSeconds: 2, noteCount }],
+    }).success
+
+  expect(span(0)).toBe(false)
+  expect(span(-3)).toBe(false)
+  expect(span(2.5)).toBe(false)
+  expect(span(1)).toBe(true)
+})
+
 test("rejects a calibration with a bad version, source, or empty spans", () => {
   expect(CalibrationSchema.safeParse({ version: 2, source: "sheetsage2", spans: [] }).success).toBe(
     false,

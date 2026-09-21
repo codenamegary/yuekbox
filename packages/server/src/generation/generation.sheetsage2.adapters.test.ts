@@ -105,21 +105,21 @@ test("groupVocalSpans sorts notes and merges them at a breath gap", () => {
   )
 
   expect(groupVocalSpans(lab, 10)).toEqual([
-    { startSeconds: 3, endSeconds: 3.9 },
-    { startSeconds: 4.5, endSeconds: 5 },
+    { startSeconds: 3, endSeconds: 3.9, noteCount: 2 },
+    { startSeconds: 4.5, endSeconds: 5, noteCount: 1 },
   ])
 })
 
 test("groupVocalSpans clamps spans to the duration and drops empty ones", () => {
   const lab = ["7.000000\t11.000000\t60", "11.500000\t13.000000\t62"].join("\n")
 
-  expect(groupVocalSpans(lab, 10)).toEqual([{ startSeconds: 7, endSeconds: 10 }])
+  expect(groupVocalSpans(lab, 10)).toEqual([{ startSeconds: 7, endSeconds: 10, noteCount: 1 }])
 })
 
 test("groupVocalSpans ignores blank and malformed lines", () => {
   const lab = ["", "not a note", "1.000000\t1.400000\t60", "2.000000\tbad\tx", "  "].join("\n")
 
-  expect(groupVocalSpans(lab, 10)).toEqual([{ startSeconds: 1, endSeconds: 1.4 }])
+  expect(groupVocalSpans(lab, 10)).toEqual([{ startSeconds: 1, endSeconds: 1.4, noteCount: 1 }])
 })
 
 test("successful vocal transcription returns the grouped spans", async () => {
@@ -144,8 +144,8 @@ test("successful vocal transcription returns the grouped spans", async () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.value.spans).toEqual([
-      { startSeconds: 1, endSeconds: 2 },
-      { startSeconds: 4, endSeconds: 5 },
+      { startSeconds: 1, endSeconds: 2, noteCount: 1 },
+      { startSeconds: 4, endSeconds: 5, noteCount: 1 },
     ])
   })
 })

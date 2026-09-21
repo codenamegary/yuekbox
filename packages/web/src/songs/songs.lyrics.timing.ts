@@ -1,4 +1,9 @@
-export type VocalSpan = Readonly<{ startSeconds: number; endSeconds: number }>
+export type VocalSpan = Readonly<{
+  startSeconds: number
+  endSeconds: number
+  /** Notes sung inside the span, used to match written lines to real notes. */
+  noteCount?: number
+}>
 
 export type VocalTimeline = Readonly<{
   spans: readonly VocalSpan[]
@@ -19,7 +24,12 @@ export type LyricCueInput = Readonly<{
   vocalSpans?: readonly VocalSpan[] | null
 }>
 
-type WeightedLine = Readonly<{ text: string; section: string | null; weight: number }>
+type WeightedLine = Readonly<{
+  text: string
+  section: string | null
+  weight: number
+  syllables: number
+}>
 
 type VoiceToken =
   | Readonly<{ kind: "note"; duration: number }>
@@ -204,6 +214,15 @@ export const parseYue2VocalTimeline = (scoreAbc: string): VocalTimeline | null =
 const maxLineWords = 12
 const maxLineChars = 72
 
+const syllableGroups = /[aeiouy]+/g
+
+/** Rough English syllable count: vowel groups, word count when there are none. */
+const countSyllables = (text: string): number => {
+  const groups = text.toLowerCase().match(syllableGroups)
+  if (groups !== null && groups.length > 0) return groups.length
+  return Math.max(1, text.split(/\s+/).filter(Boolean).length)
+}
+
 const tagToken = /^\[([^\]]*)\]$/
 
 const splitSegments = (text: string): readonly string[] =>
@@ -231,7 +250,12 @@ const parseLyricLines = (lyrics: string): readonly WeightedLine[] => {
       continue
     }
     for (const text of splitSegments(token)) {
-      lines.push({ text, section, weight: Math.max(1, text.split(/\s+/).length) })
+      lines.push({
+        text,
+        section,
+        weight: Math.max(1, text.split(/\s+/).length),
+        syllables: countSyllables(text),
+      })
     }
   }
   return lines
@@ -318,12 +342,95 @@ const allocateToWindow = (
   return cues
 }
 
+/**
+ * Matches written lines to whole runs of detected phrases, using how many notes
+ * were sung in each phrase. A line's cue runs from its first phrase onset to its
+ * last phrase offset, so held notes stretch the line.
+ */
+const allocateByNoteCount = (
+  lines: readonly WeightedLine[],
+  spans: readonly VocalSpan[],
+): readonly LyricCue[] => {
+  const lineCount = lines.length
+  const spanCount = spans.length
+  if (lineCount === 0 || spanCount === 0 || lineCount > spanCount) return []
+
+  const notes = spans.map((span) => span.noteCount ?? 0)
+  if (notes.some((count) => count <= 0)) return []
+  const totalNotes = notes.reduce((total, count) => total + count, 0)
+  const totalSyllables = lines.reduce((total, line) => total + line.syllables, 0)
+  if (totalNotes <= 0 || totalSyllables <= 0) return []
+
+  const prefix = [0]
+  for (const count of notes) prefix.push((prefix.at(-1) ?? 0) + count)
+  const expected = lines.map((line) => (line.syllables * totalNotes) / totalSyllables)
+
+  const infinity = Number.POSITIVE_INFINITY
+  const cost: number[][] = Array.from({ length: lineCount + 1 }, () =>
+    Array.from({ length: spanCount + 1 }, () => infinity),
+  )
+  const previous: number[][] = Array.from({ length: lineCount + 1 }, () =>
+    Array.from({ length: spanCount + 1 }, () => -1),
+  )
+  const startRow = cost[0]
+  if (startRow !== undefined) startRow[0] = 0
+
+  for (let line = 1; line <= lineCount; line += 1) {
+    const row = cost[line]
+    const beforeRow = cost[line - 1]
+    if (row === undefined || beforeRow === undefined) continue
+    for (let end = line; end <= spanCount; end += 1) {
+      for (let start = line - 1; start < end; start += 1) {
+        const before = beforeRow[start] ?? infinity
+        if (!Number.isFinite(before)) continue
+        const assigned = (prefix[end] ?? 0) - (prefix[start] ?? 0)
+        const error = (assigned - (expected[line - 1] ?? 0)) ** 2
+        if (before + error < (row[end] ?? infinity)) {
+          row[end] = before + error
+          const previousRow = previous[line]
+          if (previousRow !== undefined) previousRow[end] = start
+        }
+      }
+    }
+  }
+
+  if (!Number.isFinite(cost[lineCount]?.[spanCount] ?? infinity)) return []
+
+  const bounds: number[] = []
+  let cursor = spanCount
+  for (let line = lineCount; line > 0; line -= 1) {
+    const start = previous[line]?.[cursor] ?? -1
+    if (start < 0) return []
+    bounds.unshift(start)
+    cursor = start
+  }
+  bounds.push(spanCount)
+
+  const cues: LyricCue[] = []
+  for (let index = 0; index < lineCount; index += 1) {
+    const line = lines[index]
+    const first = spans[bounds[index] ?? 0]
+    const last = spans[(bounds[index + 1] ?? spanCount) - 1]
+    if (line === undefined || first === undefined || last === undefined) continue
+    cues.push({
+      text: line.text,
+      section: line.section,
+      startSeconds: first.startSeconds,
+      endSeconds: last.endSeconds,
+    })
+  }
+  return cues
+}
+
 export const buildLyricCues = (input: LyricCueInput): readonly LyricCue[] => {
   const lines = parseLyricLines(input.lyrics)
   if (lines.length === 0 || !(input.durationSeconds > 0)) return []
 
   const vocalSpans = input.vocalSpans ?? []
   if (vocalSpans.length > 0) {
+    const byNoteCount = allocateByNoteCount(lines, vocalSpans)
+    if (byNoteCount.length > 0) return byNoteCount
+
     const cues = allocateToSpans(lines, vocalSpans, true)
     if (cues.length > 0) return cues
   }

@@ -108,13 +108,14 @@ export const groupVocalSpans = (lab: string, durationSeconds: number): readonly 
     })
     .sort((left, right) => left.startSeconds - right.startSeconds)
 
-  const spans: { startSeconds: number; endSeconds: number }[] = []
+  const spans: { startSeconds: number; endSeconds: number; noteCount: number }[] = []
   for (const note of notes) {
     const current = spans.at(-1)
     if (current !== undefined && note.startSeconds - current.endSeconds <= vocalBreathGapSeconds) {
       current.endSeconds = Math.max(current.endSeconds, note.endSeconds)
+      current.noteCount += 1
     } else {
-      spans.push({ startSeconds: note.startSeconds, endSeconds: note.endSeconds })
+      spans.push({ startSeconds: note.startSeconds, endSeconds: note.endSeconds, noteCount: 1 })
     }
   }
   return spans
