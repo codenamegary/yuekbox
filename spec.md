@@ -18,6 +18,10 @@ _Avoid_: Prompt, prompt JSON (except when talking to the YuE2 CLI)
 ABC lead sheet YuE2 wrote for the Song. Stored as `score.abc` in the Song's folder. Hidden in v1.
 _Avoid_: Plan, MIDI, sheet
 
+**Calibration**:
+Vocal phrase spans SheetSage2 detected in the rendered audio. Stored as `calibration.json` in the Song's folder. The web app times lyric cues from these spans; the Score is the fallback.
+_Avoid_: Alignment, sync data
+
 **Queue**:
 Ordered Songs waiting for the GPU. Length may be greater than 1. The GPU runs one Song at a time.
 _Avoid_: Batch
@@ -36,7 +40,7 @@ _Avoid_: Remix, transfer
 
 Status values: `queued`, `running`, `complete`, `failed`.
 
-Stage values while `running`: `transcribe`, `plan`, `semantic`, `synthesize`, `decode`, `encode`. Omit `stage` when not running. Covers start at `transcribe`; freeform Songs start at `plan`.
+Stage values while `running`: `transcribe`, `plan`, `semantic`, `synthesize`, `decode`, `encode`, `sync`. Omit `stage` when not running. Covers start at `transcribe`; freeform Songs start at `plan`. `sync` runs last, after the MP3 encode.
 
 ## Goal
 
@@ -213,13 +217,14 @@ Server fills `cot: "full"` and a random `seed` when omitted. Those fields are no
 ```text
 id                string
 status            queued | running | complete | failed
-stage             plan | semantic | synthesize | decode | encode   (only when running)
+stage             plan | semantic | synthesize | decode | encode | sync   (only when running)
 lyrics            string
 style             string
 seed              number
 durationSeconds   number | omitted until complete
 truncated         { abc: boolean, semantic: boolean } | omitted until complete
 scoreAbc          string | omitted unless complete; only sent by GET one Song
+calibration       { version: 1, source: "sheetsage2", spans: [{ startSeconds, endSeconds }] } | omitted unless complete; only sent by GET one Song
 errorDetail       string | omitted unless failed
 createdAt         iso datetime
 updatedAt         iso datetime
@@ -350,6 +355,7 @@ Generation's own ports:
 ```text
 RunYue2Generate
 RunTranscribe
+RunVocalTranscribe
 EncodeFlacToMp3
 CreateTempDir
 RemoveTempDir
@@ -357,9 +363,11 @@ RemoveTempDir
 
 `RunYue2Generate` takes `{ lyrics, style, seed, cot, abc, outputDir, onStage, onProgress }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter shells out to the YuE2 venv. It does not import Python.
 
+`RunVocalTranscribe` takes `{ audioPath, outputDir, durationSeconds }` and returns the grouped vocal phrase spans or a Result error. The adapter runs the SheetSage2 script with `--task melody-vocal` and reads `melody_vocal.lab`.
+
 `EncodeFlacToMp3` takes a FLAC path and returns MP3 `Uint8Array`.
 
-`CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the folder, then marks the row complete. If the row update fails it removes those files and rethrows.
+`CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the folder, plus `calibration.json` when the input carries spans, then marks the row complete. If the row update fails it removes those files and rethrows.
 
 ### SQLite
 
@@ -396,6 +404,7 @@ completed_at       text null
 <MEDIA_DIR>/<TITLE>_<SONG_ID>/
   generated_<SONG_ID>.mp3
   score.abc
+  calibration.json                      optional
   reference_score.abc
   visualization.js
   references/<uploaded>_<ulid>.<ext>    optional
@@ -407,9 +416,9 @@ completed_at       text null
 - The folder is created at create time, so even a freeform Song owns one from birth.
 - Uploads land in `temp/`. Creating a Song with a `referenceId` moves the file into the Song's `references/` directory. Nothing is renamed after that.
 - The uploaded name keeps its case, spaces, and unicode; path separators and control characters become `-`, the stem is capped at 120 chars, and the extension comes from the content type. The trailing `_<ulid>` is the Reference id; display names strip it (and add back the extension).
-- `reference_score.abc` is written right after transcription. `score.abc` is written at completion. `visualization.js` holds one model-authored canvas factory; the visualizations slice writes it with the same temp + rename rule and reads it back for `GET /v1/songs/:id/visualization`. Deleting the Song deletes it with the folder. Nothing stores a path.
+- `reference_score.abc` is written right after transcription. `score.abc` and `calibration.json` are written at completion. `calibration.json` exists only when a vocal was detected. `visualization.js` holds one model-authored canvas factory; the visualizations slice writes it with the same temp + rename rule and reads it back for `GET /v1/songs/:id/visualization`. Deleting the Song deletes it with the folder. Nothing stores a path.
 
-There is no purge job, no boot reconcile, and no rename step. Missing files surface lazily: the audio route stats the file and 404s, transcription fails before the script spawns, and `GET /v1/songs/:id` omits `scoreAbc` when the file is gone.
+There is no purge job, no boot reconcile, and no rename step. Missing files surface lazily: the audio route stats the file and 404s, transcription fails before the script spawns, and `GET /v1/songs/:id` omits `scoreAbc` or `calibration` when the file is gone.
 
 Writes go to `<path>.tmp`, then rename onto the final path. Deletes remove the row and the folder in parallel; either side tolerating a failure is fine, an orphan folder is harmless and a later read just reports the file as missing.
 
@@ -448,7 +457,7 @@ CLI flags must match the installed `yue2` parser. If the module form fails, call
 
 5. Worker updates `stage` when stderr progress names a known stage. If parsing fails, leave the stage until done. Status stays `running`.
 6. If the Song has a Reference, transcribe it before generation. Run `<sheetsage2-python> <kit>/skills/yue2-music/scripts/transcribe.py <MEDIA_DIR>/<TITLE>_<SONG_ID>/references/<name>_<ulid>.<ext> --output <tmp>/transcribe --task melody-full --device cuda --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`, read `score.abc`, write it to `reference_score.abc` in the Song folder, then generate with `cot = melody` and the ABC in the request JSON. A missing Reference file fails the Song before the script spawns; any other failure fails the Song.
-7. On success, read `audio.flac`. Encode MP3. `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the Song folder and marks the row `complete` with `durationSeconds` and the truncation flags. Delete the temp dir (FLAC does not stay on disk).
+7. On success, read `audio.flac`. Encode MP3. Run `<sheetsage2-python> <kit>/skills/yue2-music/scripts/transcribe.py <FLAC> --output <tmp>/sync --task melody-vocal --device cuda --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`, read `melody_vocal.lab`, group note rows into phrase spans at a gap over 0.35 s, clamp to `durationSeconds`, and write them to `calibration.json`. A failed or empty run logs and leaves the Song without a calibration; the Song still completes. `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the Song folder and marks the row `complete` with `durationSeconds` and the truncation flags. Delete the temp dir (FLAC does not stay on disk).
 8. On failure, mark `failed`, store a short `errorDetail`, delete the temp dir.
 9. Claim the next queued Song.
 
@@ -500,10 +509,11 @@ Cover at least:
 - Create writes the Song folder, moves an upload into `references/`, and rolls back the row and folder when the move fails.
 - Create rejects a missing upload with `reference_unavailable` on `/referenceId`.
 - Create rejects empty lyrics and empty style.
-- Get missing id is not-found; Get fills `scoreAbc` and the reference summary from disk.
+- Get missing id is not-found; Get fills `scoreAbc`, the calibration, and the reference summary from disk.
 - List does not include media or per-item disk reads.
-- Complete path with stub `RunYue2Generate` + stub `EncodeFlacToMp3` writes `generated_<ID>.mp3` and `score.abc`, then marks `complete`.
+- Complete path with stub `RunYue2Generate` + stub `EncodeFlacToMp3` writes `generated_<ID>.mp3`, `score.abc`, and `calibration.json` when spans arrive, then marks `complete`.
 - A failed row update after completion removes the files it just wrote.
+- A failed vocal transcription logs, completes the Song, and writes no calibration.
 - Encode failure marks `failed` and writes nothing.
 - `songs.files.ts` slugs the first lyric line, builds every key, and parses folder and reference names back to their ids.
 - `media.find` matches segments, returns files and directories, and rejects `..`.
@@ -577,9 +587,11 @@ One page.
 - Active Song card: status, stage label, error text.
 - Player: native `<audio controls src="/v1/songs/{id}/audio">` when `complete`.
 - Lyrics overlay: while a complete Song plays, its lines fade in and out at the center of the
-  page. Timing comes from the stored ABC vocal melody, scaled to the audio duration; when the
-  score is missing, lines spread across the Song instead. The editor dims while the overlay is
-  active and returns when the user touches it. Cues carry the active `[Tag]` as their section.
+  page. Timing prefers the calibration's detected vocal phrase spans, and the first line is
+  anchored to the first phrase. Without spans it comes from the stored ABC vocal melody, scaled to
+  the audio duration. When both are missing, lines spread across the Song instead. Each line settles
+  in 0.4 s and fades out near its end. The editor dims while the overlay is active and returns when
+  the user touches it. Cues carry the active `[Tag]` as their section.
 - Backdrop: the four hand-written trip modes run behind everything. When the active Song has a
   ready visualization (or a reroll in flight), its canvas replaces the trip mode. The visual
   receives audio frames every `requestAnimationFrame` and lyric cues on change; the overlay hides
@@ -598,6 +610,7 @@ semantic     Writing music
 synthesize   Synthesizing
 decode       Decoding audio
 encode       Encoding mp3
+sync         Syncing lyrics
 ```
 
 If `truncated.abc` or `truncated.semantic` is true, show a warning. The file may still play.

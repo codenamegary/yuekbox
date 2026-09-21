@@ -2,7 +2,8 @@ import { SongSchema } from "contracts/http/songs"
 import { Song } from "./songs.models"
 
 type SongResponseOptions = Readonly<{
-  includeScore?: boolean
+  /** Includes the on-disk song files: the score and the calibration. */
+  includeFiles?: boolean
 }>
 
 export const toSongResponse = (song: Song, options: SongResponseOptions = {}) =>
@@ -21,7 +22,10 @@ export const toSongResponse = (song: Song, options: SongResponseOptions = {}) =>
     ...(song.truncatedAbc !== null && song.truncatedSemantic !== null
       ? { truncated: { abc: song.truncatedAbc, semantic: song.truncatedSemantic } }
       : {}),
-    ...(options.includeScore === true && song.scoreAbc !== null ? { scoreAbc: song.scoreAbc } : {}),
+    ...(options.includeFiles === true && song.scoreAbc !== null ? { scoreAbc: song.scoreAbc } : {}),
+    ...(options.includeFiles === true && song.calibration !== null
+      ? { calibration: song.calibration }
+      : {}),
     ...(song.errorDetail !== null ? { errorDetail: song.errorDetail } : {}),
     createdAt: song.createdAt,
     updatedAt: song.updatedAt,

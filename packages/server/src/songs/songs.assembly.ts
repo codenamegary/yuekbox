@@ -1,4 +1,5 @@
 import { ulid } from "ulid"
+import { Calibration, CalibrationSchema } from "contracts/http/songs"
 import { Db } from "../db/client"
 import { MediaSlice } from "../media/media.assembly"
 import { StoredFile } from "../media/media.ports"
@@ -9,6 +10,7 @@ import { makeCompleteSong } from "./songs.complete.usecase"
 import { makeCreateSong } from "./songs.create.usecase"
 import { makeDeleteSong } from "./songs.delete.usecase"
 import {
+  calibrationKey,
   generatedAudioKey,
   parseReferenceFileName,
   referenceFileKey,
@@ -157,6 +159,19 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     return bytes === null ? null : new TextDecoder().decode(bytes)
   }
 
+  const readCalibration = async (songId: string): Promise<Calibration | null> => {
+    const folderKey = await findSongFolder(songId)
+    if (folderKey === null) return null
+    const bytes = await media.readFile(calibrationKey(folderKey))
+    if (bytes === null) return null
+    try {
+      const parsed = CalibrationSchema.safeParse(JSON.parse(new TextDecoder().decode(bytes)))
+      return parsed.success ? parsed.data : null
+    } catch {
+      return null
+    }
+  }
+
   const readVisualizationFile = async (songId: string): Promise<string | null> => {
     const folderKey = await findSongFolder(songId)
     if (folderKey === null) return null
@@ -229,7 +244,7 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
   })
 
   const listSongs = makeListSongs({ listSongs: listSongsPort })
-  const getSong = makeGetSong({ findSongById, readScoreAbc, findReferenceSummary })
+  const getSong = makeGetSong({ findSongById, readScoreAbc, readCalibration, findReferenceSummary })
   const deleteSong = makeDeleteSong({ deleteSong: deleteSongRow, removeSongFolder, logError })
   const getSongAudio = makeGetSongAudio({ findSongById, statSongAudio, readSongAudio })
 

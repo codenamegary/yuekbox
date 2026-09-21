@@ -18,6 +18,7 @@ export const songFixture = (overrides: Partial<Song> = {}): Song =>
     cot: "full",
     reference: null,
     scoreAbc: null,
+    calibration: null,
     durationSeconds: null,
     truncatedAbc: null,
     truncatedSemantic: null,

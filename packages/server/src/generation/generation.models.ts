@@ -1,4 +1,4 @@
-import { SongStage } from "contracts/http/songs"
+import { SongStage, VocalSpan } from "contracts/http/songs"
 import { SongCot, StageProgressUpdate, TruncatedFlags } from "../songs/songs.models"
 
 export type GenerateSongError =
@@ -8,6 +8,8 @@ export type GenerateSongError =
 export type EncodeSongError = Readonly<{ kind: "encode_failed"; detail: string }>
 
 export type TranscribeError = Readonly<{ kind: "transcribe_failed"; detail: string }>
+
+export type VocalTranscribeError = Readonly<{ kind: "vocal_transcribe_failed"; detail: string }>
 
 export type RunYue2GenerateInput = Readonly<{
   songId: string
@@ -36,4 +38,14 @@ export type RunTranscribeInput = Readonly<{
 
 export type RunTranscribeOutput = Readonly<{
   scoreAbc: string
+}>
+
+export type RunVocalTranscribeInput = Readonly<{
+  audioPath: string
+  outputDir: string
+  durationSeconds: number
+}>
+
+export type RunVocalTranscribeOutput = Readonly<{
+  spans: readonly VocalSpan[]
 }>

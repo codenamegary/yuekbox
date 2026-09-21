@@ -16,6 +16,7 @@ export type LyricCueInput = Readonly<{
   lyrics: string
   scoreAbc: string | null
   durationSeconds: number
+  vocalSpans?: readonly VocalSpan[] | null
 }>
 
 type WeightedLine = Readonly<{ text: string; section: string | null; weight: number }>
@@ -35,7 +36,8 @@ const fallbackStartFraction = 0.06
 const fallbackEndFraction = 0.94
 const scaleFloor = 0.25
 const scaleCeiling = 4
-const fadeInFraction = 0.16
+/** The overlay text settles in this many seconds, whatever the line length. */
+export const lyricFadeInSeconds = 0.4
 const fadeOutFraction = 0.28
 
 const headerValue = (lines: readonly string[], field: string): string | null => {
@@ -238,6 +240,8 @@ const parseLyricLines = (lyrics: string): readonly WeightedLine[] => {
 const allocateToSpans = (
   lines: readonly WeightedLine[],
   spans: readonly VocalSpan[],
+  /** Calibrated cues anchor the first line to the first detected phrase. */
+  anchorFirstSpan = false,
 ): readonly LyricCue[] => {
   const totalSinging = spans.reduce(
     (total, span) => total + (span.endSeconds - span.startSeconds),
@@ -249,7 +253,18 @@ const allocateToSpans = (
     (span) => (lines.length * (span.endSeconds - span.startSeconds)) / totalSinging,
   )
   const counts = quotas.map((quota) => Math.floor(quota))
-  const leftover = lines.length - counts.reduce((total, count) => total + count, 0)
+  let leftover = lines.length - counts.reduce((total, count) => total + count, 0)
+  const firstSpan = spans[0]
+  if (
+    anchorFirstSpan &&
+    lines.length > 0 &&
+    (counts[0] ?? 0) === 0 &&
+    firstSpan !== undefined &&
+    firstSpan.endSeconds > firstSpan.startSeconds
+  ) {
+    counts[0] = 1
+    leftover -= 1
+  }
   const byRemainder = quotas
     .map((quota, index) => ({ index, remainder: quota - Math.floor(quota) }))
     .sort((left, right) => right.remainder - left.remainder || left.index - right.index)
@@ -306,6 +321,12 @@ export const buildLyricCues = (input: LyricCueInput): readonly LyricCue[] => {
   const lines = parseLyricLines(input.lyrics)
   if (lines.length === 0 || !(input.durationSeconds > 0)) return []
 
+  const vocalSpans = input.vocalSpans ?? []
+  if (vocalSpans.length > 0) {
+    const cues = allocateToSpans(lines, vocalSpans, true)
+    if (cues.length > 0) return cues
+  }
+
   if (input.scoreAbc !== null) {
     const timeline = parseYue2VocalTimeline(input.scoreAbc)
     if (timeline !== null && timeline.spans.length > 0 && timeline.durationSeconds > 0) {
@@ -342,7 +363,7 @@ export const cueIndexAt = (cues: readonly LyricCue[], seconds: number): number |
   return found
 }
 
-export const lyricEnvelope = (progress: number): number => {
+export const lyricEnvelope = (progress: number, fadeInFraction: number): number => {
   const clamped = Math.min(1, Math.max(0, progress))
   const fadeIn = Math.min(1, clamped / fadeInFraction)
   const fadeOut = Math.min(1, (1 - clamped) / fadeOutFraction)

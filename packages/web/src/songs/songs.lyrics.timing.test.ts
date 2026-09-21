@@ -134,6 +134,67 @@ test("distributes lines across separate singing spans", () => {
   ])
 })
 
+test("prefers the detected vocal spans over the score, without scaling", () => {
+  const cues = buildLyricCues({
+    lyrics: "first line\nsecond line",
+    scoreAbc: vocalScore,
+    vocalSpans: [
+      { startSeconds: 10, endSeconds: 14 },
+      { startSeconds: 20, endSeconds: 26 },
+    ],
+    durationSeconds: 30,
+  })
+
+  expect(cues).toEqual([
+    { text: "first line", section: null, startSeconds: 10, endSeconds: 14 },
+    { text: "second line", section: null, startSeconds: 20, endSeconds: 26 },
+  ])
+})
+
+test("anchors the first calibrated line to the first detected phrase", () => {
+  const spans = [
+    { startSeconds: 10.73, endSeconds: 11.9725 },
+    { startSeconds: 13.3825, endSeconds: 14.62 },
+    { startSeconds: 16.38, endSeconds: 17.6225 },
+    { startSeconds: 19.0325, endSeconds: 20.265 },
+    { startSeconds: 22.74, endSeconds: 25.91 },
+    { startSeconds: 28.39, endSeconds: 31.565 },
+    { startSeconds: 34.03, endSeconds: 37.21 },
+    { startSeconds: 39.68, endSeconds: 42.855 },
+  ]
+
+  const cues = buildLyricCues({
+    lyrics: "[Verse]\nhold the line\ncall it home",
+    scoreAbc: null,
+    vocalSpans: spans,
+    durationSeconds: 58.678666666666665,
+  })
+
+  expect(cues[0]).toEqual({
+    text: "hold the line",
+    section: "Verse",
+    startSeconds: 10.73,
+    endSeconds: 11.9725,
+  })
+})
+
+test("falls back to the score when the detected spans are empty", () => {
+  const withEmpty = buildLyricCues({
+    lyrics: "first line\nsecond line",
+    scoreAbc: vocalScore,
+    vocalSpans: [],
+    durationSeconds: 16,
+  })
+  const withoutSpans = buildLyricCues({
+    lyrics: "first line\nsecond line",
+    scoreAbc: vocalScore,
+    durationSeconds: 16,
+  })
+
+  expect(withEmpty).toEqual(withoutSpans)
+  expect(withEmpty[0]?.startSeconds).toBe(4)
+})
+
 test("falls back to an even spread when the score is missing", () => {
   const cues = buildLyricCues({
     lyrics: "aa bb\ncc dd",
@@ -221,11 +282,17 @@ test("cueIndexAt follows playback through the cue list", () => {
   expect(cueIndexAt([], 5)).toBeNull()
 })
 
-test("lyricEnvelope fades in and out across a cue", () => {
-  expect(lyricEnvelope(0)).toBe(0)
-  expect(lyricEnvelope(0.16)).toBe(1)
-  expect(lyricEnvelope(0.5)).toBe(1)
-  expect(lyricEnvelope(0.86)).toBeCloseTo(0.5)
-  expect(lyricEnvelope(1)).toBe(0)
-  expect(lyricEnvelope(1.5)).toBe(0)
+test("lyricEnvelope fades in over the given fraction and out over the tail", () => {
+  expect(lyricEnvelope(0, 0.4)).toBe(0)
+  expect(lyricEnvelope(0.4, 0.4)).toBe(1)
+  expect(lyricEnvelope(0.5, 0.4)).toBe(1)
+  expect(lyricEnvelope(0.86, 0.4)).toBeCloseTo(0.5)
+  expect(lyricEnvelope(1, 0.4)).toBe(0)
+  expect(lyricEnvelope(1.5, 0.4)).toBe(0)
+})
+
+test("lyricEnvelope settles a long line in a fixed share of its length", () => {
+  // A 10 s line fades in over the first 0.4 s: a fraction of 0.04.
+  expect(lyricEnvelope(0.04, 0.04)).toBe(1)
+  expect(lyricEnvelope(0.02, 0.04)).toBeCloseTo(0.5)
 })

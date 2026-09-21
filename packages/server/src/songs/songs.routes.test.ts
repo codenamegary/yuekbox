@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { Status } from "contracts/http/status"
 import { StatusSchema } from "contracts/http/status"
 import { PROBLEM_TYPES, ProblemDetailsSchema } from "contracts/http/error"
-import { SongSchema, SongsCollectionSchema } from "contracts/http/songs"
+import { Calibration, SongSchema, SongsCollectionSchema } from "contracts/http/songs"
 import { unusedAiFixture } from "../ai/ai.fixtures"
 import { buildApp } from "../app"
 import { err, ok } from "../shared/result"
@@ -13,12 +13,18 @@ import { unusedVisualizationsFixture } from "../visualizations/visualizations.fi
 const songId = "01J8K3R4P9ABCDEFGHJKMNPQRS"
 const queuedSong = songFixture()
 const scoreAbcFixture = "X:1\nM:4/4\nL:1/8\nK:C\nV: Vocal\nc8|\n"
+const calibrationFixture: Calibration = {
+  version: 1,
+  source: "sheetsage2",
+  spans: [{ startSeconds: 12.3, endSeconds: 16.8 }],
+}
 const completeSong = songFixture({
   status: "complete",
   durationSeconds: 152.5,
   truncatedAbc: false,
   truncatedSemantic: false,
   scoreAbc: scoreAbcFixture,
+  calibration: calibrationFixture,
   completedAt: "2026-09-17T04:05:00.000Z",
 })
 
@@ -134,7 +140,7 @@ test("list returns a contract collection", async () => {
   expect(collection.page.count).toBe(1)
 })
 
-test("get includes the score for a complete song", async () => {
+test("get includes the score and calibration for a complete song", async () => {
   const app = makeApp(
     makeSongsSliceFixture({
       getSong: async () => ok(completeSong),
@@ -144,10 +150,12 @@ test("get includes the score for a complete song", async () => {
   const response = await app.inject({ method: "GET", url: `/v1/songs/${songId}` })
 
   expect(response.statusCode).toBe(200)
-  expect(SongSchema.parse(response.json()).scoreAbc).toBe(scoreAbcFixture)
+  const parsed = SongSchema.parse(response.json())
+  expect(parsed.scoreAbc).toBe(scoreAbcFixture)
+  expect(parsed.calibration).toEqual(calibrationFixture)
 })
 
-test("list omits the score", async () => {
+test("list omits the score and calibration", async () => {
   const app = makeApp(
     makeSongsSliceFixture({
       listSongs: async () =>
@@ -164,7 +172,9 @@ test("list omits the score", async () => {
   const response = await app.inject({ method: "GET", url: "/v1/songs?limit=20" })
 
   expect(response.statusCode).toBe(200)
-  expect(SongSchema.parse(response.json().items[0]).scoreAbc).toBeUndefined()
+  const parsed = SongSchema.parse(response.json().items[0])
+  expect(parsed.scoreAbc).toBeUndefined()
+  expect(parsed.calibration).toBeUndefined()
 })
 
 test("list rejects an unknown status filter", async () => {

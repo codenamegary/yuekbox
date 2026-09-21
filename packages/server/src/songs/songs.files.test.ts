@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test"
 import {
+  calibrationFileName,
+  calibrationKey,
   generatedAudioKey,
   generatedAudioFileName,
   parseReferenceFileName,
@@ -94,6 +96,8 @@ test("keys point inside the song folder", () => {
   expect(generatedAudioFileName(id)).toBe(`generated_${id}.mp3`)
   expect(generatedAudioKey(folder, id)).toBe(`${folder}/generated_${id}.mp3`)
   expect(scoreKey(folder)).toBe(`${folder}/score.abc`)
+  expect(calibrationFileName).toBe("calibration.json")
+  expect(calibrationKey(folder)).toBe(`${folder}/calibration.json`)
   expect(referenceScoreKey(folder)).toBe(`${folder}/reference_score.abc`)
   expect(visualizationKey(folder)).toBe(`${folder}/visualization.js`)
   expect(referenceFilesPattern(folder)).toBe(`${folder}/references/*`)

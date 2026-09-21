@@ -3,7 +3,12 @@ import { AiSlice, assembleAiSlice } from "./ai/ai.assembly"
 import { buildApp } from "./app"
 import { Db } from "./db/client"
 import { assembleGenerationSlice, GenerationSlice } from "./generation/generation.assembly"
-import { EncodeFlacToMp3, RunTranscribe, RunYue2Generate } from "./generation/generation.ports"
+import {
+  EncodeFlacToMp3,
+  RunTranscribe,
+  RunVocalTranscribe,
+  RunYue2Generate,
+} from "./generation/generation.ports"
 import { assembleMediaSlice, MediaSlice } from "./media/media.assembly"
 import { assembleSongsSlice, SongsSlice } from "./songs/songs.assembly"
 import {
@@ -28,6 +33,7 @@ export type ComposeDeps = Readonly<{
   mediaDir: string
   runYue2Generate: RunYue2Generate
   runTranscribe: RunTranscribe
+  runVocalTranscribe: RunVocalTranscribe
   encodeFlacToMp3: EncodeFlacToMp3
   referenceMaxBytes: number
   service: ServiceInfo
@@ -63,6 +69,7 @@ export const composeServer = (deps: ComposeDeps): ComposedServer => {
     songs: songs.capabilities,
     runYue2Generate: deps.runYue2Generate,
     runTranscribe: deps.runTranscribe,
+    runVocalTranscribe: deps.runVocalTranscribe,
     encodeFlacToMp3: deps.encodeFlacToMp3,
     logError: deps.logError,
   })

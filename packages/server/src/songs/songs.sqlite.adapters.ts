@@ -33,6 +33,7 @@ const toSong = (row: SongRow): Song =>
     cot: row.cot,
     reference: null,
     scoreAbc: null,
+    calibration: null,
     durationSeconds: row.durationSeconds,
     truncatedAbc: row.truncatedAbc,
     truncatedSemantic: row.truncatedSemantic,

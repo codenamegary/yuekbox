@@ -113,6 +113,7 @@ export const SongsPage: React.FC = () => {
         : buildLyricCues({
             lyrics: activeSong.lyrics,
             scoreAbc: activeSong.scoreAbc ?? null,
+            vocalSpans: activeSong.calibration?.spans ?? null,
             durationSeconds: activeSong.durationSeconds ?? 0,
           }),
     [activeSong],
