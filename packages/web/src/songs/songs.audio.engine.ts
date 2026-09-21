@@ -116,6 +116,10 @@ export const createAudioEngine = (): AudioEngine => {
       notify()
     })
     element.addEventListener("loadedmetadata", notify)
+    // A src swap aborts the old media without pause/ended; the snapshot must
+    // not keep claiming the old song is still playing.
+    element.addEventListener("emptied", notify)
+    element.addEventListener("abort", notify)
     stopLoop()
     startLoop()
   }

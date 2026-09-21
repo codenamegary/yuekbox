@@ -49,7 +49,7 @@ export const createFullAutoController = () => {
   }
   let requestInFlight = false
   let retryTimer: number | null = null
-  let wasPlaying = false
+  let playingSongId: string | null = null
   const listeners = new Set<() => void>()
 
   const publish = (next: FullAutoState) => {
@@ -129,16 +129,25 @@ export const createFullAutoController = () => {
       }
     },
 
-    /** Playback edges: start triggers the next generation, end rolls the reel. */
+    /**
+     * Playback edges. A new song id is a start even when the previous song was
+     * interrupted without a pause or ended event (the media element reloads).
+     */
     notePlayback: (playing: boolean, ended: boolean, songId: string | null) => {
-      if (playing && !wasPlaying) {
-        transition({ type: "playbackStarted", songId: songId ?? "" })
-      } else if (!playing && wasPlaying && ended) {
+      if (playing) {
+        const id = songId ?? ""
+        if (playingSongId === id) return
+        playingSongId = id
+        transition({ type: "playbackStarted", songId: id })
+        return
+      }
+      const finishedId = playingSongId
+      playingSongId = null
+      if (ended && finishedId !== null) {
         const wasRolling = state.phase === "playing"
         transition({ type: "playbackEnded" })
         if (wasRolling) handlers.onTrackEnded()
       }
-      wasPlaying = playing
     },
 
     subscribe: (listener: () => void) => {
