@@ -94,6 +94,24 @@ describe("makeEnhance", () => {
     expect(calls).toHaveLength(0)
   })
 
+  test("keeps the style out of the lyrics prompt", async () => {
+    const seen: string[] = []
+    const enhance = makeUseCase(async (_writer, _system, user) => {
+      seen.push(user)
+      return ok(lyricSheet)
+    })
+
+    const result = await enhance({
+      kind: "lyrics",
+      style: "gospel brass stabs, female alto",
+      lyrics: "[Verse]\nold words",
+    })
+
+    expect(result).toEqual(ok(lyricSheet))
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).not.toContain("gospel")
+  })
+
   test("sends the style prompt through the style scope's model", async () => {
     const seen: Array<{ model: string; user: string }> = []
     const enhance = makeUseCase(async (writer, _system, user) => {

@@ -34,7 +34,7 @@ export const makeEnhance = (deps: EnhanceDeps) => {
             style: input.style.trim() === "" ? "freeform — surprise the listener" : input.style,
             lyrics: input.lyrics,
           })
-        : buildLyricsEnhancePrompt({ style: input.style, lyrics: input.lyrics })
+        : buildLyricsEnhancePrompt({ lyrics: input.lyrics })
     const usable =
       input.kind === "style"
         ? (text: string): string | null => (isUsableStyleBrief(text) ? null : styleUnusableDetail)

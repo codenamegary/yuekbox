@@ -64,29 +64,30 @@ describe("buildStyleEnhancePrompt", () => {
 
 describe("buildLyricsEnhancePrompt", () => {
   test("extend mode keeps the lyrics in the prompt", () => {
-    const prompt = buildLyricsEnhancePrompt({
-      style: "gospel",
-      lyrics: "[Verse]\nhello",
-    })
-    expect(prompt).toContain("gospel")
+    const prompt = buildLyricsEnhancePrompt({ lyrics: "[Verse]\nhello" })
     expect(prompt).toContain("[Verse]\nhello")
     expect(prompt).toContain("Rework and extend")
     expect(prompt).toContain("slurs are never allowed")
   })
 
+  test("never mentions a style", () => {
+    const prompt = buildLyricsEnhancePrompt({ lyrics: "" })
+    expect(prompt).not.toContain("style")
+  })
+
   test("empty lyrics switch to brand-new mode", () => {
-    const prompt = buildLyricsEnhancePrompt({ style: "", lyrics: "" })
+    const prompt = buildLyricsEnhancePrompt({ lyrics: "" })
     expect(prompt).toContain("brand new original song lyrics")
   })
 
   test("demands one line per lyric line", () => {
-    const prompt = buildLyricsEnhancePrompt({ style: "gospel", lyrics: "" })
+    const prompt = buildLyricsEnhancePrompt({ lyrics: "" })
     expect(prompt).toContain("own line")
     expect(prompt).toContain("Never pack a verse into one paragraph")
   })
 
   test("brand-new mode offers a menu of song structures to pick from", () => {
-    const prompt = buildLyricsEnhancePrompt({ style: "gospel", lyrics: "" })
+    const prompt = buildLyricsEnhancePrompt({ lyrics: "" })
     expect(prompt).toContain("[Verse] → [Chorus] → [Verse] → [Chorus] → [Bridge] → [Outro]")
     expect(prompt).toContain("[Verse] → [Chorus] → [Verse] → [Chorus] → [Outro]")
     expect(prompt).toContain("[Verse] → [Verse] → [Chorus] → [Verse] → [Chorus] → [Outro]")
@@ -96,10 +97,7 @@ describe("buildLyricsEnhancePrompt", () => {
   })
 
   test("rework mode keeps an existing structure, fallback menu present", () => {
-    const prompt = buildLyricsEnhancePrompt({
-      style: "gospel",
-      lyrics: "[Verse]\nexisting",
-    })
+    const prompt = buildLyricsEnhancePrompt({ lyrics: "[Verse]\nexisting" })
     expect(prompt).toContain("section structure YuE2 expects")
     expect(prompt).toContain("If the LYRICS have no clear structure")
     expect(prompt).toContain("[Verse] → [Chorus] → [Verse] → [Chorus] → [Bridge] → [Outro]")
@@ -124,14 +122,14 @@ describe("buildRandomStylePrompt", () => {
 })
 
 describe("buildRandomLyricsPrompt", () => {
-  test("carries the style and the lyric rules", () => {
-    const prompt = buildRandomLyricsPrompt("gospel techno, female alto")
-    expect(prompt).toContain("gospel techno, female alto")
+  test("carries the lyric rules and no style", () => {
+    const prompt = buildRandomLyricsPrompt()
     expect(prompt).toContain("[Verse]")
     expect(prompt).toContain("own line")
     expect(prompt).toContain("150 to 400 words")
     expect(prompt).toContain("slurs are never allowed")
     expect(prompt).toContain("ONLY the lyric sheet")
+    expect(prompt).not.toContain("style")
   })
 })
 
