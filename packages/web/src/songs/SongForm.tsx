@@ -153,8 +153,37 @@ export const SongForm: React.FC<SongFormProps> = ({
 
   return (
     <div className="w-full max-w-4xl mx-auto pointer-events-auto space-y-3">
-      <div className="rounded-3xl bg-black/40 p-5 sm:p-6">
+      <div className="rounded-3xl bg-black/85 p-5 sm:p-6">
         <div className="grid gap-5 md:grid-cols-2">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pr-1">
+              <Label
+                htmlFor="lyrics-input"
+                className="font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
+              >
+                lyrics
+              </Label>
+              {aiEnabled ? (
+                <EnhancePill
+                  kind="lyrics"
+                  pending={enhancing === "lyrics"}
+                  disabled={enhancing !== null}
+                  onEnhance={onEnhance}
+                />
+              ) : null}
+            </div>
+            <div className="hairline-glass-box rounded-2xl p-4">
+              <Textarea
+                id="lyrics-input"
+                rows={12}
+                value={lyrics}
+                onChange={(event) => onLyricsChange(event.target.value)}
+                placeholder={"[Verse]\nwrite the words here\n\n[Chorus]\n..."}
+                className="w-full min-h-[12lh] max-h-[24lh] overflow-y-auto border-0 bg-transparent p-0 text-xs font-mono text-slate-200 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15"
+              />
+            </div>
+          </div>
+
           <div className="space-y-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between pr-1">
@@ -302,35 +331,6 @@ export const SongForm: React.FC<SongFormProps> = ({
                   <span className="font-mono text-3xs tracking-[0.25em] uppercase">full auto</span>
                 </button>
               ) : null}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between pr-1">
-              <Label
-                htmlFor="lyrics-input"
-                className="font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
-              >
-                lyrics
-              </Label>
-              {aiEnabled ? (
-                <EnhancePill
-                  kind="lyrics"
-                  pending={enhancing === "lyrics"}
-                  disabled={enhancing !== null}
-                  onEnhance={onEnhance}
-                />
-              ) : null}
-            </div>
-            <div className="hairline-glass-box rounded-2xl p-4">
-              <Textarea
-                id="lyrics-input"
-                rows={8}
-                value={lyrics}
-                onChange={(event) => onLyricsChange(event.target.value)}
-                placeholder={"[Verse]\nwrite the words here\n\n[Chorus]\n..."}
-                className="w-full min-h-[8lh] max-h-[16lh] overflow-y-auto border-0 bg-transparent p-0 text-xs font-mono text-slate-200 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15"
-              />
             </div>
           </div>
         </div>
