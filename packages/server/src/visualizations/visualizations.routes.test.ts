@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { PROBLEM_TYPES } from "contracts/http/error"
 import { Status } from "contracts/http/status"
-import { SongVisualizationSchema } from "contracts/http/visualizations"
+import {
+  SongAnalysis,
+  SongVisualizationResponse,
+  SongVisualizationResponseSchema,
+} from "contracts/http/visualizations"
 import { unusedAiFixture } from "../ai/ai.fixtures"
 import { AiNotReadyError, VisualizationAuthorError } from "../ai/ai.models"
 import { buildApp } from "../app"
@@ -11,10 +15,16 @@ import { Song } from "../songs/songs.models"
 import { assembleVisualizationsSlice } from "./visualizations.assembly"
 
 const song = songFixture()
-const code =
-  "(host) => ({ resize() {}, renderAudioFrame() {}, renderLyricFrame() {}, dispose() {} })"
-const newCode =
-  "(host) => ({ resize() {}, renderAudioFrame() {}, renderLyricFrame() {}, dispose() {}, hue: 1 })"
+const code = "(host) => ({ resize() {}, renderAudioFrame() {}, dispose() {} })"
+const newCode = "(host) => ({ resize() {}, renderAudioFrame() {}, dispose() {}, hue: 1 })"
+
+const analysis: SongAnalysis = {
+  version: 1,
+  source: "sheetsage2",
+  notes: [{ startSeconds: 1, endSeconds: 1.5, pitch: 64 }],
+  beats: [{ time: 0, position: 1, beatsPerBar: 4, beatUnit: 4 }],
+  sections: [{ name: "intro", startSeconds: 0, endSeconds: 8 }],
+}
 
 type AuthorReply = Result<Readonly<{ code: string }>, VisualizationAuthorError>
 
@@ -42,6 +52,7 @@ const makeHarness = () => {
   const files = new Map<string, string>()
   const replies: Array<(reply: AuthorReply) => void> = []
   let allowed: Result<null, AiNotReadyError> = ok(null)
+  let storedAnalysis: SongAnalysis | null = null
 
   const visualizations = assembleVisualizationsSlice({
     findSongById: async (songId) => songsById.get(songId) ?? null,
@@ -50,6 +61,7 @@ const makeHarness = () => {
       files.set(songId, fileCode)
       return fileCode.length
     },
+    readAnalysis: async () => storedAnalysis,
     canAuthorVisualizations: async () => allowed,
     authorVisualization: () => {
       const run = deferred<AuthorReply>()
@@ -71,6 +83,9 @@ const makeHarness = () => {
     app,
     visualizations,
     files,
+    setAnalysis: (value: SongAnalysis | null) => {
+      storedAnalysis = value
+    },
     allow: (value: Result<null, AiNotReadyError>) => {
       allowed = value
     },
@@ -89,6 +104,14 @@ const getVisualization = async (harness: ReturnType<typeof makeHarness>) => {
   return response
 }
 
+const readVisualization = async (harness: ReturnType<typeof makeHarness>) =>
+  SongVisualizationResponseSchema.parse((await getVisualization(harness)).json())
+
+const visualizationOf = (body: SongVisualizationResponse) => {
+  if (body.visualization === null) throw new Error("expected a visualization")
+  return body.visualization
+}
+
 describe("visualization routes", () => {
   test("GET on an unknown Song is 404", async () => {
     const harness = makeHarness()
@@ -101,11 +124,22 @@ describe("visualization routes", () => {
     expect(response.json().type).toBe(PROBLEM_TYPES.notFound)
   })
 
-  test("GET without a file and without state is 404", async () => {
+  test("GET without a file and without state is a null visual, not a 404", async () => {
     const harness = makeHarness()
     const response = await getVisualization(harness)
 
-    expect(response.statusCode).toBe(404)
+    expect(response.statusCode).toBe(200)
+    expect(JSON.parse(response.body)).toEqual({ visualization: null, analysis: null })
+  })
+
+  test("GET carries the measured analysis even with no visual", async () => {
+    const harness = makeHarness()
+    harness.setAnalysis(analysis)
+
+    const body = await readVisualization(harness)
+
+    expect(body.visualization).toBeNull()
+    expect(body.analysis).toEqual(analysis)
   })
 
   test("POST on an unknown Song is 404", async () => {
@@ -145,13 +179,13 @@ describe("visualization routes", () => {
     expect(posted.statusCode).toBe(202)
     expect(posted.body).toBe("")
 
-    const pending = SongVisualizationSchema.parse((await getVisualization(harness)).json())
+    const pending = visualizationOf(await readVisualization(harness))
     expect(pending).toEqual({ status: "pending" })
 
     harness.resolveAuthor(ok({ code }))
     await harness.visualizations.drain()
 
-    const ready = SongVisualizationSchema.parse((await getVisualization(harness)).json())
+    const ready = visualizationOf(await readVisualization(harness))
     expect(ready.status).toBe("ready")
     expect(ready.code).toBe(code)
     expect(ready.checksum).toBeTruthy()
@@ -178,12 +212,12 @@ describe("visualization routes", () => {
     const harness = makeHarness()
     harness.files.set(song.id, code)
 
-    const before = SongVisualizationSchema.parse((await getVisualization(harness)).json())
+    const before = visualizationOf(await readVisualization(harness))
     expect(before.status).toBe("ready")
 
     await harness.app.inject({ method: "POST", url: `/v1/songs/${song.id}/visualization` })
 
-    const during = SongVisualizationSchema.parse((await getVisualization(harness)).json())
+    const during = visualizationOf(await readVisualization(harness))
     expect(during.status).toBe("rerolling")
     expect(during.code).toBe(code)
     expect(during.checksum).toBe(before.checksum)
@@ -191,7 +225,7 @@ describe("visualization routes", () => {
     harness.resolveAuthor(ok({ code: newCode }))
     await harness.visualizations.drain()
 
-    const after = SongVisualizationSchema.parse((await getVisualization(harness)).json())
+    const after = visualizationOf(await readVisualization(harness))
     expect(after.status).toBe("ready")
     expect(after.code).toBe(newCode)
     expect(after.checksum).not.toBe(before.checksum)
@@ -204,17 +238,17 @@ describe("visualization routes", () => {
     harness.resolveAuthor(err({ kind: "upstream_failed", detail: "503 down" }))
     await harness.visualizations.drain()
 
-    const failed = SongVisualizationSchema.parse((await getVisualization(harness)).json())
+    const failed = visualizationOf(await readVisualization(harness))
     expect(failed).toEqual({ status: "failed", errorDetail: "503 down" })
 
     await harness.app.inject({ method: "POST", url: `/v1/songs/${song.id}/visualization` })
-    const pending = SongVisualizationSchema.parse((await getVisualization(harness)).json())
+    const pending = visualizationOf(await readVisualization(harness))
     expect(pending).toEqual({ status: "pending" })
 
     harness.resolveAuthor(ok({ code }))
     await harness.visualizations.drain()
 
-    const ready = SongVisualizationSchema.parse((await getVisualization(harness)).json())
+    const ready = visualizationOf(await readVisualization(harness))
     expect(ready.status).toBe("ready")
   })
 
@@ -228,7 +262,7 @@ describe("visualization routes", () => {
     )
     await harness.visualizations.drain()
 
-    const after = SongVisualizationSchema.parse((await getVisualization(harness)).json())
+    const after = visualizationOf(await readVisualization(harness))
     expect(after.status).toBe("ready")
     expect(after.code).toBe(code)
   })

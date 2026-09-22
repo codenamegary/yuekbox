@@ -35,6 +35,7 @@ export const useStatusQuery = () =>
 /**
  * Polls while the visual is being authored. `pending` has no code yet;
  * `rerolling` still has the old code playing until the new checksum lands.
+ * The measured analysis rides along and never changes.
  */
 export const useVisualizationQuery = (songId: string | null) =>
   useQuery({
@@ -45,7 +46,7 @@ export const useVisualizationQuery = (songId: string | null) =>
     },
     enabled: songId !== null,
     refetchInterval: (query) => {
-      const status = query.state.data?.status
+      const status = query.state.data?.visualization?.status
       return status === "pending" || status === "rerolling" ? 1000 : false
     },
   })

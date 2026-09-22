@@ -1,7 +1,8 @@
 import { Calibration } from "contracts/http/songs"
+import { SongAnalysis } from "contracts/http/visualizations"
 import { PutFile, RemoveFile } from "../media/media.ports"
 import { CompleteSongInput, Song } from "./songs.models"
-import { calibrationKey, generatedAudioKey, scoreKey } from "./songs.files"
+import { analysisKey, calibrationKey, generatedAudioKey, scoreKey } from "./songs.files"
 import { CompleteSong, FindSongById, MarkSongComplete } from "./songs.ports"
 
 export type CompleteSongDeps = Readonly<{
@@ -14,8 +15,8 @@ export type CompleteSongDeps = Readonly<{
 
 const encodeText = (value: string): Uint8Array => new TextEncoder().encode(value)
 
-const encodeCalibration = (calibration: Calibration): Uint8Array =>
-  encodeText(JSON.stringify(calibration))
+const encodeJson = (value: Calibration | SongAnalysis): Uint8Array =>
+  encodeText(JSON.stringify(value))
 
 export const makeCompleteSong =
   (deps: CompleteSongDeps): CompleteSong =>
@@ -31,7 +32,10 @@ export const makeCompleteSong =
       await deps.putFile(scoreKey(folderKey), encodeText(input.scoreAbc))
     }
     if (input.calibration !== null && input.calibration.cues.length > 0) {
-      await deps.putFile(calibrationKey(folderKey), encodeCalibration(input.calibration))
+      await deps.putFile(calibrationKey(folderKey), encodeJson(input.calibration))
+    }
+    if (input.analysis !== null) {
+      await deps.putFile(analysisKey(folderKey), encodeJson(input.analysis))
     }
 
     try {
@@ -45,6 +49,7 @@ export const makeCompleteSong =
         deps.removeFile(generatedAudioKey(folderKey, input.songId)).catch(() => undefined),
         deps.removeFile(scoreKey(folderKey)).catch(() => undefined),
         deps.removeFile(calibrationKey(folderKey)).catch(() => undefined),
+        deps.removeFile(analysisKey(folderKey)).catch(() => undefined),
       ])
       throw error
     }

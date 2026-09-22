@@ -50,6 +50,7 @@ export const makeSongsCapabilitiesFixture = (
   markSongFailed: async () => {},
   findReferenceBySongId: async () => null,
   saveReferenceScore: async () => {},
+  saveTranscriptRaw: async () => {},
   completeSong: async () => {},
   ...overrides,
 })
@@ -66,6 +67,8 @@ export const makeSongsSliceFixture = (overrides: Partial<SongsSlice> = {}): Song
   findSongById: async () => null,
   readVisualizationFile: async () => null,
   writeVisualizationFile: async () => 0,
+  readAnalysisFile: async () => null,
+  saveTranscriptRaw: async () => {},
   queueDepth: async () => 0,
   recoverInterruptedSongs: async () => 0,
   capabilities: makeSongsCapabilitiesFixture(),

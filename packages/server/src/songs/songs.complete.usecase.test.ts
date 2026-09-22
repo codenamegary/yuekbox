@@ -34,7 +34,7 @@ const makeHarness = (options: Readonly<{ failComplete?: boolean; song?: Song | n
   return { completeSong, calls, files, completed }
 }
 
-test("complete writes the mp3, the score, and the calibration, then marks the row complete", async () => {
+test("complete writes the mp3, the score, the calibration, and the analysis, then marks the row complete", async () => {
   const harness = makeHarness()
 
   await harness.completeSong({
@@ -42,6 +42,13 @@ test("complete writes the mp3, the score, and the calibration, then marks the ro
     mp3: new Uint8Array([1, 2, 3, 4]),
     scoreAbc: "X:1\nK:C\nC D E|",
     calibration: { cues: [{ text: "hello world", startSeconds: 12.3, endSeconds: 16.8 }] },
+    analysis: {
+      version: 1,
+      source: "sheetsage2",
+      notes: [{ startSeconds: 1, endSeconds: 1.5, pitch: 64 }],
+      beats: [{ time: 0, position: 1, beatsPerBar: 4, beatUnit: 4 }],
+      sections: [{ name: "intro", startSeconds: 0, endSeconds: 8 }],
+    },
     durationSeconds: 152.5,
     truncated: { abc: false, semantic: false },
   })
@@ -50,6 +57,7 @@ test("complete writes the mp3, the score, and the calibration, then marks the ro
     `put:${folderKey}/generated_${songId}.mp3`,
     `put:${folderKey}/score.abc`,
     `put:${folderKey}/calibration.json`,
+    `put:${folderKey}/analysis.json`,
     "complete",
   ])
   expect(Array.from(harness.files.get(`${folderKey}/generated_${songId}.mp3`) ?? [])).toEqual([
@@ -63,12 +71,21 @@ test("complete writes the mp3, the score, and the calibration, then marks the ro
   ).toEqual({
     cues: [{ text: "hello world", startSeconds: 12.3, endSeconds: 16.8 }],
   })
+  expect(
+    JSON.parse(new TextDecoder().decode(harness.files.get(`${folderKey}/analysis.json`))),
+  ).toEqual({
+    version: 1,
+    source: "sheetsage2",
+    notes: [{ startSeconds: 1, endSeconds: 1.5, pitch: 64 }],
+    beats: [{ time: 0, position: 1, beatsPerBar: 4, beatUnit: 4 }],
+    sections: [{ name: "intro", startSeconds: 0, endSeconds: 8 }],
+  })
   expect(harness.completed).toEqual([
     { durationSeconds: 152.5, truncated: { abc: false, semantic: false } },
   ])
 })
 
-test("complete skips the score and calibration files when there is nothing to write", async () => {
+test("complete skips the score, calibration, and analysis files when there is nothing to write", async () => {
   const harness = makeHarness()
 
   await harness.completeSong({
@@ -76,6 +93,7 @@ test("complete skips the score and calibration files when there is nothing to wr
     mp3: new Uint8Array([1]),
     scoreAbc: null,
     calibration: null,
+    analysis: null,
     durationSeconds: 10,
     truncated: { abc: true, semantic: false },
   })
@@ -91,6 +109,7 @@ test("complete skips an empty cue list", async () => {
     mp3: new Uint8Array([1]),
     scoreAbc: null,
     calibration: { cues: [] },
+    analysis: null,
     durationSeconds: 10,
     truncated: { abc: true, semantic: false },
   })
@@ -107,6 +126,13 @@ test("a failed row update removes the files it wrote and rethrows", async () => 
       mp3: new Uint8Array([1]),
       scoreAbc: "X:1",
       calibration: { cues: [{ text: "hello world", startSeconds: 1, endSeconds: 2 }] },
+      analysis: {
+        version: 1,
+        source: "sheetsage2",
+        notes: [],
+        beats: [],
+        sections: [],
+      },
       durationSeconds: 10,
       truncated: { abc: false, semantic: false },
     })
@@ -120,10 +146,12 @@ test("a failed row update removes the files it wrote and rethrows", async () => 
     `put:${folderKey}/generated_${songId}.mp3`,
     `put:${folderKey}/score.abc`,
     `put:${folderKey}/calibration.json`,
+    `put:${folderKey}/analysis.json`,
     "complete",
     `remove:${folderKey}/generated_${songId}.mp3`,
     `remove:${folderKey}/score.abc`,
     `remove:${folderKey}/calibration.json`,
+    `remove:${folderKey}/analysis.json`,
   ])
   expect(harness.files.size).toBe(0)
 })
@@ -137,6 +165,7 @@ test("complete fails when the song row is gone", async () => {
       mp3: new Uint8Array([1]),
       scoreAbc: null,
       calibration: null,
+      analysis: null,
       durationSeconds: 10,
       truncated: { abc: false, semantic: false },
     })

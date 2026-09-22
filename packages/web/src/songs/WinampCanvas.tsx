@@ -1,12 +1,15 @@
 import * as React from "react"
+import { SongAnalysis } from "contracts/http/visualizations"
 import { TripMode, WinampEngine } from "./songs.winamp.engine"
 
 type WinampCanvasProps = Readonly<{
   engine: WinampEngine
   mode: TripMode
+  /** The active Song's measured score; its downbeats drive the surge. */
+  analysis: SongAnalysis | null
 }>
 
-export const WinampCanvas: React.FC<WinampCanvasProps> = ({ engine, mode }) => {
+export const WinampCanvas: React.FC<WinampCanvasProps> = ({ engine, mode, analysis }) => {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null)
 
   React.useEffect(() => {
@@ -16,6 +19,10 @@ export const WinampCanvas: React.FC<WinampCanvasProps> = ({ engine, mode }) => {
     engine.start()
     return () => engine.stop()
   }, [engine])
+
+  React.useEffect(() => {
+    engine.setAnalysis(analysis)
+  }, [engine, analysis])
 
   React.useEffect(() => {
     engine.setMode(mode)

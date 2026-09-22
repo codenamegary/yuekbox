@@ -49,6 +49,7 @@ export const SongsPage: React.FC = () => {
     createWinampEngine({
       bins: () => audio.bins,
       isPlaying: () => audio.isPlaying(),
+      time: audio.currentTime,
     }),
   )
   const [activeId, setActiveId] = React.useState<string | null>(null)
@@ -117,7 +118,8 @@ export const SongsPage: React.FC = () => {
     [activeSong],
   )
 
-  const visualization = visualizationQuery.data ?? null
+  const visualization = visualizationQuery.data?.visualization ?? null
+  const analysis = visualizationQuery.data?.analysis ?? null
   const visualizationCode = visualization?.code ?? null
   const visualizationKey = `${activeSongId ?? "none"}:${visualization?.checksum ?? "none"}`
   const visualizationFailed = visualizationFailure?.key === visualizationKey
@@ -311,10 +313,11 @@ export const SongsPage: React.FC = () => {
           song={visualizationSong}
           code={visualizationCode}
           cues={lyricCues}
+          analysis={analysis}
           onFailure={handleVisualizationFailure}
         />
       ) : (
-        <WinampCanvas engine={winamp} mode={mode} />
+        <WinampCanvas engine={winamp} mode={mode} analysis={analysis} />
       )}
       <div className="tech-vignette" />
 

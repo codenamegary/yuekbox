@@ -20,6 +20,7 @@ describe("makeVisualizationAuthoring", () => {
     const written: Array<{ songId: string; code: string }> = []
     const authoring = makeVisualizationAuthoring({
       author: async () => ok({ code }),
+      readAnalysis: async () => null,
       writeFile: async (songId, fileCode) => {
         written.push({ songId, code: fileCode })
         return fileCode.length
@@ -39,6 +40,7 @@ describe("makeVisualizationAuthoring", () => {
   test("an authoring failure is remembered with its detail", async () => {
     const authoring = makeVisualizationAuthoring({
       author: async () => ({ ok: false, error: { kind: "upstream_failed", detail: "503 down" } }),
+      readAnalysis: async () => null,
       writeFile: async () => 0,
     })
 
@@ -52,6 +54,7 @@ describe("makeVisualizationAuthoring", () => {
   test("a file write failure is remembered too", async () => {
     const authoring = makeVisualizationAuthoring({
       author: async () => ok({ code }),
+      readAnalysis: async () => null,
       writeFile: async () => {
         throw new Error("disk full")
       },
@@ -71,11 +74,13 @@ describe("makeVisualizationAuthoring", () => {
         calls += 1
         return first.promise
       },
+      readAnalysis: async () => null,
       writeFile: async () => 0,
     })
 
     authoring.start(song)
     authoring.start(song)
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(calls).toBe(1)
 
     first.resolve(ok({ code }))
@@ -89,6 +94,7 @@ describe("makeVisualizationAuthoring", () => {
         reply === "failed"
           ? { ok: false, error: { kind: "upstream_failed", detail: "down" } }
           : ok({ code }),
+      readAnalysis: async () => null,
       writeFile: async () => 0,
     })
 
@@ -109,6 +115,7 @@ describe("makeVisualizationAuthoring", () => {
       author: async () => {
         throw new Error("socket exploded")
       },
+      readAnalysis: async () => null,
       writeFile: async () => 0,
       logError: (message) => {
         errors.push(message)

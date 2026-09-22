@@ -1,4 +1,5 @@
 import { CreateSongBody, SongStage, SongStatus } from "contracts/http/songs"
+import { SongAnalysis } from "contracts/http/visualizations"
 import { Result } from "../shared/result"
 import { ListCursor } from "./songs.cursor"
 import {
@@ -52,3 +53,8 @@ export type FindReferenceBySongId = (songId: string) => Promise<TranscribeRefere
 export type SaveReferenceScore = (songId: string, scoreAbc: string) => Promise<void>
 
 export type CompleteSong = (input: CompleteSongInput) => Promise<void>
+
+/** Keeps a transcript tool's raw output tree beside the Song. */
+export type SaveTranscriptRaw = (songId: string, sourceDir: string) => Promise<void>
+
+export type ReadAnalysis = (songId: string) => Promise<SongAnalysis | null>

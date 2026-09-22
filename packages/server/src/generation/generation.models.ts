@@ -1,4 +1,5 @@
 import { Calibration, SongStage } from "contracts/http/songs"
+import { AnalysisBeat, AnalysisNote, AnalysisSection } from "contracts/http/visualizations"
 import { SongCot, StageProgressUpdate, TruncatedFlags } from "../songs/songs.models"
 
 export type GenerateSongError =
@@ -47,4 +48,20 @@ export type RunLyricAlignInput = Readonly<{
 
 export type RunLyricAlignOutput = Readonly<{
   calibration: Calibration
+}>
+
+export type VocalTranscriptError = Readonly<{ kind: "vocal_transcribe_failed"; detail: string }>
+
+export type RunVocalTranscriptInput = Readonly<{
+  audioPath: string
+  outputDir: string
+  durationSeconds: number
+}>
+
+/** The measured slices plus the raw output tree that the Song folder keeps. */
+export type RunVocalTranscriptOutput = Readonly<{
+  notes: AnalysisNote[]
+  beats: AnalysisBeat[]
+  sections: AnalysisSection[]
+  transcriptDir: string
 }>

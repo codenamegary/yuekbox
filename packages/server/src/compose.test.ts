@@ -5,11 +5,12 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { ReferenceSchema } from "contracts/http/references"
 import { SongSchema } from "contracts/http/songs"
-import { SongVisualizationSchema } from "contracts/http/visualizations"
+import { SongVisualizationResponseSchema } from "contracts/http/visualizations"
 import { composeServer } from "./compose"
 import { openDatabase } from "./db/client"
 import { ok } from "./shared/result"
 import {
+  analysisFileName,
   calibrationFileName,
   generatedAudioFileName,
   referenceScoreFileName,
@@ -50,6 +51,10 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
           calibration: { cues: [{ text: "hello world", startSeconds: 12.3, endSeconds: 16.8 }] },
         })
       },
+      runVocalTranscript: async () => ({
+        ok: false,
+        error: { kind: "vocal_transcribe_failed", detail: "no model in this test" },
+      }),
       encodeFlacToMp3: async () => ok(mp3Bytes),
       referenceMaxBytes: 1024 * 1024,
       service: { version: "0.1.0", state: () => "online", startedAt: "2026-09-17T04:00:00.000Z" },
@@ -88,7 +93,8 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
       method: "GET",
       url: `/v1/songs/${queued.id}/visualization`,
     })
-    expect(noVisualization.statusCode).toBe(404)
+    expect(noVisualization.statusCode).toBe(200)
+    expect(JSON.parse(noVisualization.body)).toEqual({ visualization: null, analysis: null })
     expect(existsSync(join(mediaDir, folderKey, visualizationFileName))).toBe(false)
 
     generation.worker.wake()
@@ -98,6 +104,7 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
     expect(existsSync(join(mediaDir, folderKey, scoreFileName))).toBe(true)
     expect(existsSync(join(mediaDir, folderKey, referenceScoreFileName))).toBe(true)
     expect(existsSync(join(mediaDir, folderKey, calibrationFileName))).toBe(true)
+    expect(existsSync(join(mediaDir, folderKey, analysisFileName))).toBe(false)
     expect(transcribedPaths).toEqual([referencePath])
     expect(alignedPaths).toEqual(["/tmp/yuekbox-compose-test/audio.flac"])
     expect(generatedCalls).toEqual([{ cot: "melody", abc: "X:1\nK:C\nC D E|" }])
@@ -186,6 +193,10 @@ test("creating a Song authors a visualization and deleting it takes the file alo
       runTranscribe: async () => ok({ scoreAbc: "X:1\nK:C\nC D E F|" }),
       runLyricAlign: async () =>
         ok({ calibration: { cues: [{ text: "hi", startSeconds: 1, endSeconds: 2 }] } }),
+      runVocalTranscript: async () => ({
+        ok: false,
+        error: { kind: "vocal_transcribe_failed", detail: "no model in this test" },
+      }),
       encodeFlacToMp3: async () => ok(Uint8Array.from([1, 2, 3])),
       referenceMaxBytes: 1024,
       service: { version: "0.1.0", state: () => "online", startedAt: "2026-09-17T04:00:00.000Z" },
@@ -224,9 +235,10 @@ test("creating a Song authors a visualization and deleting it takes the file alo
       url: `/v1/songs/${queued.id}/visualization`,
     })
     expect(visualization.statusCode).toBe(200)
-    const body = SongVisualizationSchema.parse(visualization.json())
-    expect(body.status).toBe("ready")
-    expect(body.code).toBe(visualizationCode)
+    const body = SongVisualizationResponseSchema.parse(visualization.json())
+    expect(body.visualization?.status).toBe("ready")
+    expect(body.visualization?.code).toBe(visualizationCode)
+    expect(body.analysis).toBeNull()
     expect(fake.calls()).toBe(2)
     expect(existsSync(join(mediaDir, folderKey, visualizationFileName))).toBe(true)
 

@@ -1,8 +1,12 @@
+import { SongAnalysis } from "contracts/http/visualizations"
+
 export type TripMode = 0 | 1 | 2 | 3
 
 export type FrequencySource = Readonly<{
   bins: () => Float32Array
   isPlaying: () => boolean
+  /** Playback seconds, used to land the surge on the measured downbeats. */
+  time: () => number
 }>
 
 export type WinampEngine = Readonly<{
@@ -10,8 +14,30 @@ export type WinampEngine = Readonly<{
   start: () => void
   stop: () => void
   setMode: (mode: TripMode) => void
+  setAnalysis: (analysis: SongAnalysis | null) => void
   pulse: (amount: number) => void
 }>
+
+/** The measured downbeat times, earliest first, or an empty list. */
+export const downbeatTimes = (analysis: SongAnalysis | null): readonly number[] => {
+  if (analysis === null) return []
+  return analysis.beats
+    .filter((beat) => beat.position === 1)
+    .map((beat) => beat.time)
+    .toSorted((left, right) => left - right)
+}
+
+/** The latest downbeat at or before `time`, or null before the first one. */
+export const downbeatAt = (downbeats: readonly number[], time: number): number | null => {
+  let found: number | null = null
+  for (const downbeat of downbeats) {
+    if (downbeat > time) break
+    found = downbeat
+  }
+  return found
+}
+
+const downbeatSurge = 1.1
 
 export const createWinampEngine = (source: FrequencySource): WinampEngine => {
   const state: {
@@ -23,6 +49,8 @@ export const createWinampEngine = (source: FrequencySource): WinampEngine => {
     handle: number
     mode: TripMode
     surge: number
+    downbeats: readonly number[]
+    lastDownbeat: number | null
     mouseX: number
     mouseY: number
     targetX: number
@@ -36,10 +64,23 @@ export const createWinampEngine = (source: FrequencySource): WinampEngine => {
     handle: 0,
     mode: 0,
     surge: 0,
+    downbeats: [],
+    lastDownbeat: null,
     mouseX: 0.5,
     mouseY: 0.5,
     targetX: 0.5,
     targetY: 0.5,
+  }
+
+  /** A genuine crossing pulses; a seek backward just re-anchors. */
+  const checkDownbeats = () => {
+    if (state.downbeats.length === 0) return
+    const downbeat = downbeatAt(state.downbeats, source.time())
+    if (downbeat === null || downbeat === state.lastDownbeat) return
+    if (state.lastDownbeat === null || downbeat > state.lastDownbeat) {
+      state.surge = Math.min(1.8, state.surge + downbeatSurge)
+    }
+    state.lastDownbeat = downbeat
   }
 
   const resize = () => {
@@ -191,6 +232,8 @@ export const createWinampEngine = (source: FrequencySource): WinampEngine => {
     state.mouseX += (state.targetX - state.mouseX) * 0.05
     state.mouseY += (state.targetY - state.mouseY) * 0.05
 
+    if (source.isPlaying()) checkDownbeats()
+
     const bins = source.bins()
     if (state.mode === 0) drawTunnel(context, bins)
     else if (state.mode === 1) drawOscilloscope(context, bins)
@@ -231,5 +274,10 @@ export const createWinampEngine = (source: FrequencySource): WinampEngine => {
     state.surge = Math.min(1.8, state.surge + amount)
   }
 
-  return { attach, start, stop, setMode, pulse }
+  const setAnalysis = (analysis: SongAnalysis | null) => {
+    state.downbeats = downbeatTimes(analysis)
+    state.lastDownbeat = null
+  }
+
+  return { attach, start, stop, setMode, setAnalysis, pulse }
 }

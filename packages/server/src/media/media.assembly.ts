@@ -1,4 +1,5 @@
 import {
+  makeCopyDirectory,
   makeFindFiles,
   makeMakeDirectory,
   makeMoveFile,
@@ -10,6 +11,7 @@ import {
   makeStatFile,
 } from "./media.adapters"
 import {
+  CopyDirectory,
   FindFiles,
   MakeDirectory,
   MoveFile,
@@ -31,6 +33,7 @@ export type MediaSlice = Readonly<{
   removeFile: RemoveFile
   removeDirectory: RemoveDirectory
   find: FindFiles
+  copyDirectory: CopyDirectory
 }>
 
 export const assembleMediaSlice = (mediaDir: string): MediaSlice =>
@@ -44,4 +47,5 @@ export const assembleMediaSlice = (mediaDir: string): MediaSlice =>
     removeFile: makeRemoveFile(mediaDir),
     removeDirectory: makeRemoveDirectory(mediaDir),
     find: makeFindFiles(mediaDir),
+    copyDirectory: makeCopyDirectory(mediaDir),
   })
