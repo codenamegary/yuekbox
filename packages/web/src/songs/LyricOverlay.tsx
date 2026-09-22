@@ -6,7 +6,6 @@ import { LyricCue, cueIndexAt, lyricEnvelope, lyricFadeInSeconds } from "./songs
 type LyricOverlayProps = Readonly<{
   cues: readonly LyricCue[]
   engine: AudioEngine
-  receded: boolean
   /** The visualization owns the lyrics while it runs. */
   muted: boolean
 }>
@@ -30,7 +29,7 @@ const lyricMotion = (progress: number, fadeInFraction: number) => {
   }
 }
 
-export const LyricOverlay: React.FC<LyricOverlayProps> = ({ cues, engine, receded, muted }) => {
+export const LyricOverlay: React.FC<LyricOverlayProps> = ({ cues, engine, muted }) => {
   const [playing, setPlaying] = React.useState(false)
   const [cueIndex, setCueIndex] = React.useState<number | null>(null)
   const textRef = React.useRef<HTMLParagraphElement | null>(null)
@@ -72,7 +71,7 @@ export const LyricOverlay: React.FC<LyricOverlayProps> = ({ cues, engine, recede
   }, [cues, engine])
 
   const activeCue = cueIndex === null ? null : (cues[cueIndex] ?? null)
-  const visible = playing && !receded && !muted && activeCue !== null
+  const visible = playing && !muted && activeCue !== null
 
   return (
     <div

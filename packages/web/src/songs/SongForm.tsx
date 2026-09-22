@@ -152,62 +152,64 @@ export const SongForm: React.FC<SongFormProps> = ({
       : Math.max(0, Math.min(100, (progress.completed / progress.total) * 100))
 
   return (
-    <div className="w-full max-w-lg pointer-events-auto space-y-6">
-      <div className="space-y-2">
-        <div className="flex items-center justify-between pr-1">
-          <Label
-            htmlFor="style-input"
-            className="font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
-          >
-            style
-          </Label>
-          {aiEnabled ? (
-            <EnhancePill
-              kind="style"
-              pending={enhancing === "style"}
-              disabled={enhancing !== null}
-              onEnhance={onEnhance}
+    <div className="w-full max-w-4xl pointer-events-auto space-y-6">
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between pr-1">
+            <Label
+              htmlFor="style-input"
+              className="font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
+            >
+              style
+            </Label>
+            {aiEnabled ? (
+              <EnhancePill
+                kind="style"
+                pending={enhancing === "style"}
+                disabled={enhancing !== null}
+                onEnhance={onEnhance}
+              />
+            ) : null}
+          </div>
+          <div className="hairline-glass-box rounded-2xl p-4">
+            <Textarea
+              id="style-input"
+              rows={4}
+              value={style}
+              onChange={(event) => onStyleChange(event.target.value)}
+              placeholder="genre, voice, instruments, tempo"
+              className="w-full min-h-[4lh] max-h-[8lh] overflow-y-auto border-0 bg-transparent p-0 text-sm text-slate-100 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15 md:text-sm"
             />
-          ) : null}
+          </div>
         </div>
-        <div className="hairline-glass-box rounded-2xl p-4">
-          <Textarea
-            id="style-input"
-            rows={4}
-            value={style}
-            onChange={(event) => onStyleChange(event.target.value)}
-            placeholder="genre, voice, instruments, tempo"
-            className="w-full min-h-[4lh] max-h-[8lh] overflow-y-auto border-0 bg-transparent p-0 text-sm text-slate-100 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15 md:text-sm"
-          />
-        </div>
-      </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between pr-1">
-          <Label
-            htmlFor="lyrics-input"
-            className="font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
-          >
-            lyrics
-          </Label>
-          {aiEnabled ? (
-            <EnhancePill
-              kind="lyrics"
-              pending={enhancing === "lyrics"}
-              disabled={enhancing !== null}
-              onEnhance={onEnhance}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between pr-1">
+            <Label
+              htmlFor="lyrics-input"
+              className="font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
+            >
+              lyrics
+            </Label>
+            {aiEnabled ? (
+              <EnhancePill
+                kind="lyrics"
+                pending={enhancing === "lyrics"}
+                disabled={enhancing !== null}
+                onEnhance={onEnhance}
+              />
+            ) : null}
+          </div>
+          <div className="hairline-glass-box rounded-2xl p-4">
+            <Textarea
+              id="lyrics-input"
+              rows={4}
+              value={lyrics}
+              onChange={(event) => onLyricsChange(event.target.value)}
+              placeholder={"[Verse]\nwrite the words here\n\n[Chorus]\n..."}
+              className="w-full min-h-[4lh] max-h-[8lh] overflow-y-auto border-0 bg-transparent p-0 text-xs font-mono text-slate-200 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15"
             />
-          ) : null}
-        </div>
-        <div className="hairline-glass-box rounded-2xl p-4">
-          <Textarea
-            id="lyrics-input"
-            rows={4}
-            value={lyrics}
-            onChange={(event) => onLyricsChange(event.target.value)}
-            placeholder={"[Verse]\nwrite the words here\n\n[Chorus]\n..."}
-            className="w-full min-h-[4lh] max-h-[8lh] overflow-y-auto border-0 bg-transparent p-0 text-xs font-mono text-slate-200 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15"
-          />
+          </div>
         </div>
       </div>
 

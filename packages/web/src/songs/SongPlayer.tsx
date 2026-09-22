@@ -1,77 +1,24 @@
 import * as React from "react"
 import { Song } from "contracts/http/songs"
-import { VisualizationStatus } from "contracts/http/visualizations"
 import { cn } from "@/lib/cn"
 import { AudioEngine } from "./songs.audio.engine"
+import { seekRatio } from "./songs.player"
 import { songAudioSource } from "./songs.api"
-
-type SpectrumBarsProps = Readonly<{
-  engine: AudioEngine
-}>
-
-const SpectrumBars: React.FC<SpectrumBarsProps> = ({ engine }) => {
-  const containerRef = React.useRef<HTMLDivElement | null>(null)
-
-  React.useEffect(() => {
-    const container = containerRef.current
-    if (container === null) return
-    const bars: HTMLDivElement[] = []
-    for (let index = 0; index < 32; index += 1) {
-      const bar = document.createElement("div")
-      bar.className =
-        "w-0.5 bg-gradient-to-t from-cyan-400 to-white rounded-full transition-all duration-75"
-      bar.style.height = "4px"
-      container.appendChild(bar)
-      bars.push(bar)
-    }
-
-    const frame = { handle: 0 }
-    const tick = () => {
-      for (let index = 0; index < bars.length; index += 1) {
-        const bar = bars[index]
-        if (bar === undefined) continue
-        bar.style.height = `${Math.max(3, (engine.bins[index] ?? 0) * 22)}px`
-      }
-      frame.handle = requestAnimationFrame(tick)
-    }
-    frame.handle = requestAnimationFrame(tick)
-
-    return () => {
-      cancelAnimationFrame(frame.handle)
-      container.replaceChildren()
-    }
-  }, [engine])
-
-  return (
-    <div
-      ref={containerRef}
-      className="flex-1 h-5 flex items-end justify-center gap-1.5 opacity-60"
-    />
-  )
-}
-
-export type SongVisualizationControls = Readonly<{
-  configured: boolean
-  status: VisualizationStatus | null
-  /** A client-side compile or render failure; the server still says ready. */
-  failed: boolean
-  /** Why the visual failed, server-side or client-side. */
-  detail: string | null
-  rerolling: boolean
-  onReroll: () => void
-}>
 
 type SongPlayerProps = Readonly<{
   song: Song | null
   engine: AudioEngine
-  onPoke: () => void
-  visualization: SongVisualizationControls
 }>
 
-export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine, onPoke, visualization }) => {
+const seekNudgeSeconds = 5
+
+export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine }) => {
   const audioRef = React.useRef<HTMLAudioElement | null>(null)
-  const scrubberRef = React.useRef<HTMLDivElement | null>(null)
+  const barRef = React.useRef<HTMLButtonElement | null>(null)
+  const fillRef = React.useRef<HTMLSpanElement | null>(null)
+  const thumbRef = React.useRef<HTMLSpanElement | null>(null)
   const [playing, setPlaying] = React.useState(false)
+  const [scrubbing, setScrubbing] = React.useState(false)
 
   React.useEffect(() => {
     const element = audioRef.current
@@ -83,12 +30,11 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine, onPoke, vi
   React.useEffect(() => {
     const frame = { handle: 0 }
     const tick = () => {
-      const scrubber = scrubberRef.current
-      if (scrubber !== null) {
-        const total = engine.duration()
-        const ratio = total > 0 ? engine.currentTime() / total : 0
-        scrubber.style.width = `${(ratio * 100).toFixed(2)}%`
-      }
+      const total = engine.duration()
+      const ratio = total > 0 ? engine.currentTime() / total : 0
+      const percent = `${(ratio * 100).toFixed(2)}%`
+      if (fillRef.current !== null) fillRef.current.style.width = percent
+      if (thumbRef.current !== null) thumbRef.current.style.left = percent
       frame.handle = requestAnimationFrame(tick)
     }
     frame.handle = requestAnimationFrame(tick)
@@ -96,13 +42,6 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine, onPoke, vi
   }, [engine])
 
   const complete = song !== null && song.status === "complete"
-  const showBadge =
-    visualization.configured && (visualization.failed || visualization.status === "failed")
-  const rerollTitle = !visualization.configured
-    ? "AI visuals are off — click to open settings"
-    : visualization.failed
-      ? "Reroll the failed visualization"
-      : "Reroll Visualization"
 
   const toggle = () => {
     if (!complete) return
@@ -113,98 +52,101 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine, onPoke, vi
     void engine.play().catch(() => {})
   }
 
-  const scrub = (event: React.MouseEvent<HTMLElement>) => {
-    if (!complete) return
-    const rect = event.currentTarget.getBoundingClientRect()
-    const ratio = (event.clientX - rect.left) / Math.max(1, rect.width)
+  const seekToPointer = (clientX: number) => {
+    const bar = barRef.current
+    if (bar === null) return
+    const rect = bar.getBoundingClientRect()
     const total = engine.duration()
-    if (total > 0) engine.seek(ratio * total)
+    if (total > 0) engine.seek(seekRatio(clientX, rect.left, rect.width) * total)
+  }
+
+  const beginScrub = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!complete || event.button !== 0) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setScrubbing(true)
+    seekToPointer(event.clientX)
+  }
+
+  const moveScrub = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!scrubbing) return
+    seekToPointer(event.clientX)
+  }
+
+  const endScrub = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!scrubbing) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    setScrubbing(false)
+  }
+
+  const nudge = (deltaSeconds: number) => {
+    const total = engine.duration()
+    if (total <= 0) return
+    engine.seek(engine.currentTime() + deltaSeconds)
   }
 
   return (
-    <div className="w-full max-w-2xl mx-auto pointer-events-auto">
-      {showBadge ? (
-        <div className="flex items-center justify-center gap-2 pb-1">
-          <span className="font-mono text-3xs tracking-[0.25em] uppercase text-amber-200/70">
-            visual failed
-          </span>
-          {visualization.detail !== null ? (
-            <span
-              className="max-w-[360px] truncate font-mono text-3xs text-white/30"
-              title={visualization.detail}
-            >
-              {visualization.detail}
-            </span>
-          ) : null}
-          <button
-            type="button"
-            onClick={visualization.onReroll}
-            className="font-mono text-3xs tracking-[0.25em] uppercase text-white/40 hover:text-white transition-colors"
-            title="Reroll the visualization"
-          >
-            reroll ↻
-          </button>
-        </div>
-      ) : null}
-      <div className="pure-transparent-player py-3 px-6 flex items-center justify-between gap-6">
-        <button
-          type="button"
-          onClick={toggle}
-          disabled={!complete}
-          className="w-8 h-8 rounded-full flex items-center justify-center text-white/80 hover:text-white transition-transform active:scale-90 disabled:opacity-30 disabled:pointer-events-none"
-          title="Play / Pause"
-        >
-          {playing ? (
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
-                clipRule="evenodd"
-              />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
-            </svg>
-          )}
-        </button>
+    <div className="fixed top-8 left-8 z-20 flex items-center gap-4 pointer-events-auto">
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={!complete}
+        className={cn(
+          "alien-sigil disabled:opacity-30 disabled:pointer-events-none",
+          playing && "active",
+        )}
+        title="Play / Pause"
+      >
+        {playing ? (
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path
+              fillRule="evenodd"
+              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
+              clipRule="evenodd"
+            />
+          </svg>
+        ) : (
+          <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+          </svg>
+        )}
+      </button>
 
-        <SpectrumBars engine={engine} />
-
-        <button
-          type="button"
-          aria-label="Seek"
-          onClick={scrub}
-          className="w-36 h-1 bg-white/10 hover:bg-white/20 rounded-full cursor-pointer relative overflow-hidden transition-all"
-        >
-          <div
-            ref={scrubberRef}
-            className="h-full w-0 bg-gradient-to-r from-cyan-400 via-sky-300 to-white rounded-full"
+      <button
+        ref={barRef}
+        type="button"
+        aria-label="Seek"
+        onPointerDown={beginScrub}
+        onPointerMove={moveScrub}
+        onPointerUp={endScrub}
+        onPointerCancel={endScrub}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft") {
+            event.preventDefault()
+            nudge(-seekNudgeSeconds)
+          }
+          if (event.key === "ArrowRight") {
+            event.preventDefault()
+            nudge(seekNudgeSeconds)
+          }
+        }}
+        className="group relative flex h-5 w-40 cursor-pointer touch-none select-none items-center"
+      >
+        <span className="relative h-1 w-full overflow-hidden rounded-full bg-white/10 transition-colors group-hover:bg-white/20">
+          <span
+            ref={fillRef}
+            className="block h-full w-0 rounded-full bg-gradient-to-r from-cyan-400 via-sky-300 to-white"
           />
-        </button>
-
-        <button
-          type="button"
-          onClick={onPoke}
-          className="text-white/40 hover:text-cyan-300 transition-colors text-xs font-mono"
-          title="Acoustic Pulse"
-        >
-          ⏛
-        </button>
-
-        <button
-          type="button"
-          onClick={visualization.onReroll}
-          disabled={visualization.rerolling}
+        </span>
+        <span
+          ref={thumbRef}
           className={cn(
-            "text-white/40 hover:text-cyan-300 transition-colors text-xs font-mono disabled:opacity-30 disabled:pointer-events-none",
-            visualization.rerolling && "animate-pulse",
+            "pointer-events-none absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_10px_rgba(0,240,255,0.9)] transition-opacity",
+            scrubbing ? "opacity-100" : "opacity-0 group-hover:opacity-100",
           )}
-          title={rerollTitle}
-        >
-          ↻
-        </button>
-      </div>
+        />
+      </button>
 
       <audio
         ref={audioRef}

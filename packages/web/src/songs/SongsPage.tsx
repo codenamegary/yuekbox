@@ -9,12 +9,13 @@ import { LoadSongDialog } from "./LoadSongDialog"
 import { LyricOverlay } from "./LyricOverlay"
 import { SongForm } from "./SongForm"
 import { SongList } from "./SongList"
-import { SongPlayer, SongVisualizationControls } from "./SongPlayer"
+import { SongPlayer } from "./SongPlayer"
 import { VisualizationCanvas } from "./VisualizationCanvas"
 import { WinampCanvas } from "./WinampCanvas"
 import { createAudioEngine } from "./songs.audio.engine"
 import { Draft, shouldConfirmLoad } from "./songs.draft"
 import { buildLyricCues } from "./songs.lyrics.timing"
+import { writerHidden } from "./songs.player"
 import { useDeleteSongMutation, useRerollVisualizationMutation } from "./songs.mutations"
 import {
   pickActiveSong,
@@ -59,10 +60,7 @@ export const SongsPage: React.FC = () => {
   const [fullAuto, setFullAuto] = React.useState(false)
   const [playSignal, setPlaySignal] = React.useState(0)
   const [audioPlaying, setAudioPlaying] = React.useState(false)
-  const [editorEngaged, setEditorEngaged] = React.useState(false)
   const pendingAutoPlay = React.useRef<string | null>(null)
-  const wasPlaying = React.useRef(false)
-  const formRegionRef = React.useRef<HTMLDivElement | null>(null)
 
   const songsQuery = useSongsQuery()
   const statusQuery = useStatusQuery()
@@ -164,29 +162,11 @@ export const SongsPage: React.FC = () => {
     lastStage.current = activeStage
   }, [activeStage, winamp])
 
-  const lyricsTakeover = audioPlaying && activeSong?.status === "complete"
-  const editorDimmed = lyricsTakeover && !editorEngaged
+  const writerIsHidden = writerHidden(audioPlaying, activeSong?.status ?? null)
 
   React.useEffect(() => {
     return audio.subscribe(() => setAudioPlaying(audio.isPlaying()))
   }, [audio])
-
-  React.useEffect(() => {
-    if (audioPlaying && !wasPlaying.current) {
-      setEditorEngaged(false)
-    }
-    wasPlaying.current = audioPlaying
-  }, [audioPlaying])
-
-  React.useEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
-      const region = formRegionRef.current
-      if (region !== null && event.target instanceof Node && region.contains(event.target)) return
-      setEditorEngaged(false)
-    }
-    document.addEventListener("pointerdown", onPointerDown)
-    return () => document.removeEventListener("pointerdown", onPointerDown)
-  }, [])
 
   React.useEffect(() => {
     if (pendingAutoPlay.current === null || activeSong === null) return
@@ -258,29 +238,32 @@ export const SongsPage: React.FC = () => {
 
   const aiConfig = aiConfigQuery.data
   const visualsConfigured = aiEnabled && (aiConfig?.visuals.model.trim() ?? "") !== ""
-  const visualizationControls: SongVisualizationControls = {
-    configured: visualsConfigured,
-    status: visualization?.status ?? null,
-    failed: visualizationFailed,
-    detail: visualizationFailed
-      ? (visualizationFailure?.detail ?? null)
-      : visualization?.status === "failed"
-        ? (visualization.errorDetail ?? null)
-        : null,
-    rerolling:
-      rerollVisualization.isPending ||
-      visualization?.status === "rerolling" ||
-      visualization?.status === "pending",
-    onReroll: () => {
-      if (!visualsConfigured) {
-        setSettingsOpen(true)
-        poke()
-        return
-      }
-      if (activeSongId === null) return
-      rerollVisualization.mutate(activeSongId)
+  const visualizationFailedServer = visualization?.status === "failed"
+  const showVisualizationBadge =
+    visualsConfigured && (visualizationFailed || visualizationFailedServer)
+  const visualizationDetail = visualizationFailed
+    ? (visualizationFailure?.detail ?? null)
+    : visualizationFailedServer
+      ? (visualization.errorDetail ?? null)
+      : null
+  const rerolling =
+    rerollVisualization.isPending ||
+    visualization?.status === "rerolling" ||
+    visualization?.status === "pending"
+  const rerollTitle = !visualsConfigured
+    ? "AI visuals are off — click to open settings"
+    : visualizationFailed || visualizationFailedServer
+      ? "Reroll the failed visualization"
+      : "Reroll Visualization"
+  const rerollVisualizationNow = () => {
+    if (!visualsConfigured) {
+      setSettingsOpen(true)
       poke()
-    },
+      return
+    }
+    if (activeSongId === null) return
+    rerollVisualization.mutate(activeSongId)
+    poke()
   }
   const enhance = useEnhanceMutation((kind, text) => {
     if (kind === "style") {
@@ -337,6 +320,43 @@ export const SongsPage: React.FC = () => {
 
       {!fullAutoActive ? (
         <div className="fixed top-8 right-8 z-20 flex items-center gap-2.5 pointer-events-auto">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={rerollVisualizationNow}
+              disabled={rerolling}
+              className={cn(
+                "alien-sigil disabled:opacity-40 disabled:pointer-events-none",
+                rerolling && "active",
+              )}
+              title={rerollTitle}
+            >
+              <span
+                className={cn(
+                  "inline-block leading-none",
+                  rerolling && "animate-spin motion-reduce:animate-none",
+                )}
+              >
+                ↻
+              </span>
+            </button>
+            {showVisualizationBadge ? (
+              <span className="absolute right-0 top-full mt-1.5 flex items-center gap-2 whitespace-nowrap">
+                <span className="font-mono text-3xs tracking-[0.25em] uppercase text-amber-200/70">
+                  visual failed
+                </span>
+                {visualizationDetail !== null ? (
+                  <span
+                    className="max-w-[14rem] truncate font-mono text-3xs text-white/30"
+                    title={visualizationDetail}
+                  >
+                    {visualizationDetail}
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
+          </div>
+          <div className="w-px h-4 bg-white/10 mx-1" />
           {tripModes.map((trip) => (
             <button
               key={trip.mode}
@@ -380,13 +400,10 @@ export const SongsPage: React.FC = () => {
       <main className="relative z-10 w-full h-full flex flex-col p-8 sm:p-14 md:p-16 pointer-events-none">
         {!fullAutoActive ? (
           <div
-            ref={formRegionRef}
             className={cn(
-              "flex-1 min-h-0 overflow-y-auto transition-opacity duration-700",
-              editorDimmed && "opacity-[0.13]",
+              "flex-1 min-h-0 overflow-y-auto transition-[opacity,visibility,transform] duration-700 ease-out",
+              writerIsHidden && "invisible opacity-0 -translate-y-2 pointer-events-none",
             )}
-            onPointerDownCapture={() => setEditorEngaged(true)}
-            onFocusCapture={() => setEditorEngaged(true)}
           >
             <div className="min-h-full flex flex-col justify-center">
               <SongForm
@@ -414,7 +431,6 @@ export const SongsPage: React.FC = () => {
                 }}
                 onToggleFullAuto={() => {
                   setFullAuto((on) => !on)
-                  setEditorEngaged(false)
                   setHistoryOpen(false)
                   setSettingsOpen(false)
                   poke()
@@ -445,17 +461,10 @@ export const SongsPage: React.FC = () => {
           </div>
         ) : null}
 
-        <div className="shrink-0 pt-6">
-          <SongPlayer
-            song={activeSong}
-            engine={audio}
-            onPoke={poke}
-            visualization={visualizationControls}
-          />
-        </div>
+        <SongPlayer song={activeSong} engine={audio} />
       </main>
 
-      <LyricOverlay cues={lyricCues} engine={audio} receded={editorEngaged} muted={visualRunning} />
+      <LyricOverlay cues={lyricCues} engine={audio} muted={visualRunning} />
 
       <LoadSongDialog song={loadCandidate} onCancel={cancelLoad} onConfirm={confirmLoad} />
 

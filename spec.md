@@ -589,26 +589,29 @@ Local form fields: `useState` in `SongForm`. No Jotai unless a second distant tr
 
 One page.
 
-- Style field (textarea). Placeholder names genre, voice, instruments, tempo.
-- Lyrics field (textarea). Placeholder shows `[Verse]` / `[Chorus]` lines.
+- Style and lyrics fields (textareas) side by side. Placeholders name genre, voice, instruments,
+  tempo, and `[Verse]` / `[Chorus]` lines.
 - Generate button. Submits `POST /v1/songs`. Stays enabled so the user can queue another Song. Show queue depth from `/v1/status`.
 - Active Song card: status, stage label, error text.
-- Player: native `<audio controls src="/v1/songs/{id}/audio">` when `complete`.
+- Player: play/pause and the seek bar live in the top-left corner, mirroring the top-right control
+  cluster. The play sigil is a circle in the same style. The seek bar grows a grabbable, draggable
+  thumb on hover; click-to-seek still works. While a complete Song plays, the writer (style, lyrics,
+  reference, buttons, pips) fades out completely; pause or stop fades it back in.
 - Lyrics overlay: while a complete Song plays, its lines fade in and out at the center of the
   page. The calibration's cues are the timeline and show their text as-is, so the overlay displays
   exactly what was sung. Without a calibration the lines are spread across the stored ABC vocal
   melody, scaled to the audio duration. When both are missing, lines spread across the Song
-  instead. Each line settles in 0.4 s and fades out near its end. The editor dims while the overlay
-  is active and returns when the user touches it. A cue carries the active `[Tag]` as its section
-  when its text matches a written line.
+  instead. Each line settles in 0.4 s and fades out near its end. A cue carries the active `[Tag]` as
+  its section when its text matches a written line.
 - Backdrop: the four hand-written trip modes run behind everything. When the active Song has a
   ready visualization (or a reroll in flight), its canvas replaces the trip mode. The visual
   receives audio frames every `requestAnimationFrame` and lyric cues on change; the overlay hides
   while it runs and returns on failure. A swap happens when the checksum changes.
-- Reroll: `SongPlayer` always shows a reroll control beside the pulse button. It rerolls the active
-  Song when AI is on and the visuals writer has a model, pulses while a run is in flight, and opens
-  AI settings when the visuals writer is unconfigured. A failed authoring run or a browser-side
-  compile/render failure shows a small badge; reroll clears it and the trip mode covers the gap.
+- Reroll: the leftmost item in the top-right control cluster (and the failed-visual badge below it).
+  It rerolls the active Song when AI is on and the visuals writer has a model, spins and glows while
+  a run is in flight, and opens AI settings when the visuals writer is unconfigured. A failed
+  authoring run or a browser-side compile/render failure shows a small badge; reroll clears it and
+  the trip mode covers the gap.
 - History list: newest first, the title over its style and status or duration, click to play.
 
 Stage labels:
