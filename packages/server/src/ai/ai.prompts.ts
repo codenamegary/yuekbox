@@ -152,19 +152,32 @@ const shuffled = <T>(items: readonly T[], random: () => number): readonly T[] =>
 const paletteLine = (label: string, hints: readonly string[], random: () => number): string =>
   `${label}: ${shuffled(hints, random).join(" · ")}`
 
-const styleBriefDimensions = `- Genre: one lane, or a deliberate mashup of two (name both).
+const styleBriefDimensions = `- Language: the language the words are sung in, listed first (for example English,
+  Mandarin, Cantonese, Japanese). Infer it from the lyrics when they are supplied;
+  otherwise keep what the STYLE implies and default to English.
+- Genre: one lane, or a deliberate mashup of two (name both).
 - Voice: a specific singer profile — sex (male / female / duet / choir), range, timbre,
   delivery, era. State it plainly and vary it: never reach for the same breathy
   female lead by default.
 - Instrumentation: 3 to 6 named instruments or sound sources.
 - Mood: the emotional weather in a few words.
 - Tempo: a BPM or an unmistakable feel.
-- Harmony: name a key plus one or two chord colors or a short progression.
+- Harmony: a key or a harmonic color only when it helps — the planner writes the chords.
 - Production: era, space, texture.`
 
 const wordsRule =
   "Word choice: slang, dialect, and profanity only where the song calls for them; " +
   "slurs are never allowed."
+
+const styleStackRule =
+  "Format: one comma-separated stack of short descriptors, strongest first. " +
+  "No labels, no full sentences, no square brackets of any kind. Aim for 25 to 50 words. " +
+  'May add "no <instrument>" to drop one instrument — nothing else negative.'
+
+const plainTextRule =
+  "Plain text only: no markdown of any kind (no bold, italics, headings, bullets, " +
+  "numbered lists, backticks, code fences, links), no semicolons, no em dashes. " +
+  "Commas, periods, question marks, exclamation points, and apostrophes are fine."
 
 const lyricsLineRule =
   "Every sung line goes on its own line, ending in a single newline. Section tags like " +
@@ -187,13 +200,15 @@ export const buildStyleEnhancePrompt = (input: {
   const lyricsContext =
     lyrics === ""
       ? ""
-      : `\nThe lyrics, for voice casting and mood (do not repeat or rewrite them):\n${lyrics.slice(0, 600)}\n`
-  return `Rewrite the STYLE below into one vivid production brief for a text-to-song model (YuE2).
+      : `\nThe lyrics, for voice casting, language, and mood (do not repeat or rewrite them):\n${lyrics.slice(0, 600)}\n`
+  return `Rewrite the STYLE below into one production brief for a text-to-song model (YuE2).
 Keep the user's musical intent. Where the STYLE is silent or vague, decide for me.
 Make every dimension explicit — never leave the voice implied or the genre generic:
 
 ${styleBriefDimensions}
 
+${styleStackRule}
+${plainTextRule}
 ${wordsRule}
 Keep it under ${maxStyleWords} words. Output ONLY the brief — no preamble, no quotes, no commentary.
 ${lyricsContext}
@@ -217,6 +232,7 @@ ${songStructures}`
 ${task}
 Lyrics must use explicit section tags like [Verse], [Chorus], [Bridge], [Outro].
 ${lyricsLineRule}
+${plainTextRule}
 ${wordsRule}
 Keep the whole song between 150 and 400 words. Output ONLY the lyrics.
 
@@ -243,9 +259,12 @@ Make every dimension explicit — never leave the vocalist implied or the genre 
 
 ${styleBriefDimensions}
 
+${styleStackRule}
+${plainTextRule}
 ${wordsRule}
-Write one vivid paragraph under ${maxStyleWords} words. Output ONLY the brief — no
-preamble, no labels, no quotes, no commentary.
+The lyrics are English — lead the stack with English.
+Write the stack under ${maxStyleWords} words. Output ONLY the brief — no preamble,
+no labels, no quotes, no commentary.
 `
 
 /**
@@ -253,10 +272,11 @@ preamble, no labels, no quotes, no commentary.
  * model sing its vocabulary back, so the lyrics are written style-blind.
  */
 export const buildRandomLyricsPrompt =
-  (): string => `Write the complete lyric sheet for a brand new song.
+  (): string => `Write the complete lyric sheet in English for a brand new song.
 
 Rules, all mandatory:
 - ${lyricsLineRule}
+- ${plainTextRule}
 - 150 to 400 words.
 - ${wordsRule}
 
