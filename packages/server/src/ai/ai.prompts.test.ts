@@ -40,6 +40,31 @@ describe("buildStyleEnhancePrompt", () => {
     expect(prompt).toContain("under 140 words")
   })
 
+  test("leads the dimensions with the language of the sung words", () => {
+    const prompt = buildStyleEnhancePrompt({ style: "dark techno" })
+    expect(prompt).toContain("- Language:")
+    expect(prompt).toContain("default to English")
+    expect(prompt.indexOf("- Language:")).toBeLessThan(prompt.indexOf("- Genre:"))
+  })
+
+  test("asks for a descriptor stack, not a paragraph", () => {
+    const prompt = buildStyleEnhancePrompt({ style: "dark techno" })
+    expect(prompt).toContain("comma-separated stack")
+    expect(prompt).toContain("25 to 50 words")
+    expect(prompt).toContain("No labels, no full sentences, no square brackets")
+  })
+
+  test("allows one exclusion for a dropped instrument", () => {
+    const prompt = buildStyleEnhancePrompt({ style: "dark techno" })
+    expect(prompt).toContain('"no <instrument>"')
+  })
+
+  test("demands plain text with no markdown or fancy punctuation", () => {
+    const prompt = buildStyleEnhancePrompt({ style: "dark techno" })
+    expect(prompt).toContain("no markdown of any kind")
+    expect(prompt).toContain("no semicolons, no em dashes")
+  })
+
   test("ships no palette and no nudge", () => {
     const prompt = buildStyleEnhancePrompt({ style: "dark techno" })
     expect(prompt).not.toContain("lean toward")
@@ -54,6 +79,15 @@ describe("buildStyleEnhancePrompt", () => {
     })
     expect(prompt).toContain("voice casting")
     expect(prompt).toContain("I lost the farm")
+  })
+
+  test("asks the lyrics for their language, not just their mood", () => {
+    const prompt = buildStyleEnhancePrompt({
+      style: "country",
+      lyrics: "[Verse]\n月亮升起来",
+    })
+    expect(prompt).toContain("for voice casting, language, and mood")
+    expect(prompt).toContain("月亮升起来")
   })
 
   test("omits lyrics context when empty", () => {
@@ -86,6 +120,12 @@ describe("buildLyricsEnhancePrompt", () => {
     expect(prompt).toContain("Never pack a verse into one paragraph")
   })
 
+  test("demands plain text, same as the style writer", () => {
+    const prompt = buildLyricsEnhancePrompt({ lyrics: "[Verse]\nx" })
+    expect(prompt).toContain("no markdown of any kind")
+    expect(prompt).toContain("no semicolons, no em dashes")
+  })
+
   test("brand-new mode offers a menu of song structures to pick from", () => {
     const prompt = buildLyricsEnhancePrompt({ lyrics: "" })
     expect(prompt).toContain("[Verse] → [Chorus] → [Verse] → [Chorus] → [Bridge] → [Outro]")
@@ -116,6 +156,26 @@ describe("buildRandomStylePrompt", () => {
     expect(prompt).toContain("under 140 words")
   })
 
+  test("writes the stack, not a vivid paragraph", () => {
+    const prompt = buildRandomStylePrompt()
+    expect(prompt).toContain("comma-separated stack")
+    expect(prompt).toContain("25 to 50 words")
+  })
+
+  test("demands plain text with no markdown or fancy punctuation", () => {
+    const prompt = buildRandomStylePrompt()
+    expect(prompt).toContain("no markdown of any kind")
+    expect(prompt).toContain("no semicolons, no em dashes")
+  })
+
+  test("pins the language to the English lyrics it pairs with", () => {
+    expect(buildRandomStylePrompt()).toContain("The lyrics are English")
+  })
+
+  test("leaves the chords to the planner", () => {
+    expect(buildRandomStylePrompt()).toContain("the planner writes the chords")
+  })
+
   test("shuffles the palette on every call", () => {
     expect(buildRandomStylePrompt()).not.toBe(buildRandomStylePrompt())
   })
@@ -130,6 +190,16 @@ describe("buildRandomLyricsPrompt", () => {
     expect(prompt).toContain("slurs are never allowed")
     expect(prompt).toContain("ONLY the lyric sheet")
     expect(prompt).not.toContain("style")
+  })
+
+  test("demands plain text too", () => {
+    const prompt = buildRandomLyricsPrompt()
+    expect(prompt).toContain("no markdown of any kind")
+    expect(prompt).toContain("no semicolons, no em dashes")
+  })
+
+  test("writes in English so the style and lyrics agree", () => {
+    expect(buildRandomLyricsPrompt()).toContain("in English")
   })
 })
 
