@@ -97,29 +97,8 @@ test("rejects a score on a song that is not complete", () => {
   expect(SongSchema.safeParse({ ...queued, scoreAbc: "X:1" }).success).toBe(false)
 })
 
-test("parses a calibration fixture", () => {
+test("parses a calibration whose cues time the sung lines", () => {
   const calibration: Calibration = {
-    version: 1,
-    source: "sheetsage2",
-    spans: [{ startSeconds: 12.3, endSeconds: 16.8 }],
-  }
-  expect(CalibrationSchema.parse(calibration)).toEqual(calibration)
-})
-
-test("parses a calibration whose spans carry note counts", () => {
-  const calibration: Calibration = {
-    version: 1,
-    source: "sheetsage2",
-    spans: [{ startSeconds: 12.3, endSeconds: 16.8, noteCount: 9 }],
-  }
-  expect(CalibrationSchema.parse(calibration)).toEqual(calibration)
-})
-
-test("parses a transcription calibration whose cues time the lines", () => {
-  const calibration: Calibration = {
-    version: 1,
-    source: "transcribe",
-    spans: [{ startSeconds: 12.3, endSeconds: 16.8, noteCount: 4 }],
     cues: [
       { text: "hello world", startSeconds: 12.3, endSeconds: 14.1 },
       { text: "second line here", startSeconds: 14.1, endSeconds: 16.8 },
@@ -129,45 +108,20 @@ test("parses a transcription calibration whose cues time the lines", () => {
 })
 
 test("rejects a cue with empty text or a negative time", () => {
-  const parse = (cues: unknown) =>
-    CalibrationSchema.safeParse({
-      version: 1,
-      source: "transcribe",
-      spans: [{ startSeconds: 1, endSeconds: 2 }],
-      cues,
-    }).success
+  const parse = (cues: unknown) => CalibrationSchema.safeParse({ cues }).success
 
   expect(parse([{ text: "", startSeconds: 1, endSeconds: 2 }])).toBe(false)
   expect(parse([{ text: "hi", startSeconds: -1, endSeconds: 2 }])).toBe(false)
   expect(parse([{ text: "hi", startSeconds: 1, endSeconds: 2 }])).toBe(true)
 })
 
-test("rejects a span with a non-positive or fractional note count", () => {
-  const span = (noteCount: number) =>
-    CalibrationSchema.safeParse({
-      version: 1,
-      source: "sheetsage2",
-      spans: [{ startSeconds: 1, endSeconds: 2, noteCount }],
-    }).success
-
-  expect(span(0)).toBe(false)
-  expect(span(-3)).toBe(false)
-  expect(span(2.5)).toBe(false)
-  expect(span(1)).toBe(true)
-})
-
-test("rejects a calibration with a bad version, source, or empty spans", () => {
-  expect(CalibrationSchema.safeParse({ version: 2, source: "sheetsage2", spans: [] }).success).toBe(
-    false,
-  )
-  expect(CalibrationSchema.safeParse({ version: 1, source: "other", spans: [] }).success).toBe(
-    false,
-  )
+test("rejects a calibration with no cues or a retired field", () => {
+  expect(CalibrationSchema.safeParse({ cues: [] }).success).toBe(false)
+  expect(CalibrationSchema.safeParse({}).success).toBe(false)
   expect(
     CalibrationSchema.safeParse({
-      version: 1,
-      source: "sheetsage2",
-      spans: [{ startSeconds: -1, endSeconds: 2 }],
+      cues: [{ text: "hi", startSeconds: 1, endSeconds: 2 }],
+      spans: [{ startSeconds: 1, endSeconds: 2 }],
     }).success,
   ).toBe(false)
 })
@@ -176,9 +130,7 @@ test("a complete song carries its calibration", () => {
   const withCalibration: Song = {
     ...completeSong,
     calibration: {
-      version: 1,
-      source: "sheetsage2",
-      spans: [{ startSeconds: 12.3, endSeconds: 16.8 }],
+      cues: [{ text: "hello world", startSeconds: 12.3, endSeconds: 16.8 }],
     },
   }
   expect(SongSchema.parse(withCalibration)).toEqual(withCalibration)
@@ -199,9 +151,7 @@ test("rejects a calibration on a song that is not complete", () => {
     SongSchema.safeParse({
       ...queued,
       calibration: {
-        version: 1,
-        source: "sheetsage2",
-        spans: [{ startSeconds: 1, endSeconds: 2 }],
+        cues: [{ text: "hi", startSeconds: 1, endSeconds: 2 }],
       },
     }).success,
   ).toBe(false)

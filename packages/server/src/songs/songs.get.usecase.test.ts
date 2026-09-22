@@ -41,9 +41,7 @@ test("get fills the score and the reference summary from disk", async () => {
 
 test("get fills the calibration from disk", async () => {
   const calibration: Calibration = {
-    version: 1,
-    source: "sheetsage2",
-    spans: [{ startSeconds: 12.3, endSeconds: 16.8 }],
+    cues: [{ text: "hello world", startSeconds: 12.3, endSeconds: 16.8 }],
   }
   const getSong = makeGetSong({
     findSongById: async () => song,

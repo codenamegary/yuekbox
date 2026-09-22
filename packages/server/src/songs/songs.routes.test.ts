@@ -14,9 +14,7 @@ const songId = "01J8K3R4P9ABCDEFGHJKMNPQRS"
 const queuedSong = songFixture()
 const scoreAbcFixture = "X:1\nM:4/4\nL:1/8\nK:C\nV: Vocal\nc8|\n"
 const calibrationFixture: Calibration = {
-  version: 1,
-  source: "sheetsage2",
-  spans: [{ startSeconds: 12.3, endSeconds: 16.8 }],
+  cues: [{ text: "hello world", startSeconds: 12.3, endSeconds: 16.8 }],
 }
 const completeSong = songFixture({
   status: "complete",

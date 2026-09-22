@@ -18,13 +18,6 @@ export const SongStageSchema = z.enum([
   "sync",
 ])
 
-export const VocalSpanSchema = z.strictObject({
-  startSeconds: z.number().nonnegative(),
-  endSeconds: z.number().nonnegative(),
-  /** Notes sung inside the span, used to line lyric lines up with real notes. */
-  noteCount: z.number().int().positive().optional(),
-})
-
 export const LyricCueSchema = z.strictObject({
   text: z.string().min(1),
   startSeconds: z.number().nonnegative(),
@@ -32,11 +25,7 @@ export const LyricCueSchema = z.strictObject({
 })
 
 export const CalibrationSchema = z.strictObject({
-  version: z.literal(1),
-  source: z.enum(["sheetsage2", "transcribe"]),
-  spans: z.array(VocalSpanSchema).min(1),
-  /** Per-line cues when the calibration timed the written lines directly. */
-  cues: z.array(LyricCueSchema).min(1).optional(),
+  cues: z.array(LyricCueSchema).min(1),
 })
 
 export const CreateSongBodySchema = z.strictObject({
@@ -193,7 +182,6 @@ export const SongsCollectionSchema = createCollectionSchema(SongSchema)
 
 export type SongStatus = z.infer<typeof SongStatusSchema>
 export type SongStage = z.infer<typeof SongStageSchema>
-export type VocalSpan = z.infer<typeof VocalSpanSchema>
 export type LyricCue = z.infer<typeof LyricCueSchema>
 export type Calibration = z.infer<typeof CalibrationSchema>
 export type CreateSongBody = z.infer<typeof CreateSongBodySchema>

@@ -9,8 +9,9 @@ Lyric calibration from a Whisper transcript stream.
   4. Display lines are grouped from the surviving stream at pauses and
      sentence ends, and their timings come straight from the words.
 
-Writes a rich alignment.json and an app-shaped calibration.json
-(version 1, source "transcribe"). Everything stays next to the song.
+Writes a rich alignment.json for inspection and the app-shaped calibration.json
+the server reads: a list of display cues, nothing else. Everything stays next
+to the song.
 """
 
 from __future__ import annotations
@@ -210,30 +211,6 @@ def build_transcript_cues(
     return cues
 
 
-def build_spans(units: list[dict], duration_seconds: float) -> list[dict]:
-    """Group words into phrase spans, splitting at a gap over a breath."""
-    timed = sorted(units, key=lambda unit: unit["startSeconds"])
-    spans: list[dict] = []
-    last_start: float | None = None
-    for unit in timed:
-        start = min(max(unit["startSeconds"], 0.0), duration_seconds)
-        end = min(max(unit["endSeconds"], 0.0), duration_seconds)
-        current = spans[-1] if spans else None
-        if current is None or last_start is None or start - last_start > PAUSE_GAP_SECONDS:
-            spans.append(
-                {
-                    "startSeconds": round(start, 3),
-                    "endSeconds": round(end, 3),
-                    "noteCount": 1,
-                }
-            )
-        else:
-            current["endSeconds"] = max(current["endSeconds"], round(end, 3))
-            current["noteCount"] += 1
-        last_start = start
-    return spans
-
-
 def main() -> int:
     args = parse_args()
     audio_path = Path(args.audio).resolve()
@@ -263,8 +240,7 @@ def main() -> int:
     gate_seconds = time.time() - gate_started
 
     cues = build_transcript_cues(units, duration_seconds)
-    spans = build_spans(units, duration_seconds)
-    print(f"[align] {len(cues)} transcript cues, {len(spans)} phrase spans")
+    print(f"[align] {len(cues)} transcript cues")
 
     report = {
         "version": 1,
@@ -286,7 +262,6 @@ def main() -> int:
             }
             for unit in units
         ],
-        "spans": spans,
         "cues": cues,
     }
     alignment_path = out_dir / "alignment.json"
@@ -295,12 +270,6 @@ def main() -> int:
 
     if args.calibration_out is not None:
         calibration = {
-            "version": 1,
-            "source": "transcribe",
-            "spans": [
-                {"startSeconds": span["startSeconds"], "endSeconds": span["endSeconds"]}
-                for span in spans
-            ],
             "cues": [
                 {
                     "text": cue["text"],

@@ -1,4 +1,4 @@
-import { Calibration, VocalSpan } from "contracts/http/songs"
+import { Calibration } from "contracts/http/songs"
 import { PutFile, RemoveFile } from "../media/media.ports"
 import { CompleteSongInput, Song } from "./songs.models"
 import { calibrationKey, generatedAudioKey, scoreKey } from "./songs.files"
@@ -14,10 +14,8 @@ export type CompleteSongDeps = Readonly<{
 
 const encodeText = (value: string): Uint8Array => new TextEncoder().encode(value)
 
-const encodeCalibration = (spans: readonly VocalSpan[]): Uint8Array => {
-  const calibration: Calibration = { version: 1, source: "sheetsage2", spans: [...spans] }
-  return encodeText(JSON.stringify(calibration))
-}
+const encodeCalibration = (calibration: Calibration): Uint8Array =>
+  encodeText(JSON.stringify(calibration))
 
 export const makeCompleteSong =
   (deps: CompleteSongDeps): CompleteSong =>
@@ -32,7 +30,7 @@ export const makeCompleteSong =
     if (input.scoreAbc !== null) {
       await deps.putFile(scoreKey(folderKey), encodeText(input.scoreAbc))
     }
-    if (input.calibration !== null && input.calibration.length > 0) {
+    if (input.calibration !== null && input.calibration.cues.length > 0) {
       await deps.putFile(calibrationKey(folderKey), encodeCalibration(input.calibration))
     }
 

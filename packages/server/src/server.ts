@@ -5,9 +5,13 @@ import { composeServer } from "./compose"
 import { openDatabase } from "./db/client"
 import { checkFfmpeg, makeEncodeFlacToMp3 } from "./generation/generation.ffmpeg.adapters"
 import {
+  checkLyricAlign,
+  LyricAlignAdapterEnv,
+  makeRunLyricAlign,
+} from "./generation/generation.lyricalign.adapters"
+import {
   checkSheetsage2,
   makeRunTranscribe,
-  makeRunVocalTranscribe,
   resolveSheetsage2BaseModel,
   Sheetsage2AdapterEnv,
 } from "./generation/generation.sheetsage2.adapters"
@@ -39,6 +43,11 @@ const readEnv = () => {
     sheetsage2BaseModel: resolveSheetsage2BaseModel(kitRoot, process.env.SHEETSAGE2_BASE_MODEL),
     sheetsage2Device: process.env.SHEETSAGE2_DEVICE ?? "cuda",
     sheetsage2Offline: process.env.SHEETSAGE2_OFFLINE !== "0",
+    lyricAlignPython:
+      process.env.LYRIC_ALIGN_PYTHON ?? resolve(kitRoot, ".venv-lyricalign/bin/python"),
+    lyricAlignScript:
+      process.env.LYRIC_ALIGN_SCRIPT ?? resolve(import.meta.dir, "../tools/lyric-align/align.py"),
+    lyricAlignDevice: process.env.LYRIC_ALIGN_DEVICE ?? "cuda:0",
     referenceMaxBytes: Number(process.env.REFERENCE_MAX_BYTES ?? 26214400),
   }
 }
@@ -51,6 +60,10 @@ const yue2State = checkYue2({ kitRoot: env.kitRoot, pythonBin: env.pythonBin })
 const sheetsage2State = checkSheetsage2({
   pythonBin: env.sheetsage2Python,
   scriptPath: env.sheetsage2Script,
+})
+const lyricAlignState = checkLyricAlign({
+  pythonBin: env.lyricAlignPython,
+  scriptPath: env.lyricAlignScript,
 })
 if (ffmpegState === "missing") {
   console.warn(
@@ -71,6 +84,11 @@ if (sheetsage2State === "missing") {
     `sheetsage2 model not found at ${env.sheetsage2Model}; reference covers will fail until it is downloaded`,
   )
 }
+if (lyricAlignState === "missing") {
+  console.warn(
+    `lyric-align not found (python=${env.lyricAlignPython}, script=${env.lyricAlignScript}); songs will complete without lyric cues`,
+  )
+}
 
 const startedAt = new Date().toISOString()
 const serviceState: { value: ServiceState } = { value: "starting" }
@@ -85,6 +103,13 @@ const sheetsage2Env: Sheetsage2AdapterEnv = {
   cwd: env.kitRoot,
 }
 
+const lyricAlignEnv: LyricAlignAdapterEnv = {
+  pythonBin: env.lyricAlignPython,
+  scriptPath: env.lyricAlignScript,
+  device: env.lyricAlignDevice,
+  cwd: env.kitRoot,
+}
+
 const { app, songs } = composeServer({
   db: database.db,
   mediaDir: env.mediaDir,
@@ -95,7 +120,7 @@ const { app, songs } = composeServer({
     gpuBudget: env.gpuBudget,
   }),
   runTranscribe: makeRunTranscribe(sheetsage2Env),
-  runVocalTranscribe: makeRunVocalTranscribe(sheetsage2Env),
+  runLyricAlign: makeRunLyricAlign(lyricAlignEnv),
   encodeFlacToMp3: makeEncodeFlacToMp3({ ffmpegBin: env.ffmpegBin }),
   referenceMaxBytes: env.referenceMaxBytes,
   service: {

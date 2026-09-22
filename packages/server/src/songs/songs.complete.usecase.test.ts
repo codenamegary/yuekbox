@@ -41,7 +41,7 @@ test("complete writes the mp3, the score, and the calibration, then marks the ro
     songId,
     mp3: new Uint8Array([1, 2, 3, 4]),
     scoreAbc: "X:1\nK:C\nC D E|",
-    calibration: [{ startSeconds: 12.3, endSeconds: 16.8, noteCount: 9 }],
+    calibration: { cues: [{ text: "hello world", startSeconds: 12.3, endSeconds: 16.8 }] },
     durationSeconds: 152.5,
     truncated: { abc: false, semantic: false },
   })
@@ -61,9 +61,7 @@ test("complete writes the mp3, the score, and the calibration, then marks the ro
   expect(
     JSON.parse(new TextDecoder().decode(harness.files.get(`${folderKey}/calibration.json`))),
   ).toEqual({
-    version: 1,
-    source: "sheetsage2",
-    spans: [{ startSeconds: 12.3, endSeconds: 16.8, noteCount: 9 }],
+    cues: [{ text: "hello world", startSeconds: 12.3, endSeconds: 16.8 }],
   })
   expect(harness.completed).toEqual([
     { durationSeconds: 152.5, truncated: { abc: false, semantic: false } },
@@ -85,14 +83,14 @@ test("complete skips the score and calibration files when there is nothing to wr
   expect(harness.calls).toEqual([`put:${folderKey}/generated_${songId}.mp3`, "complete"])
 })
 
-test("complete skips an empty calibration span list", async () => {
+test("complete skips an empty cue list", async () => {
   const harness = makeHarness()
 
   await harness.completeSong({
     songId,
     mp3: new Uint8Array([1]),
     scoreAbc: null,
-    calibration: [],
+    calibration: { cues: [] },
     durationSeconds: 10,
     truncated: { abc: true, semantic: false },
   })
@@ -108,7 +106,7 @@ test("a failed row update removes the files it wrote and rethrows", async () => 
       songId,
       mp3: new Uint8Array([1]),
       scoreAbc: "X:1",
-      calibration: [{ startSeconds: 1, endSeconds: 2 }],
+      calibration: { cues: [{ text: "hello world", startSeconds: 1, endSeconds: 2 }] },
       durationSeconds: 10,
       truncated: { abc: false, semantic: false },
     })

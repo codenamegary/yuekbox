@@ -16,6 +16,9 @@ the audio.
 
 ## Usage
 
+The generation worker runs this on every rendered song at the `sync` stage. To
+run it by hand:
+
 ```bash
 ~/sites/yue2/.venv-lyricalign/bin/python \
   packages/server/tools/lyric-align/align.py \
@@ -25,10 +28,14 @@ the audio.
 ```
 
 - `alignment/alignment.json` is the rich record: every word with timings, the
-  display cues, phrase spans, and stage timings.
+  display cues, and stage timings.
 - `alignment/demucs/.../vocals.wav` is cached and reused on later runs.
-- `calibration.json` is the app-shaped file the server reads. It uses
-  `source: "transcribe"` and carries the display lines as `cues`.
+- `calibration.json` is the app-shaped file the server reads: `{ "cues": [...] }`.
+
+The server picks the interpreter and script up from `LYRIC_ALIGN_PYTHON` and
+`LYRIC_ALIGN_SCRIPT`, and the device from `LYRIC_ALIGN_DEVICE` (default
+`cuda:0`). Missing pieces are logged at boot, and a song still completes without
+a calibration when the run fails.
 
 ## Notes
 
@@ -39,10 +46,3 @@ the audio.
 - Why large-v3-turbo: whisper-small.en looped over an ad-libbed intro and missed
   three whole lines. Large-v3-turbo recovered them and transcribed the clean
   rap songs nearly word for word.
-- The line splitter this tool used to mirror for written-lyric matching is gone.
-  Transcription calibrations are the only mode now.
-
-## Status
-
-Experiment. Not wired into the generation worker, which still writes SheetSage2
-spans for new songs. Run this by hand and the calibration sits next to the song.
