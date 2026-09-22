@@ -152,182 +152,188 @@ export const SongForm: React.FC<SongFormProps> = ({
       : Math.max(0, Math.min(100, (progress.completed / progress.total) * 100))
 
   return (
-    <div className="w-full max-w-lg pointer-events-auto space-y-6">
-      <div className="space-y-2">
-        <div className="flex items-center justify-between pr-1">
-          <Label
-            htmlFor="style-input"
-            className="font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
-          >
-            style
-          </Label>
-          {aiEnabled ? (
-            <EnhancePill
-              kind="style"
-              pending={enhancing === "style"}
-              disabled={enhancing !== null}
-              onEnhance={onEnhance}
-            />
-          ) : null}
-        </div>
-        <div className="hairline-glass-box rounded-2xl p-4">
-          <Textarea
-            id="style-input"
-            rows={4}
-            value={style}
-            onChange={(event) => onStyleChange(event.target.value)}
-            placeholder="genre, voice, instruments, tempo"
-            className="w-full min-h-[4lh] max-h-[8lh] overflow-y-auto border-0 bg-transparent p-0 text-sm text-slate-100 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15 md:text-sm"
-          />
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <div className="flex items-center justify-between pr-1">
-          <Label
-            htmlFor="lyrics-input"
-            className="font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
-          >
-            lyrics
-          </Label>
-          {aiEnabled ? (
-            <EnhancePill
-              kind="lyrics"
-              pending={enhancing === "lyrics"}
-              disabled={enhancing !== null}
-              onEnhance={onEnhance}
-            />
-          ) : null}
-        </div>
-        <div className="hairline-glass-box rounded-2xl p-4">
-          <Textarea
-            id="lyrics-input"
-            rows={4}
-            value={lyrics}
-            onChange={(event) => onLyricsChange(event.target.value)}
-            placeholder={"[Verse]\nwrite the words here\n\n[Chorus]\n..."}
-            className="w-full min-h-[4lh] max-h-[8lh] overflow-y-auto border-0 bg-transparent p-0 text-xs font-mono text-slate-200 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15"
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center gap-3 min-h-[1.75rem]">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="audio/*"
-          onChange={onFileChange}
-          className="hidden"
-          aria-label="Upload a reference song"
-        />
-        {reference === null ? (
-          <button
-            type="button"
-            onClick={pickFile}
-            disabled={uploadReference.isPending}
-            title="Upload a reference song; its melody guides the cover"
-            className={cn(
-              "inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1",
-              "font-mono text-3xs tracking-[0.3em] uppercase text-cyan-300/70 transition-colors",
-              "hover:border-cyan-400/60 hover:text-cyan-200 disabled:opacity-40",
-              uploadFailed && "border-rose-400/40 text-rose-300/80",
-            )}
-          >
-            <span>{uploadReference.isPending ? "◌" : "＋"}</span>
-            {uploadReference.isPending ? "uploading…" : "reference song"}
-          </button>
-        ) : (
-          <span className="inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-500/10 px-3 py-1 font-mono text-3xs tracking-[0.2em] uppercase text-cyan-200">
-            <span title="Melody reference attached">⌁</span>
-            <span className="max-w-[16rem] truncate">{reference.filename}</span>
-            <button
-              type="button"
-              onClick={clearReference}
-              title="Remove reference"
-              className="text-cyan-200/60 hover:text-white transition-colors"
-            >
-              ✕
-            </button>
-          </span>
-        )}
-        {uploadFailed ? (
-          <span className="font-mono text-3xs tracking-widest text-rose-300/90 uppercase">
-            reference upload failed
-          </span>
-        ) : null}
-      </div>
-
-      <div className="flex items-center gap-4 pt-1">
-        {aiEnabled ? (
-          <Button
-            type="button"
-            size="icon"
-            onClick={onRandom}
-            disabled={randomPending}
-            title="Random song — AI writes it, Yuekbox plays it"
-            className="group relative w-12 h-12 rounded-full border border-white/20 bg-white/[0.04] hover:bg-fuchsia-500/20 hover:border-fuchsia-400/70 transition-all duration-500 shadow-[0_0_25px_rgba(232,121,249,0.15)] active:scale-95 disabled:opacity-30"
-          >
-            <span className="font-mono text-lg text-white/70 group-hover:text-white group-hover:rotate-180 transition-all duration-500">
-              ⚄
-            </span>
-          </Button>
-        ) : null}
-
-        <Button
-          type="button"
-          size="icon"
-          onClick={submit}
-          disabled={!canGenerate}
-          title="Generate Song (Click to run 5-stage synthesis)"
-          className="group relative w-12 h-12 rounded-full border border-white/20 bg-white/[0.04] hover:bg-cyan-500/20 hover:border-cyan-400/80 transition-all duration-500 shadow-[0_0_25px_rgba(0,240,255,0.2)] active:scale-95 disabled:opacity-30"
-        >
-          <span className="font-mono text-base text-white/80 group-hover:text-white group-hover:scale-125 transition-transform duration-300">
-            ✦
-          </span>
-        </Button>
-
-        <div
-          className={cn(
-            "relative transition-opacity duration-500",
-            activeSong?.status === "running" ? "opacity-100" : "opacity-40",
-          )}
-        >
-          <div id="stages-pips" className="flex items-center gap-2.5">
-            {stages.map((stage, index) => (
-              <span
-                key={stage}
-                className={pipClassName(activeSong, stages, index)}
-                title={stageLabels[stage]}
-              />
-            ))}
-          </div>
-          {progressPercent !== null ? (
-            <div className="absolute left-0 right-0 top-full mt-1.5 h-px overflow-hidden bg-white/10">
-              <div
-                className="h-full bg-cyan-400/80 transition-[width] duration-700 ease-out"
-                style={{ width: `${progressPercent}%` }}
+    <div className="w-full max-w-4xl mx-auto pointer-events-auto space-y-3">
+      <div className="rounded-3xl bg-black/85 p-5 sm:p-6">
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pr-1">
+              <Label
+                htmlFor="lyrics-input"
+                className="font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
+              >
+                lyrics
+              </Label>
+              {aiEnabled ? (
+                <EnhancePill
+                  kind="lyrics"
+                  pending={enhancing === "lyrics"}
+                  disabled={enhancing !== null}
+                  onEnhance={onEnhance}
+                />
+              ) : null}
+            </div>
+            <div className="hairline-glass-box rounded-2xl p-4">
+              <Textarea
+                id="lyrics-input"
+                rows={12}
+                value={lyrics}
+                onChange={(event) => onLyricsChange(event.target.value)}
+                placeholder={"[Verse]\nwrite the words here\n\n[Chorus]\n..."}
+                className="w-full h-[12lh] overflow-y-auto border-0 bg-transparent p-0 text-xs font-mono text-slate-200 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15"
               />
             </div>
-          ) : null}
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between pr-1">
+                <Label
+                  htmlFor="style-input"
+                  className="font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
+                >
+                  style
+                </Label>
+                {aiEnabled ? (
+                  <EnhancePill
+                    kind="style"
+                    pending={enhancing === "style"}
+                    disabled={enhancing !== null}
+                    onEnhance={onEnhance}
+                  />
+                ) : null}
+              </div>
+              <div className="hairline-glass-box rounded-2xl p-4">
+                <Textarea
+                  id="style-input"
+                  rows={4}
+                  value={style}
+                  onChange={(event) => onStyleChange(event.target.value)}
+                  placeholder="genre, voice, instruments, tempo"
+                  className="w-full min-h-[4lh] max-h-[8lh] overflow-y-auto border-0 bg-transparent p-0 text-sm text-slate-100 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15 md:text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 min-h-[1.75rem]">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="audio/*"
+                onChange={onFileChange}
+                className="hidden"
+                aria-label="Upload a reference song"
+              />
+              {reference === null ? (
+                <button
+                  type="button"
+                  onClick={pickFile}
+                  disabled={uploadReference.isPending}
+                  title="Upload a reference song; its melody guides the cover"
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1",
+                    "font-mono text-3xs tracking-[0.3em] uppercase text-cyan-300/70 transition-colors",
+                    "hover:border-cyan-400/60 hover:text-cyan-200 disabled:opacity-40",
+                    uploadFailed && "border-rose-400/40 text-rose-300/80",
+                  )}
+                >
+                  <span>{uploadReference.isPending ? "◌" : "＋"}</span>
+                  {uploadReference.isPending ? "uploading…" : "reference song"}
+                </button>
+              ) : (
+                <span className="inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-500/10 px-3 py-1 font-mono text-3xs tracking-[0.2em] uppercase text-cyan-200">
+                  <span title="Melody reference attached">⌁</span>
+                  <span className="max-w-[16rem] truncate">{reference.filename}</span>
+                  <button
+                    type="button"
+                    onClick={clearReference}
+                    title="Remove reference"
+                    className="text-cyan-200/60 hover:text-white transition-colors"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+              {uploadFailed ? (
+                <span className="font-mono text-3xs tracking-widest text-rose-300/90 uppercase">
+                  reference upload failed
+                </span>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4">
+              {aiEnabled ? (
+                <Button
+                  type="button"
+                  size="icon"
+                  onClick={onRandom}
+                  disabled={randomPending}
+                  title="Random song — AI writes it, Yuekbox plays it"
+                  className="group relative w-12 h-12 rounded-full border border-white/20 bg-white/[0.04] hover:bg-fuchsia-500/20 hover:border-fuchsia-400/70 transition-all duration-500 shadow-[0_0_25px_rgba(232,121,249,0.15)] active:scale-95 disabled:opacity-30"
+                >
+                  <span className="font-mono text-lg text-white/70 group-hover:text-white group-hover:rotate-180 transition-all duration-500">
+                    ⚄
+                  </span>
+                </Button>
+              ) : null}
+
+              <Button
+                type="button"
+                size="icon"
+                onClick={submit}
+                disabled={!canGenerate}
+                title="Generate Song (Click to run 5-stage synthesis)"
+                className="group relative w-12 h-12 rounded-full border border-white/20 bg-white/[0.04] hover:bg-cyan-500/20 hover:border-cyan-400/80 transition-all duration-500 shadow-[0_0_25px_rgba(0,240,255,0.2)] active:scale-95 disabled:opacity-30"
+              >
+                <span className="font-mono text-base text-white/80 group-hover:text-white group-hover:scale-125 transition-transform duration-300">
+                  ✦
+                </span>
+              </Button>
+
+              <div
+                className={cn(
+                  "relative transition-opacity duration-500",
+                  activeSong?.status === "running" ? "opacity-100" : "opacity-40",
+                )}
+              >
+                <div id="stages-pips" className="flex items-center gap-2.5">
+                  {stages.map((stage, index) => (
+                    <span
+                      key={stage}
+                      className={pipClassName(activeSong, stages, index)}
+                      title={stageLabels[stage]}
+                    />
+                  ))}
+                </div>
+                {progressPercent !== null ? (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 h-px overflow-hidden bg-white/10">
+                    <div
+                      className="h-full bg-cyan-400/80 transition-[width] duration-700 ease-out"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                ) : null}
+              </div>
+
+              {queueDepth !== null && queueDepth > 0 ? (
+                <span className="font-mono text-3xs tracking-widest text-cyan-200/70 uppercase">
+                  queue {queueDepth}
+                </span>
+              ) : null}
+
+              {aiEnabled ? (
+                <button
+                  type="button"
+                  onClick={onToggleFullAuto}
+                  className="ai-fullauto-toggle"
+                  title="Full random mode — hide the inputs, generate and play forever"
+                >
+                  <span className="text-sm leading-none">∞</span>
+                  <span className="font-mono text-3xs tracking-[0.25em] uppercase">full auto</span>
+                </button>
+              ) : null}
+            </div>
+          </div>
         </div>
-
-        {queueDepth !== null && queueDepth > 0 ? (
-          <span className="font-mono text-3xs tracking-widest text-cyan-200/70 uppercase">
-            queue {queueDepth}
-          </span>
-        ) : null}
-
-        {aiEnabled ? (
-          <button
-            type="button"
-            onClick={onToggleFullAuto}
-            className="ai-fullauto-toggle"
-            title="Full random mode — hide the inputs, generate and play forever"
-          >
-            <span className="text-sm leading-none">∞</span>
-            <span className="font-mono text-3xs tracking-[0.25em] uppercase">full auto</span>
-          </button>
-        ) : null}
       </div>
 
       {enhanceError !== null ? <p className="text-xs text-rose-300/90">{enhanceError}</p> : null}

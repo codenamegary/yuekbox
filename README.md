@@ -28,12 +28,12 @@ queue, a worker, and the real YuE2 CLI. The visuals are just here to make the wa
 
 ## 🎛️ What it does (v1)
 
-- 🪞 **Two glass boxes.** One for style, one for lyrics.
+- 🪞 **Two glass boxes.** One for style, one for lyrics, side by side.
 - ✦ **Generate.** One click queues a Song and fires the worker.
 - 🚦 **A queue, not a stampede.** Click generate ten times if you want. The GPU still runs one Song at a time.
 - 📶 **Real progress.** Six stage pips, plus a hairline bar under them for the stages YuE2 actually counts (synthesize + decode). No fake bars for stages nobody can measure.
 - 🔊 **Plays the MP3** when the Song lands, with a real spectrum fed by an `AnalyserNode`. The backdrop dances to it. Yes, really.
-- ✍️ **Lyrics in the void.** While a Song plays, its lines fade in and out at the center of the page, timed to the notes actually sung in the rendered audio. Each line starts on its first note and stretches across held notes. Without a detection it falls back to the stored score. Each line settles in 0.4 s. The editor dims until you touch it.
+- ✍️ **Lyrics in the void.** While a Song plays, its lines fade in and out at the center of the page, timed to the notes actually sung in the rendered audio. Each line starts on its first note and stretches across held notes. Without a detection it falls back to the stored score. Each line settles in 0.4 s. The writer fades away until you pause.
 - 🗂️ **History drawer.** Newest first. Click to play. Click to delete. Loading a song offers to replace the editor text before it stomps your draft.
 - 🧪 **Keeps the score.** Every successful Song stores the ABC lead sheet for future features. v1 doesn't show it. Yet.
 - ⌁ **Reference covers.** Attach a song file and SheetSage2 transcribes its melody first, then YuE2 sings your lyrics over that tune. Optional — without it you get the usual freeform generation.
