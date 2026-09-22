@@ -24,7 +24,7 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
   const handle = openDatabase({ path: ":memory:" })
   try {
     const transcribedPaths: string[] = []
-    const syncPaths: string[] = []
+    const alignedPaths: string[] = []
     const generatedCalls: Array<Readonly<{ cot: string; abc: string | null }>> = []
 
     const { app, generation } = composeServer({
@@ -44,9 +44,11 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
         transcribedPaths.push(input.audioPath)
         return ok({ scoreAbc: "X:1\nK:C\nC D E|" })
       },
-      runVocalTranscribe: async (input) => {
-        syncPaths.push(input.audioPath)
-        return ok({ spans: [{ startSeconds: 12.3, endSeconds: 16.8, noteCount: 9 }] })
+      runLyricAlign: async (input) => {
+        alignedPaths.push(input.audioPath)
+        return ok({
+          calibration: { cues: [{ text: "hello world", startSeconds: 12.3, endSeconds: 16.8 }] },
+        })
       },
       encodeFlacToMp3: async () => ok(mp3Bytes),
       referenceMaxBytes: 1024 * 1024,
@@ -97,7 +99,7 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
     expect(existsSync(join(mediaDir, folderKey, referenceScoreFileName))).toBe(true)
     expect(existsSync(join(mediaDir, folderKey, calibrationFileName))).toBe(true)
     expect(transcribedPaths).toEqual([referencePath])
-    expect(syncPaths).toEqual(["/tmp/yuekbox-compose-test/audio.flac"])
+    expect(alignedPaths).toEqual(["/tmp/yuekbox-compose-test/audio.flac"])
     expect(generatedCalls).toEqual([{ cot: "melody", abc: "X:1\nK:C\nC D E|" }])
 
     const fetched = await app.inject({ method: "GET", url: `/v1/songs/${queued.id}` })
@@ -106,9 +108,7 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
     expect(complete.status).toBe("complete")
     expect(complete.scoreAbc).toBe("X:1\nK:C\nC D E F|")
     expect(complete.calibration).toEqual({
-      version: 1,
-      source: "sheetsage2",
-      spans: [{ startSeconds: 12.3, endSeconds: 16.8, noteCount: 9 }],
+      cues: [{ text: "hello world", startSeconds: 12.3, endSeconds: 16.8 }],
     })
     expect(complete.reference).toEqual({ id: reference.id, filename: "Demo Song.mp3" })
     expect(complete.durationSeconds).toBe(152.5)
@@ -184,7 +184,8 @@ test("creating a Song authors a visualization and deleting it takes the file alo
           stages: [],
         }),
       runTranscribe: async () => ok({ scoreAbc: "X:1\nK:C\nC D E F|" }),
-      runVocalTranscribe: async () => ok({ spans: [{ startSeconds: 1, endSeconds: 2 }] }),
+      runLyricAlign: async () =>
+        ok({ calibration: { cues: [{ text: "hi", startSeconds: 1, endSeconds: 2 }] } }),
       encodeFlacToMp3: async () => ok(Uint8Array.from([1, 2, 3])),
       referenceMaxBytes: 1024,
       service: { version: "0.1.0", state: () => "online", startedAt: "2026-09-17T04:00:00.000Z" },

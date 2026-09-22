@@ -19,7 +19,9 @@ ABC lead sheet YuE2 wrote for the Song. Stored as `score.abc` in the Song's fold
 _Avoid_: Plan, MIDI, sheet
 
 **Calibration**:
-Vocal phrase spans SheetSage2 detected in the rendered audio, each with a note count. Stored as `calibration.json` in the Song's folder. The web app matches lyric lines to the notes actually sung; the Score is the fallback.
+The sung lines Whisper heard in the rendered audio, with their times, stored as
+`calibration.json` in the Song's folder. The overlay shows them as-is; without a
+calibration the web app falls back to the Score's vocal melody.
 _Avoid_: Alignment, sync data
 
 **Queue**:
@@ -40,7 +42,7 @@ _Avoid_: Remix, transfer
 
 Status values: `queued`, `running`, `complete`, `failed`.
 
-Stage values while `running`: `transcribe`, `plan`, `semantic`, `synthesize`, `decode`, `encode`, `sync`. Omit `stage` when not running. Covers start at `transcribe`; freeform Songs start at `plan`. `sync` runs last, after the MP3 encode.
+Stage values while `running`: `transcribe`, `plan`, `semantic`, `synthesize`, `decode`, `encode`, `sync`. Omit `stage` when not running. Covers start at `transcribe`; freeform Songs start at `plan`. `sync` runs last, after the MP3 encode, and writes the lyric calibration.
 
 ## Goal
 
@@ -58,7 +60,7 @@ No login. Single user on this machine.
 ## Non-goals (v1)
 
 - ABC editor, piano roll, or score display
-- ASR, source separation, lyric recognition, or score editing UI
+- ASR or source-separation controls in the UI
 - Reference playback in the UI (the upload only feeds transcription)
 - `cot` picker (`full` only)
 - CFG, sampling, VAE picker
@@ -225,7 +227,7 @@ seed              number
 durationSeconds   number | omitted until complete
 truncated         { abc: boolean, semantic: boolean } | omitted until complete
 scoreAbc          string | omitted unless complete; only sent by GET one Song
-calibration       { version: 1, source: "sheetsage2", spans: [{ startSeconds, endSeconds, noteCount }] } | omitted unless complete; only sent by GET one Song
+calibration       { cues: [{ text, startSeconds, endSeconds }] } | omitted unless complete; only sent by GET one Song
 errorDetail       string | omitted unless failed
 createdAt         iso datetime
 updatedAt         iso datetime
@@ -356,7 +358,7 @@ Generation's own ports:
 ```text
 RunYue2Generate
 RunTranscribe
-RunVocalTranscribe
+RunLyricAlign
 EncodeFlacToMp3
 CreateTempDir
 RemoveTempDir
@@ -364,11 +366,11 @@ RemoveTempDir
 
 `RunYue2Generate` takes `{ lyrics, style, seed, cot, abc, outputDir, onStage, onProgress }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter shells out to the YuE2 venv. It does not import Python.
 
-`RunVocalTranscribe` takes `{ audioPath, outputDir, durationSeconds }` and returns the grouped vocal phrase spans, each with its note count, or a Result error. The adapter runs the SheetSage2 script with `--task melody-vocal` and reads `melody_vocal.lab`.
+`RunLyricAlign` takes `{ audioPath, outputDir }` and returns the calibration, or a Result error. The adapter runs `packages/server/tools/lyric-align/align.py` (Demucs vocal stem, Whisper word timings, silence gate, display-line grouping) and reads back the `calibration.json` it writes under the output dir.
 
 `EncodeFlacToMp3` takes a FLAC path and returns MP3 `Uint8Array`.
 
-`CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the folder, plus `calibration.json` when the input carries spans, then marks the row complete. If the row update fails it removes those files and rethrows.
+`CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the folder, plus `calibration.json` when the input carries cues, then marks the row complete. If the row update fails it removes those files and rethrows.
 
 ### SQLite
 
@@ -418,7 +420,7 @@ completed_at       text null
 - The folder is created at create time, so even a freeform Song owns one from birth.
 - Uploads land in `temp/`. Creating a Song with a `referenceId` moves the file into the Song's `references/` directory. Nothing is renamed after that.
 - The uploaded name keeps its case, spaces, and unicode; path separators and control characters become `-`, the stem is capped at 120 chars, and the extension comes from the content type. The trailing `_<ulid>` is the Reference id; display names strip it (and add back the extension).
-- `reference_score.abc` is written right after transcription. `score.abc` and `calibration.json` are written at completion. `calibration.json` exists only when a vocal was detected. `visualization.js` holds one model-authored canvas factory; the visualizations slice writes it with the same temp + rename rule and reads it back for `GET /v1/songs/:id/visualization`. Deleting the Song deletes it with the folder. Nothing stores a path.
+- `reference_score.abc` is written right after transcription. `score.abc` and `calibration.json` are written at completion. `calibration.json` exists only when the transcript produced cues. `visualization.js` holds one model-authored canvas factory; the visualizations slice writes it with the same temp + rename rule and reads it back for `GET /v1/songs/:id/visualization`. Deleting the Song deletes it with the folder. Nothing stores a path.
 
 There is no purge job, no boot reconcile, and no rename step. Missing files surface lazily: the audio route stats the file and 404s, transcription fails before the script spawns, and `GET /v1/songs/:id` omits `scoreAbc` or `calibration` when the file is gone.
 
@@ -459,7 +461,7 @@ CLI flags must match the installed `yue2` parser. If the module form fails, call
 
 5. Worker updates `stage` when stderr progress names a known stage. If parsing fails, leave the stage until done. Status stays `running`.
 6. If the Song has a Reference, transcribe it before generation. Run `<sheetsage2-python> <kit>/skills/yue2-music/scripts/transcribe.py <MEDIA_DIR>/<TITLE>_<SONG_ID>/references/<name>_<ulid>.<ext> --output <tmp>/transcribe --task melody-full --device cuda --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`, read `score.abc`, write it to `reference_score.abc` in the Song folder, then generate with `cot = melody` and the ABC in the request JSON. A missing Reference file fails the Song before the script spawns; any other failure fails the Song.
-7. On success, read `audio.flac`. Encode MP3. Run `<sheetsage2-python> <kit>/skills/yue2-music/scripts/transcribe.py <FLAC> --output <tmp>/sync --task melody-vocal --device cuda --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`, read `melody_vocal.lab`, group note rows into phrase spans at a gap over 0.35 s, count the notes in each span, clamp to `durationSeconds`, and write spans with their `noteCount` to `calibration.json`. The web app uses the counts to match written lines to real notes. A failed or empty run logs and leaves the Song without a calibration; the Song still completes. `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the Song folder and marks the row `complete` with `durationSeconds` and the truncation flags. Delete the temp dir (FLAC does not stay on disk).
+7. On success, read `audio.flac`. Encode MP3. Run the lyric aligner with `<LYRIC_ALIGN_PYTHON> <LYRIC_ALIGN_SCRIPT> --audio <FLAC> --out <tmp>/lyric-align --calibration-out <tmp>/lyric-align/calibration.json --device <LYRIC_ALIGN_DEVICE>`, read the `calibration.json` it writes, and pass the cues to `CompleteSong`, which writes `calibration.json` in the Song folder. The overlay shows the transcript as sung. A failed or empty run logs and leaves the Song without a calibration; the Song still completes. `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the Song folder and marks the row `complete` with `durationSeconds` and the truncation flags. Delete the temp dir (FLAC does not stay on disk).
 8. On failure, mark `failed`, store a short `errorDetail`, delete the temp dir.
 9. Claim the next queued Song.
 
@@ -496,6 +498,9 @@ SHEETSAGE2_MODEL        default $YUE2_KIT/models/SheetSage2
 SHEETSAGE2_BASE_MODEL   default <YUE2_KIT>/models/MERT-v2-FullSong when that folder exists, else unset (let the snapshot resolve its MERT-v2 parent)
 SHEETSAGE2_DEVICE       default cuda
 SHEETSAGE2_OFFLINE      default 1; set 0 to allow the Hugging Face cache to resolve
+LYRIC_ALIGN_PYTHON      default $YUE2_KIT/.venv-lyricalign/bin/python
+LYRIC_ALIGN_SCRIPT      default <repo>/packages/server/tools/lyric-align/align.py
+LYRIC_ALIGN_DEVICE      default cuda:0
 REFERENCE_MAX_BYTES     default 26214400 (25 MiB)
 ```
 
@@ -513,14 +518,15 @@ Cover at least:
 - Create rejects empty lyrics and empty style.
 - Get missing id is not-found; Get fills `scoreAbc`, the calibration, and the reference summary from disk.
 - List does not include media or per-item disk reads.
-- Complete path with stub `RunYue2Generate` + stub `EncodeFlacToMp3` writes `generated_<ID>.mp3`, `score.abc`, and `calibration.json` when spans arrive, then marks `complete`.
+- Complete path with stub `RunYue2Generate` + stub `EncodeFlacToMp3` writes `generated_<ID>.mp3`, `score.abc`, and `calibration.json` when cues arrive, then marks `complete`.
 - A failed row update after completion removes the files it just wrote.
-- A failed vocal transcription logs, completes the Song, and writes no calibration.
+- A failed lyric alignment logs, completes the Song, and writes no calibration.
 - Encode failure marks `failed` and writes nothing.
 - `songs.files.ts` slugs the first lyric line, builds every key, and parses folder and reference names back to their ids.
 - `media.find` matches segments, returns files and directories, and rejects `..`.
 - `GET /v1/songs/:id/audio` serves a range from a multi-megabyte file in the folder, 416s an unsatisfiable range, and 404s when the file is gone.
 - Transcribe points the script at the stored path and fails before spawning when the file is missing.
+- Lyric align parses the calibration, rejects an empty or contract-breaking one, and fails before spawning when the environment or audio is missing.
 - Deleting a Song removes the row and the folder; a folder failure is logged, not fatal.
 - Creating a Song fires the queued hook after the row and folder exist, and not when validation fails.
 - `visualization.js` round-trips through the songs slice; writing without a folder throws instead of dropping the code.
@@ -589,14 +595,12 @@ One page.
 - Active Song card: status, stage label, error text.
 - Player: native `<audio controls src="/v1/songs/{id}/audio">` when `complete`.
 - Lyrics overlay: while a complete Song plays, its lines fade in and out at the center of the
-  page. Timing prefers the calibration's detected vocal phrases when they carry note counts: lines
-  are matched to whole runs of phrases so a line's cue starts on its first real note and ends on its
-  last, pickups merge into the line they lead, and held notes stretch the line. Spans without note
-  counts fall back to spreading lines across phrases by duration, with the first line anchored to
-  the first phrase. Without spans it comes from the stored ABC vocal melody, scaled to the audio
-  duration. When both are missing, lines spread across the Song instead. Each line settles in 0.4 s
-  and fades out near its end. The editor dims while the overlay is active and returns when the user
-  touches it. Cues carry the active `[Tag]` as their section.
+  page. The calibration's cues are the timeline and show their text as-is, so the overlay displays
+  exactly what was sung. Without a calibration the lines are spread across the stored ABC vocal
+  melody, scaled to the audio duration. When both are missing, lines spread across the Song
+  instead. Each line settles in 0.4 s and fades out near its end. The editor dims while the overlay
+  is active and returns when the user touches it. A cue carries the active `[Tag]` as its section
+  when its text matches a written line.
 - Backdrop: the four hand-written trip modes run behind everything. When the active Song has a
   ready visualization (or a reroll in flight), its canvas replaces the trip mode. The visual
   receives audio frames every `requestAnimationFrame` and lyric cues on change; the overlay hides

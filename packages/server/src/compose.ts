@@ -5,8 +5,8 @@ import { Db } from "./db/client"
 import { assembleGenerationSlice, GenerationSlice } from "./generation/generation.assembly"
 import {
   EncodeFlacToMp3,
+  RunLyricAlign,
   RunTranscribe,
-  RunVocalTranscribe,
   RunYue2Generate,
 } from "./generation/generation.ports"
 import { assembleMediaSlice, MediaSlice } from "./media/media.assembly"
@@ -33,7 +33,7 @@ export type ComposeDeps = Readonly<{
   mediaDir: string
   runYue2Generate: RunYue2Generate
   runTranscribe: RunTranscribe
-  runVocalTranscribe: RunVocalTranscribe
+  runLyricAlign: RunLyricAlign
   encodeFlacToMp3: EncodeFlacToMp3
   referenceMaxBytes: number
   service: ServiceInfo
@@ -69,7 +69,7 @@ export const composeServer = (deps: ComposeDeps): ComposedServer => {
     songs: songs.capabilities,
     runYue2Generate: deps.runYue2Generate,
     runTranscribe: deps.runTranscribe,
-    runVocalTranscribe: deps.runVocalTranscribe,
+    runLyricAlign: deps.runLyricAlign,
     encodeFlacToMp3: deps.encodeFlacToMp3,
     logError: deps.logError,
   })

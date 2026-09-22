@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { VocalSpan } from "contracts/http/songs"
+import { Calibration } from "contracts/http/songs"
 import { ok } from "../shared/result"
 import { songFixture } from "../songs/songs.fixtures"
 import { Song } from "../songs/songs.models"
@@ -10,7 +10,7 @@ const queuedSong: Song = songFixture({ lyrics: "[Verse]\nhello" })
 type Artifacts = {
   completedMp3: Uint8Array | null
   completedScore: string | null
-  completedCalibration: readonly VocalSpan[] | null
+  completedCalibration: Calibration | null
   completedDuration: number | null
   completedTruncated: Readonly<{ abc: boolean; semantic: boolean }> | null
   referenceScore: string | null
@@ -75,9 +75,11 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
       calls.push("transcribe")
       return ok({ scoreAbc: "X:1\nK:C\nC D E|" })
     },
-    runVocalTranscribe: async () => {
-      calls.push("vocal-transcribe")
-      return ok({ spans: [{ startSeconds: 12.3, endSeconds: 16.8 }] })
+    runLyricAlign: async () => {
+      calls.push("lyric-align")
+      return ok({
+        calibration: { cues: [{ text: "hello world", startSeconds: 12.3, endSeconds: 16.8 }] },
+      })
     },
     createTempDir: async () => "/tmp/yuekbox-test",
     removeTempDir: async () => {
@@ -112,13 +114,15 @@ test("complete path writes the mp3 and score through one capability", async () =
     "stage:encode",
     "encode",
     "stage:sync",
-    "vocal-transcribe",
+    "lyric-align",
     "complete",
     "cleanup",
   ])
   expect(harness.artifacts.completedMp3).toEqual(new Uint8Array([1, 2, 3, 4]))
   expect(harness.artifacts.completedScore).toBe("X:1\nK:C\nC D E F|")
-  expect(harness.artifacts.completedCalibration).toEqual([{ startSeconds: 12.3, endSeconds: 16.8 }])
+  expect(harness.artifacts.completedCalibration).toEqual({
+    cues: [{ text: "hello world", startSeconds: 12.3, endSeconds: 16.8 }],
+  })
   expect(harness.artifacts.completedDuration).toBe(184.5)
   expect(harness.artifacts.completedTruncated).toEqual({ abc: false, semantic: false })
 })
@@ -156,9 +160,9 @@ test("encode failure marks the song failed and writes nothing", async () => {
 
 test("sync failure logs and completes the song with a null calibration", async () => {
   const harness = makeHarness({
-    runVocalTranscribe: async () => {
+    runLyricAlign: async () => {
       await Promise.resolve()
-      return { ok: false, error: { kind: "vocal_transcribe_failed", detail: "no cuda" } }
+      return { ok: false, error: { kind: "lyric_align_failed", detail: "no cuda" } }
     },
   })
 
@@ -172,7 +176,7 @@ test("sync failure logs and completes the song with a null calibration", async (
     "stage:encode",
     "encode",
     "stage:sync",
-    "log:vocal transcription failed:no cuda",
+    "log:lyric alignment failed:no cuda",
     "complete",
     "cleanup",
   ])
@@ -247,7 +251,7 @@ test("reference songs transcribe first and generate from the melody ABC", async 
     "stage:encode",
     "encode",
     "stage:sync",
-    "vocal-transcribe",
+    "lyric-align",
     "complete",
     "cleanup",
   ])

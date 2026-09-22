@@ -1,4 +1,4 @@
-import { VocalSpan } from "contracts/http/songs"
+import { Calibration } from "contracts/http/songs"
 import { Song, SongCot, StageProgressUpdate } from "../songs/songs.models"
 import {
   ClaimNextQueuedSong,
@@ -14,8 +14,8 @@ import {
   CreateTempDir,
   EncodeFlacToMp3,
   RemoveTempDir,
+  RunLyricAlign,
   RunTranscribe,
-  RunVocalTranscribe,
   RunYue2Generate,
 } from "./generation.ports"
 
@@ -29,7 +29,7 @@ export type SongWorkerDeps = Readonly<{
   saveReferenceScore: SaveReferenceScore
   completeSong: CompleteSong
   runTranscribe: RunTranscribe
-  runVocalTranscribe: RunVocalTranscribe
+  runLyricAlign: RunLyricAlign
   runYue2Generate: RunYue2Generate
   encodeFlacToMp3: EncodeFlacToMp3
   createTempDir: CreateTempDir
@@ -118,21 +118,20 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
         return
       }
 
-      let calibration: readonly VocalSpan[] | null = null
+      let calibration: Calibration | null = null
       await deps.markSongStage(song.id, "sync")
       try {
-        const vocal = await deps.runVocalTranscribe({
+        const aligned = await deps.runLyricAlign({
           audioPath: generated.value.flacPath,
           outputDir: tempDir,
-          durationSeconds: generated.value.durationSeconds,
         })
-        if (vocal.ok) {
-          calibration = vocal.value.spans
+        if (aligned.ok) {
+          calibration = aligned.value.calibration
         } else {
-          deps.logError("vocal transcription failed", vocal.error.detail)
+          deps.logError("lyric alignment failed", aligned.error.detail)
         }
       } catch (error) {
-        deps.logError("vocal transcription failed", error)
+        deps.logError("lyric alignment failed", error)
       }
 
       await deps.completeSong({
