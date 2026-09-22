@@ -23,7 +23,7 @@ const storedConfig = (overrides: Partial<StoredConfig> = {}): StoredConfig => ({
 const code =
   "(host) => ({ resize() {}, renderAudioFrame() {}, renderLyricFrame() {}, dispose() {} })"
 
-const input = { style: "neon ambient", lyrics: "[Verse]\nslow tide" }
+const input = { style: "neon ambient", lyrics: "[Verse]\nslow tide", analysis: null }
 
 const makeUseCase = (chat: ChatCompletion, config: StoredConfig = storedConfig()) =>
   makeAuthorVisualization({ loadStoredConfig: async () => config, chat })

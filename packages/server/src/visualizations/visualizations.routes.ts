@@ -1,7 +1,7 @@
 import { FastifyPluginAsync } from "fastify"
 import { UlidSchema } from "contracts/http/primitives"
 import { songsPath } from "contracts/http/songs"
-import { SongVisualizationSchema } from "contracts/http/visualizations"
+import { SongVisualizationResponseSchema } from "contracts/http/visualizations"
 import { conflictProblem, notFoundProblem, sendProblem } from "../shared/problems"
 import { VisualizationsSlice } from "./visualizations.assembly"
 
@@ -28,7 +28,7 @@ export const visualizationsRoutes: FastifyPluginAsync<VisualizationsRoutesOption
       return sendProblem(reply, notFoundProblem(`Song ${songId} does not exist`))
     }
 
-    return reply.send(SongVisualizationSchema.parse(result.value))
+    return reply.send(SongVisualizationResponseSchema.parse(result.value))
   })
 
   fastify.post<{ Params: { songId: string } }>(visualizationRoute, async (request, reply) => {

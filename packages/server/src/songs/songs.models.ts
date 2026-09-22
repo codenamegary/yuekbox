@@ -1,4 +1,5 @@
 import { Calibration, SongStage, SongStatus } from "contracts/http/songs"
+import { SongAnalysis } from "contracts/http/visualizations"
 
 export type SongCot = "full" | "melody" | "off"
 
@@ -84,6 +85,7 @@ export type CompleteSongInput = Readonly<{
   mp3: Uint8Array
   scoreAbc: string | null
   calibration: Calibration | null
+  analysis: SongAnalysis | null
   durationSeconds: number
   truncated: TruncatedFlags
 }>

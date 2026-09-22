@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { SongAnalysis } from "contracts/http/visualizations"
 import { LyricCue } from "./songs.lyrics.timing"
 import {
   compileVisualization,
@@ -14,17 +15,36 @@ const song: VisualizationSong = {
   seed: 7,
 }
 
+const analysis: SongAnalysis = {
+  version: 1,
+  source: "sheetsage2",
+  notes: [{ startSeconds: 1, endSeconds: 1.5, pitch: 64 }],
+  beats: [
+    { time: 0, position: 1, beatsPerBar: 4, beatUnit: 4 },
+    { time: 0.5, position: 2, beatsPerBar: 4, beatUnit: 4 },
+  ],
+  sections: [{ name: "intro", startSeconds: 0, endSeconds: 8 }],
+}
+
 type Observatory = {
   frames: Array<Record<string, unknown>>
   resizes: Array<Record<string, unknown>>
-  lyrics: Array<unknown>
+  cues: readonly LyricCue[] | null
+  analysis: SongAnalysis | null
   disposed: number
 }
 
-const observatory = (): Observatory => ({ frames: [], resizes: [], lyrics: [], disposed: 0 })
+const observatory = (): Observatory => ({
+  frames: [],
+  resizes: [],
+  cues: null,
+  analysis: null,
+  disposed: 0,
+})
 
 const modelCode = `(host) => {
-  const ctx = host.canvas.getContext("2d")
+  observatory.cues = host.cues
+  observatory.analysis = host.analysis
   return {
     resize(size) { observatory.resizes.push(size) },
     renderAudioFrame(frame) {
@@ -39,7 +59,6 @@ const modelCode = `(host) => {
         canvasWidth: host.canvas.width,
       })
     },
-    renderLyricFrame(cue) { observatory.lyrics.push(cue) },
     dispose() { observatory.disposed += 1 },
   }
 }`
@@ -156,7 +175,7 @@ describe("compileVisualization", () => {
 })
 
 describe("createVisualizationEngine", () => {
-  test("attach resizes, draws every frame, and reports lyric cues", () => {
+  test("attach hands the cues and analysis to the factory, then draws every frame", () => {
     const frameHost = installFrameHost()
     const windowHost = installWindow()
     const observed = installObservatory()
@@ -167,8 +186,12 @@ describe("createVisualizationEngine", () => {
     const failures: string[] = []
     const failing = createVisualizationEngine(makeSource(time, bins))
 
-    expect(engine.attach({ canvas, song, code: modelCode, cues, onError: () => {} })).toBe(true)
+    expect(
+      engine.attach({ canvas, song, code: modelCode, cues, analysis, onError: () => {} }),
+    ).toBe(true)
 
+    expect(observed.cues).toEqual(cues)
+    expect(observed.analysis).toEqual(analysis)
     expect(observed.resizes).toEqual([{ width: 640, height: 360, dpr: 2 }])
     const scaled = canvas as unknown as { width: number; height: number }
     expect(scaled.width).toBe(1280)
@@ -189,27 +212,10 @@ describe("createVisualizationEngine", () => {
       },
     ])
     expect(transforms).toEqual([[2, 0, 0, 2, 0, 0]])
-    expect(observed.lyrics).toEqual([])
-
-    time.value = 2
-    frameHost.step()
-    expect(observed.lyrics).toEqual([
-      { line: "first line", section: "Verse", startSeconds: 1, endSeconds: 4 },
-    ])
-
-    time.value = 5
-    frameHost.step()
-    expect(observed.lyrics.at(-1)).toEqual({
-      line: "second line",
-      section: "Chorus",
-      startSeconds: 4,
-      endSeconds: 8,
-    })
 
     time.value = 20
     frameHost.step()
-    expect(observed.lyrics.at(-1)).toBeNull()
-    expect(observed.lyrics).toHaveLength(3)
+    expect(observed.frames).toHaveLength(2)
 
     engine.detach()
     expect(observed.disposed).toBe(1)
@@ -220,13 +226,7 @@ describe("createVisualizationEngine", () => {
     expect(observed.frames).toHaveLength(framesAfterDetach)
 
     expect(
-      failing.attach({
-        canvas,
-        song,
-        code: modelCode,
-        cues,
-        onError: (detail) => failures.push(detail),
-      }),
+      failing.attach({ canvas, song, code: modelCode, cues, analysis, onError: () => {} }),
     ).toBe(true)
     failing.detach()
     expect(failures).toEqual([])
@@ -239,7 +239,7 @@ describe("createVisualizationEngine", () => {
     const { canvas, raw } = makeCanvas(640, 360)
     const engine = createVisualizationEngine(makeSource({ value: 0 }, new Float32Array()))
 
-    engine.attach({ canvas, song, code: modelCode, cues, onError: () => {} })
+    engine.attach({ canvas, song, code: modelCode, cues, analysis, onError: () => {} })
     raw.clientWidth = 800
     raw.clientHeight = 450
     windowHost.dispatch("resize")
@@ -264,6 +264,7 @@ describe("createVisualizationEngine", () => {
         song,
         code: "not code",
         cues,
+        analysis,
         onError: (detail) => failures.push(detail),
       }),
     ).toBe(false)
@@ -284,11 +285,44 @@ describe("createVisualizationEngine", () => {
         song,
         code: "(host) => ({ resize() {} })",
         cues,
+        analysis,
         onError: (detail) => failures.push(detail),
       }),
     ).toBe(false)
     expect(failures).toHaveLength(1)
     expect(failures[0]).toContain("missing required methods")
+  })
+
+  test("a visualization carrying the retired renderLyricFrame still mounts", () => {
+    installFrameHost()
+    installWindow()
+    const { canvas } = makeCanvas()
+    const engine = createVisualizationEngine(makeSource({ value: 0 }, new Float32Array()))
+    const oldCode = `(host) => ({
+      resize() {},
+      renderAudioFrame() {},
+      renderLyricFrame() {},
+      dispose() {},
+    })`
+
+    expect(engine.attach({ canvas, song, code: oldCode, cues, analysis, onError: () => {} })).toBe(
+      true,
+    )
+    engine.detach()
+  })
+
+  test("a Song with no analysis still mounts with a null host analysis", () => {
+    installFrameHost()
+    installWindow()
+    const observed = installObservatory()
+    const { canvas } = makeCanvas()
+    const engine = createVisualizationEngine(makeSource({ value: 0 }, new Float32Array()))
+
+    engine.attach({ canvas, song, code: modelCode, cues, analysis: null, onError: () => {} })
+
+    expect(observed.analysis).toBeNull()
+    expect(observed.cues).toEqual(cues)
+    engine.detach()
   })
 
   test("a throw stops the loop, disposes, and reports the detail", () => {
@@ -302,7 +336,6 @@ describe("createVisualizationEngine", () => {
     const throwingCode = `(host) => ({
       resize() {},
       renderAudioFrame() { throw new Error("canvas exploded") },
-      renderLyricFrame() {},
       dispose() { observatory.disposed += 1 },
     })`
 
@@ -312,6 +345,7 @@ describe("createVisualizationEngine", () => {
         song,
         code: throwingCode,
         cues,
+        analysis,
         onError: (detail) => failures.push(detail),
       }),
     ).toBe(true)

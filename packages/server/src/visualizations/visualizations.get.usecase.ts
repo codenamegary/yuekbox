@@ -1,12 +1,13 @@
-import { SongVisualization } from "contracts/http/visualizations"
+import { SongVisualization, SongVisualizationResponse } from "contracts/http/visualizations"
 import { err, ok, Result } from "../shared/result"
 import { FindSongById } from "../songs/songs.ports"
 import { VisualizationGetError } from "./visualizations.models"
-import { ReadVisualizationCode } from "./visualizations.ports"
+import { ReadAnalysis, ReadVisualizationCode } from "./visualizations.ports"
 
 export type GetVisualizationDeps = Readonly<{
   findSongById: FindSongById
   readCode: ReadVisualizationCode
+  readAnalysis: ReadAnalysis
   isInFlight: (songId: string) => boolean
   failureFor: (songId: string) => string | null
   checksum: (code: string) => string
@@ -15,27 +16,30 @@ export type GetVisualizationDeps = Readonly<{
 /**
  * The file on disk is the durable truth: when it exists the answer is ready
  * (or rerolling while a new run is in flight). Pending and failed only exist
- * while the process remembers them.
+ * while the process remembers them. The measured analysis rides along and is
+ * independent of all of that.
  */
 export const makeGetVisualization =
   (deps: GetVisualizationDeps) =>
-  async (songId: string): Promise<Result<SongVisualization, VisualizationGetError>> => {
+  async (songId: string): Promise<Result<SongVisualizationResponse, VisualizationGetError>> => {
     const song = await deps.findSongById(songId)
     if (song === null) return err({ kind: "not_found" })
 
-    const code = await deps.readCode(songId)
+    const [code, analysis] = await Promise.all([deps.readCode(songId), deps.readAnalysis(songId)])
+
+    let visualization: SongVisualization | null = null
     if (code !== null) {
-      return ok({
+      visualization = {
         status: deps.isInFlight(songId) ? "rerolling" : "ready",
         code,
         checksum: deps.checksum(code),
-      })
+      }
+    } else if (deps.isInFlight(songId)) {
+      visualization = { status: "pending" }
+    } else {
+      const failure = deps.failureFor(songId)
+      if (failure !== null) visualization = { status: "failed", errorDetail: failure }
     }
 
-    if (deps.isInFlight(songId)) return ok({ status: "pending" })
-
-    const failure = deps.failureFor(songId)
-    if (failure !== null) return ok({ status: "failed", errorDetail: failure })
-
-    return err({ kind: "not_found" })
+    return ok({ visualization, analysis })
   }

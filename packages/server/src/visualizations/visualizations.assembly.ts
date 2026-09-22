@@ -1,4 +1,4 @@
-import { SongVisualization } from "contracts/http/visualizations"
+import { SongVisualizationResponse } from "contracts/http/visualizations"
 import { Result } from "../shared/result"
 import { FindSongById } from "../songs/songs.ports"
 import { makeVisualizationAuthoring } from "./visualizations.authoring"
@@ -8,6 +8,7 @@ import { VisualizationGetError, VisualizationRequestError } from "./visualizatio
 import {
   AuthorVisualization,
   CanAuthorVisualizations,
+  ReadAnalysis,
   ReadVisualizationCode,
   WriteVisualizationCode,
 } from "./visualizations.ports"
@@ -17,13 +18,16 @@ export type VisualizationsSliceDeps = Readonly<{
   findSongById: FindSongById
   readVisualizationFile: ReadVisualizationCode
   writeVisualizationFile: WriteVisualizationCode
+  readAnalysis: ReadAnalysis
   canAuthorVisualizations: CanAuthorVisualizations
   authorVisualization: AuthorVisualization
   logError?: (message: string, error: unknown) => void
 }>
 
 export type VisualizationsSlice = Readonly<{
-  getVisualization: (songId: string) => Promise<Result<SongVisualization, VisualizationGetError>>
+  getVisualization: (
+    songId: string,
+  ) => Promise<Result<SongVisualizationResponse, VisualizationGetError>>
   requestVisualization: (songId: string) => Promise<Result<null, VisualizationRequestError>>
   /** Test seam: waits for every authoring run this process has started. */
   drain: () => Promise<void>
@@ -33,6 +37,7 @@ export const assembleVisualizationsSlice = (deps: VisualizationsSliceDeps): Visu
   const authoring = makeVisualizationAuthoring({
     author: deps.authorVisualization,
     writeFile: deps.writeVisualizationFile,
+    readAnalysis: deps.readAnalysis,
     logError: deps.logError,
   })
 
@@ -40,6 +45,7 @@ export const assembleVisualizationsSlice = (deps: VisualizationsSliceDeps): Visu
     getVisualization: makeGetVisualization({
       findSongById: deps.findSongById,
       readCode: deps.readVisualizationFile,
+      readAnalysis: deps.readAnalysis,
       isInFlight: authoring.isInFlight,
       failureFor: authoring.failureFor,
       checksum: visualizationChecksum,

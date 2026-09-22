@@ -1,4 +1,5 @@
 import { Calibration } from "contracts/http/songs"
+import { SongAnalysis } from "contracts/http/visualizations"
 import { Song, SongCot, StageProgressUpdate } from "../songs/songs.models"
 import {
   ClaimNextQueuedSong,
@@ -9,6 +10,7 @@ import {
   MarkSongRunning,
   MarkSongStage,
   SaveReferenceScore,
+  SaveTranscriptRaw,
 } from "../songs/songs.ports"
 import {
   CreateTempDir,
@@ -16,6 +18,7 @@ import {
   RemoveTempDir,
   RunLyricAlign,
   RunTranscribe,
+  RunVocalTranscript,
   RunYue2Generate,
 } from "./generation.ports"
 
@@ -27,9 +30,11 @@ export type SongWorkerDeps = Readonly<{
   markSongFailed: MarkSongFailed
   findReferenceBySongId: FindReferenceBySongId
   saveReferenceScore: SaveReferenceScore
+  saveTranscriptRaw: SaveTranscriptRaw
   completeSong: CompleteSong
   runTranscribe: RunTranscribe
   runLyricAlign: RunLyricAlign
+  runVocalTranscript: RunVocalTranscript
   runYue2Generate: RunYue2Generate
   encodeFlacToMp3: EncodeFlacToMp3
   createTempDir: CreateTempDir
@@ -119,6 +124,7 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
       }
 
       let calibration: Calibration | null = null
+      let analysis: SongAnalysis | null = null
       await deps.markSongStage(song.id, "sync")
       try {
         const aligned = await deps.runLyricAlign({
@@ -134,11 +140,38 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
         deps.logError("lyric alignment failed", error)
       }
 
+      try {
+        const transcript = await deps.runVocalTranscript({
+          audioPath: generated.value.flacPath,
+          outputDir: tempDir,
+          durationSeconds: generated.value.durationSeconds,
+        })
+        if (transcript.ok) {
+          analysis = {
+            version: 1,
+            source: "sheetsage2",
+            notes: transcript.value.notes,
+            beats: transcript.value.beats,
+            sections: transcript.value.sections,
+          }
+          try {
+            await deps.saveTranscriptRaw(song.id, transcript.value.transcriptDir)
+          } catch (error) {
+            deps.logError("saving the raw transcript failed", error)
+          }
+        } else {
+          deps.logError("vocal transcription failed", transcript.error.detail)
+        }
+      } catch (error) {
+        deps.logError("vocal transcription failed", error)
+      }
+
       await deps.completeSong({
         songId: song.id,
         mp3: encoded.value,
         scoreAbc: generated.value.scoreAbc,
         calibration,
+        analysis,
         durationSeconds: generated.value.durationSeconds,
         truncated: generated.value.truncated,
       })

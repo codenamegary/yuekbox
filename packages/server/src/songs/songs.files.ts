@@ -113,6 +113,13 @@ export const scoreFileName = "score.abc"
 
 export const calibrationFileName = "calibration.json"
 
+export const analysisFileName = "analysis.json"
+
+export const analysisDirectoryName = "analysis"
+
+/** The raw SheetSage2 output tree kept under the analysis directory. */
+export const transcriptFolderName = "sheetsage2"
+
 export const referenceScoreFileName = "reference_score.abc"
 
 export const visualizationFileName = "visualization.js"
@@ -139,6 +146,11 @@ export const generatedAudioKey = (folderKey: string, songId: string): string =>
 export const scoreKey = (folderKey: string): string => `${folderKey}/${scoreFileName}`
 
 export const calibrationKey = (folderKey: string): string => `${folderKey}/${calibrationFileName}`
+
+export const analysisKey = (folderKey: string): string => `${folderKey}/${analysisFileName}`
+
+export const transcriptDirectoryKey = (folderKey: string): string =>
+  `${folderKey}/${analysisDirectoryName}/${transcriptFolderName}`
 
 export const visualizationKey = (folderKey: string): string =>
   `${folderKey}/${visualizationFileName}`

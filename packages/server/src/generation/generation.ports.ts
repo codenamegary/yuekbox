@@ -7,9 +7,12 @@ import {
   RunLyricAlignOutput,
   RunTranscribeInput,
   RunTranscribeOutput,
+  RunVocalTranscriptInput,
+  RunVocalTranscriptOutput,
   RunYue2GenerateInput,
   RunYue2GenerateOutput,
   TranscribeError,
+  VocalTranscriptError,
 } from "./generation.models"
 
 export type RunYue2Generate = (
@@ -23,6 +26,10 @@ export type RunTranscribe = (
 export type RunLyricAlign = (
   input: RunLyricAlignInput,
 ) => Promise<Result<RunLyricAlignOutput, LyricAlignError>>
+
+export type RunVocalTranscript = (
+  input: RunVocalTranscriptInput,
+) => Promise<Result<RunVocalTranscriptOutput, VocalTranscriptError>>
 
 export type EncodeFlacToMp3 = (flacPath: string) => Promise<Result<Uint8Array, EncodeSongError>>
 

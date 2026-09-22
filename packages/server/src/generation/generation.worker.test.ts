@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { Calibration } from "contracts/http/songs"
+import { SongAnalysis } from "contracts/http/visualizations"
 import { ok } from "../shared/result"
 import { songFixture } from "../songs/songs.fixtures"
 import { Song } from "../songs/songs.models"
@@ -11,6 +12,7 @@ type Artifacts = {
   completedMp3: Uint8Array | null
   completedScore: string | null
   completedCalibration: Calibration | null
+  completedAnalysis: SongAnalysis | null
   completedDuration: number | null
   completedTruncated: Readonly<{ abc: boolean; semantic: boolean }> | null
   referenceScore: string | null
@@ -22,6 +24,7 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
     completedMp3: null,
     completedScore: null,
     completedCalibration: null,
+    completedAnalysis: null,
     completedDuration: null,
     completedTruncated: null,
     referenceScore: null,
@@ -52,6 +55,7 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
       artifacts.completedMp3 = input.mp3
       artifacts.completedScore = input.scoreAbc
       artifacts.completedCalibration = input.calibration
+      artifacts.completedAnalysis = input.analysis
       artifacts.completedDuration = input.durationSeconds
       artifacts.completedTruncated = input.truncated
     },
@@ -80,6 +84,18 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
       return ok({
         calibration: { cues: [{ text: "hello world", startSeconds: 12.3, endSeconds: 16.8 }] },
       })
+    },
+    runVocalTranscript: async () => {
+      calls.push("vocal-transcript")
+      return ok({
+        notes: [{ startSeconds: 1, endSeconds: 1.5, pitch: 64 }],
+        beats: [{ time: 0, position: 1, beatsPerBar: 4, beatUnit: 4 }],
+        sections: [{ name: "intro", startSeconds: 0, endSeconds: 8 }],
+        transcriptDir: "/tmp/yuekbox-test/transcript",
+      })
+    },
+    saveTranscriptRaw: async (songId, sourceDir) => {
+      calls.push(`save-transcript-raw:${songId}:${sourceDir}`)
     },
     createTempDir: async () => "/tmp/yuekbox-test",
     removeTempDir: async () => {
@@ -115,6 +131,8 @@ test("complete path writes the mp3 and score through one capability", async () =
     "encode",
     "stage:sync",
     "lyric-align",
+    "vocal-transcript",
+    `save-transcript-raw:${queuedSong.id}:/tmp/yuekbox-test/transcript`,
     "complete",
     "cleanup",
   ])
@@ -123,8 +141,59 @@ test("complete path writes the mp3 and score through one capability", async () =
   expect(harness.artifacts.completedCalibration).toEqual({
     cues: [{ text: "hello world", startSeconds: 12.3, endSeconds: 16.8 }],
   })
+  expect(harness.artifacts.completedAnalysis).toEqual({
+    version: 1,
+    source: "sheetsage2",
+    notes: [{ startSeconds: 1, endSeconds: 1.5, pitch: 64 }],
+    beats: [{ time: 0, position: 1, beatsPerBar: 4, beatUnit: 4 }],
+    sections: [{ name: "intro", startSeconds: 0, endSeconds: 8 }],
+  })
   expect(harness.artifacts.completedDuration).toBe(184.5)
   expect(harness.artifacts.completedTruncated).toEqual({ abc: false, semantic: false })
+})
+
+test("a failed transcript leaves the Song complete with no analysis", async () => {
+  const harness = makeHarness({
+    runVocalTranscript: async () => ({
+      ok: false,
+      error: { kind: "vocal_transcribe_failed", detail: "CUDA out of memory" },
+    }),
+  })
+
+  await harness.run()
+
+  expect(harness.calls).toContain("log:vocal transcription failed:CUDA out of memory")
+  expect(harness.calls).not.toContain("save-transcript-raw:01J8K3R4P9ABCDEFGHJKMNPQRS:/tmp")
+  expect(harness.artifacts.completedAnalysis).toBeNull()
+  expect(harness.calls).toContain("complete")
+})
+
+test("a transcript that throws is logged and does not fail the Song", async () => {
+  const harness = makeHarness({
+    runVocalTranscript: async () => {
+      throw new Error("script is gone")
+    },
+  })
+
+  await harness.run()
+
+  expect(harness.calls).toContain("log:vocal transcription failed:Error: script is gone")
+  expect(harness.artifacts.completedAnalysis).toBeNull()
+  expect(harness.calls).toContain("complete")
+})
+
+test("failing to keep the raw transcript still completes with the parsed analysis", async () => {
+  const harness = makeHarness({
+    saveTranscriptRaw: async () => {
+      throw new Error("disk is full")
+    },
+  })
+
+  await harness.run()
+
+  expect(harness.calls).toContain("log:saving the raw transcript failed:Error: disk is full")
+  expect(harness.artifacts.completedAnalysis?.notes).toHaveLength(1)
+  expect(harness.calls).toContain("complete")
 })
 
 test("generate failure marks the song failed and completes nothing", async () => {
@@ -177,6 +246,8 @@ test("sync failure logs and completes the song with a null calibration", async (
     "encode",
     "stage:sync",
     "log:lyric alignment failed:no cuda",
+    "vocal-transcript",
+    `save-transcript-raw:${queuedSong.id}:/tmp/yuekbox-test/transcript`,
     "complete",
     "cleanup",
   ])
@@ -252,6 +323,8 @@ test("reference songs transcribe first and generate from the melody ABC", async 
     "encode",
     "stage:sync",
     "lyric-align",
+    "vocal-transcript",
+    `save-transcript-raw:${queuedSong.id}:/tmp/yuekbox-test/transcript`,
     "complete",
     "cleanup",
   ])

@@ -12,6 +12,7 @@ import {
 import {
   checkSheetsage2,
   makeRunTranscribe,
+  makeRunVocalTranscript,
   resolveSheetsage2BaseModel,
   Sheetsage2AdapterEnv,
 } from "./generation/generation.sheetsage2.adapters"
@@ -121,6 +122,7 @@ const { app, songs } = composeServer({
   }),
   runTranscribe: makeRunTranscribe(sheetsage2Env),
   runLyricAlign: makeRunLyricAlign(lyricAlignEnv),
+  runVocalTranscript: makeRunVocalTranscript(sheetsage2Env),
   encodeFlacToMp3: makeEncodeFlacToMp3({ ffmpegBin: env.ffmpegBin }),
   referenceMaxBytes: env.referenceMaxBytes,
   service: {

@@ -20,3 +20,9 @@ export type RemoveFile = (key: string) => Promise<void>
 export type RemoveDirectory = (key: string) => Promise<void>
 
 export type FindFiles = (pattern: string) => Promise<readonly string[]>
+
+/**
+ * Copies an existing directory from the host filesystem into the media store
+ * under `key`. Used to keep a tool's raw output tree beside the Song.
+ */
+export type CopyDirectory = (sourcePath: string, key: string) => Promise<void>

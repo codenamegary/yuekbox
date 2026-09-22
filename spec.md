@@ -24,6 +24,13 @@ The sung lines Whisper heard in the rendered audio, with their times, stored as
 calibration the web app falls back to the Score's vocal melody.
 _Avoid_: Alignment, sync data
 
+**Analysis**:
+The measured score of the rendered audio: vocal notes with pitch, a beat grid,
+and section boundaries from SheetSage2, stored as `analysis.json` in the Song's
+folder with the raw transcript tree beside it. The backdrop uses it to
+anticipate; a Song without a transcript simply has none.
+_Avoid_: Transcription, transcript (for the derived file), measured score
+
 **Queue**:
 Ordered Songs waiting for the GPU. Length may be greater than 1. The GPU runs one Song at a time.
 _Avoid_: Batch
@@ -42,7 +49,7 @@ _Avoid_: Remix, transfer
 
 Status values: `queued`, `running`, `complete`, `failed`.
 
-Stage values while `running`: `transcribe`, `plan`, `semantic`, `synthesize`, `decode`, `encode`, `sync`. Omit `stage` when not running. Covers start at `transcribe`; freeform Songs start at `plan`. `sync` runs last, after the MP3 encode, and writes the lyric calibration.
+Stage values while `running`: `transcribe`, `plan`, `semantic`, `synthesize`, `decode`, `encode`, `sync`. Omit `stage` when not running. Covers start at `transcribe`; freeform Songs start at `plan`. `sync` runs last, after the MP3 encode, and writes the lyric calibration plus the measured analysis.
 
 ## Goal
 
@@ -350,6 +357,7 @@ MarkSongProgress
 MarkSongFailed
 FindReferenceBySongId
 SaveReferenceScore
+SaveTranscriptRaw
 CompleteSong
 ```
 
@@ -359,6 +367,7 @@ Generation's own ports:
 RunYue2Generate
 RunTranscribe
 RunLyricAlign
+RunVocalTranscript
 EncodeFlacToMp3
 CreateTempDir
 RemoveTempDir
@@ -367,6 +376,8 @@ RemoveTempDir
 `RunYue2Generate` takes `{ lyrics, style, seed, cot, abc, outputDir, onStage, onProgress }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter shells out to the YuE2 venv. It does not import Python.
 
 `RunLyricAlign` takes `{ audioPath, outputDir }` and returns the calibration, or a Result error. The adapter runs `packages/server/tools/lyric-align/align.py` (Demucs vocal stem, Whisper word timings, silence gate, display-line grouping) and reads back the `calibration.json` it writes under the output dir.
+
+`RunVocalTranscript` takes `{ audioPath, outputDir, durationSeconds }` and returns the parsed notes, beats, and sections plus the transcript output directory, or a Result error. The adapter runs `transcribe.py` with `--task melody-vocal` against the rendered FLAC and parses `melody_vocal.lab`, `beat.lab`, and `structure.lab`. A missing or malformed lab row is dropped; a run without `melody_vocal.lab` fails.
 
 `EncodeFlacToMp3` takes a FLAC path and returns MP3 `Uint8Array`.
 
@@ -409,6 +420,8 @@ completed_at       text null
   generated_<SONG_ID>.mp3
   score.abc
   calibration.json                      optional
+  analysis.json                         optional
+  analysis/sheetsage2/                  raw transcript tree, optional
   reference_score.abc
   visualization.js
   references/<uploaded>_<ulid>.<ext>    optional
@@ -420,9 +433,9 @@ completed_at       text null
 - The folder is created at create time, so even a freeform Song owns one from birth.
 - Uploads land in `temp/`. Creating a Song with a `referenceId` moves the file into the Song's `references/` directory. Nothing is renamed after that.
 - The uploaded name keeps its case, spaces, and unicode; path separators and control characters become `-`, the stem is capped at 120 chars, and the extension comes from the content type. The trailing `_<ulid>` is the Reference id; display names strip it (and add back the extension).
-- `reference_score.abc` is written right after transcription. `score.abc` and `calibration.json` are written at completion. `calibration.json` exists only when the transcript produced cues. `visualization.js` holds one model-authored canvas factory; the visualizations slice writes it with the same temp + rename rule and reads it back for `GET /v1/songs/:id/visualization`. Deleting the Song deletes it with the folder. Nothing stores a path.
+- `reference_score.abc` is written right after transcription. `score.abc`, `calibration.json`, and `analysis.json` are written at completion. `calibration.json` exists only when the lyric aligner produced cues. `analysis.json` exists only when the SheetSage2 transcript succeeded; it holds the derived notes, beats, and sections, and `analysis/sheetsage2/` keeps that run's output tree verbatim. `visualization.js` holds one model-authored canvas factory; the visualizations slice writes it with the same temp + rename rule and reads it back for `GET /v1/songs/:id/visualization`. Deleting the Song deletes it all with the folder. Nothing stores a path.
 
-There is no purge job, no boot reconcile, and no rename step. Missing files surface lazily: the audio route stats the file and 404s, transcription fails before the script spawns, and `GET /v1/songs/:id` omits `scoreAbc` or `calibration` when the file is gone.
+There is no purge job, no boot reconcile, and no rename step. Missing files surface lazily: the audio route stats the file and 404s, transcription fails before the script spawns, and `GET /v1/songs/:id` omits `scoreAbc` or `calibration` when the file is gone. The visualization route reports a null analysis when `analysis.json` is gone.
 
 Writes go to `<path>.tmp`, then rename onto the final path. Deletes remove the row and the folder in parallel; either side tolerating a failure is fine, an orphan folder is harmless and a later read just reports the file as missing.
 
@@ -434,10 +447,12 @@ Each Song may own one AI-authored canvas visualization.
 
 - Trigger: `createSong` fires `onSongQueued` once the row and folder exist. Compose wires it to the visualizations slice, which guards the visuals writer and starts one authoring run. AI off or the writer unconfigured is a silent no-op: no state, no file, no error on the Song.
 - Authoring runs in parallel with the GPU worker and never touches the Song's status, stage, or progress.
-- The prompt in `ai.visualization.prompts.ts` carries the host contract, a worked example, a randomly sampled DIRECTION (one value per axis: subject, motion, composition, marks, palette, lyric, event), the rules, the style, and the lyrics. Every authoring call samples a fresh direction, so consecutive Songs do not share a whole approach. The reply is cleaned of fences and unwrapped from the shapes models actually send (`const factory = (host) => {...}`, `export default`, named functions, prose around a fenced block) back to a bare expression, then smoke-run against a stub canvas with DOM/timer/network globals shadowed to undefined. A reply that cannot be normalized, or that throws while drawing, is discarded and asked again, up to 5 attempts with no backoff; the failure detail says why. There is no token scan and no size cap.
-- `GET /v1/songs/:id/visualization` → `{ status, code?, checksum?, errorDetail? }` or 404. `ready` and `rerolling` carry the file's code and its SHA-256; `pending` means no file and a run in flight; `failed` means no file and the last run failed. The file wins whenever it exists: a failed reroll leaves the old visual playing with no error surfaced.
+- The prompt in `ai.visualization.prompts.ts` carries the host contract, a worked example, a randomly sampled DIRECTION (one value per axis: subject, motion, composition, marks, palette, lyric, event), the rules, the style, and the lyrics. On a reroll after the Song completes, the prompt also carries a compact summary of the measured analysis: last measured moment, tempo and meter, section labels with spans, note count, and notes per 30 s. Queue-time authoring runs before the audio exists, so it has no summary. Every authoring call samples a fresh direction, so consecutive Songs do not share a whole approach. The reply is cleaned of fences and unwrapped from the shapes models actually send (`const factory = (host) => {...}`, `export default`, named functions, prose around a fenced block) back to a bare expression, then smoke-run against a stub canvas with DOM/timer/network globals shadowed to undefined. A reply that cannot be normalized, or that throws while drawing, is discarded and asked again, up to 5 attempts with no backoff; the failure detail says why. There is no token scan and no size cap.
+- The factory contract is `(host) => instance` where `host` is `{ canvas, song, cues, analysis }` and the instance has `resize`, `renderAudioFrame`, and `dispose`. `cues` is the full timed lyric list and `analysis` is the measured score or null, so the visual works out the active line and the current beat from `frame.time`; there is no per-line callback and no per-frame musical block.
+- `GET /v1/songs/:id/visualization` → `{ visualization, analysis }`, 404 only for an unknown Song. `visualization` is null or `{ status, code?, checksum?, errorDetail? }`; `analysis` is null or the measured `{ version, source, notes, beats, sections }`. `ready` and `rerolling` carry the file's code and its SHA-256; `pending` means no file and a run in flight; `failed` means no file and the last run failed. The file wins whenever it exists: a failed reroll leaves the old visual playing with no error surfaced.
 - `POST /v1/songs/:id/visualization` rerolls: 202 empty, 404 unknown Song, 409 when the visuals writer is not ready. A run already in flight absorbs the request.
 - Restart mid-authoring drops the run. The Song has no visual until rerolled; nothing re-kicks and no failed badge survives. A browser-side compile or render failure shows the same badge, falls back to the trip mode, and clears on reroll.
+- An existing `visualization.js` written against the old four-method contract still compiles and mounts. The host never calls `renderLyricFrame`, so it loses its lyrics until it is rerolled. There is no backfill for old Songs: no analysis file means a null analysis.
 
 ### Generate path
 
@@ -461,8 +476,9 @@ CLI flags must match the installed `yue2` parser. If the module form fails, call
 
 5. Worker updates `stage` when stderr progress names a known stage. If parsing fails, leave the stage until done. Status stays `running`.
 6. If the Song has a Reference, transcribe it before generation. Run `<sheetsage2-python> <kit>/skills/yue2-music/scripts/transcribe.py <MEDIA_DIR>/<TITLE>_<SONG_ID>/references/<name>_<ulid>.<ext> --output <tmp>/transcribe --task melody-full --device cuda --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`, read `score.abc`, write it to `reference_score.abc` in the Song folder, then generate with `cot = melody` and the ABC in the request JSON. A missing Reference file fails the Song before the script spawns; any other failure fails the Song.
-7. On success, read `audio.flac`. Encode MP3. Run the lyric aligner with `<LYRIC_ALIGN_PYTHON> <LYRIC_ALIGN_SCRIPT> --audio <FLAC> --out <tmp>/lyric-align --calibration-out <tmp>/lyric-align/calibration.json --device <LYRIC_ALIGN_DEVICE>`, read the `calibration.json` it writes, and pass the cues to `CompleteSong`, which writes `calibration.json` in the Song folder. The overlay shows the transcript as sung. A failed or empty run logs and leaves the Song without a calibration; the Song still completes. `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the Song folder and marks the row `complete` with `durationSeconds` and the truncation flags. Delete the temp dir (FLAC does not stay on disk).
-8. On failure, mark `failed`, store a short `errorDetail`, delete the temp dir.
+7. On success, read `audio.flac`. Encode MP3. Run the lyric aligner with `<LYRIC_ALIGN_PYTHON> <LYRIC_ALIGN_SCRIPT> --audio <FLAC> --out <tmp>/lyric-align --calibration-out <tmp>/lyric-align/calibration.json --device <LYRIC_ALIGN_DEVICE>`, read the `calibration.json` it writes, and pass the cues to `CompleteSong`, which writes `calibration.json` in the Song folder. The overlay shows the transcript as sung.
+8. Still inside `sync`, run the transcript pass on the rendered FLAC with `<SHEETSAGE2_PYTHON> <SHEETSAGE2_SCRIPT> <FLAC> --output <tmp>/transcript --task melody-vocal --device <SHEETSAGE2_DEVICE> --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`. Parse `melody_vocal.lab`, `beat.lab`, and `structure.lab` into notes, beats, and sections, copy the raw `<tmp>/transcript` tree into `analysis/sheetsage2/`, and pass the derived analysis to `CompleteSong`, which writes `analysis.json`. A failed run, a missing SheetSage2, or a failed copy logs and leaves the Song without an analysis; the Song still completes. `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the Song folder and marks the row `complete` with `durationSeconds` and the truncation flags. Delete the temp dir (FLAC does not stay on disk).
+9. On failure, mark `failed`, store a short `errorDetail`, delete the temp dir.
 9. Claim the next queued Song.
 
 One Worker in the process. Claim uses a SQLite transaction so two loops cannot double-run.
@@ -517,10 +533,13 @@ Cover at least:
 - Create rejects a missing upload with `reference_unavailable` on `/referenceId`.
 - Create rejects empty lyrics and empty style.
 - Get missing id is not-found; Get fills `scoreAbc`, the calibration, and the reference summary from disk.
+- `analysis.json` round-trips through the songs slice; malformed JSON and a missing file both read null; the raw tree copies under `analysis/sheetsage2/`.
 - List does not include media or per-item disk reads.
-- Complete path with stub `RunYue2Generate` + stub `EncodeFlacToMp3` writes `generated_<ID>.mp3`, `score.abc`, and `calibration.json` when cues arrive, then marks `complete`.
+- Complete path with stub `RunYue2Generate` + stub `EncodeFlacToMp3` writes `generated_<ID>.mp3`, `score.abc`, `calibration.json` when cues arrive, and `analysis.json` when the transcript returns slices, then marks `complete`.
 - A failed row update after completion removes the files it just wrote.
 - A failed lyric alignment logs, completes the Song, and writes no calibration.
+- A failed transcript logs, completes the Song, and writes no analysis; a failed raw copy keeps the parsed analysis.
+- Transcript parsing drops malformed lab rows, clamps to the duration, and sorts by time.
 - Encode failure marks `failed` and writes nothing.
 - `songs.files.ts` slugs the first lyric line, builds every key, and parses folder and reference names back to their ids.
 - `media.find` matches segments, returns files and directories, and rejects `..`.
@@ -530,10 +549,11 @@ Cover at least:
 - Deleting a Song removes the row and the folder; a folder failure is logged, not fatal.
 - Creating a Song fires the queued hook after the row and folder exist, and not when validation fails.
 - `visualization.js` round-trips through the songs slice; writing without a folder throws instead of dropping the code.
-- Visualization routes: 404 for unknown Songs, 409 when the visuals writer is not ready, pending → ready with code and checksum, a second POST during a run starts nothing, a reroll reports `rerolling` with the old code until the checksum changes, and a failure shows `failed` until a reroll clears it.
+- Visualization routes: 404 for unknown Songs, 409 when the visuals writer is not ready, a null visual instead of a 404 when a Song simply has none, the analysis riding along with or without a visual, pending → ready with code and checksum, a second POST during a run starts nothing, a reroll reports `rerolling` with the old code until the checksum changes, and a failure shows `failed` until a reroll clears it.
 - The authoring state machine writes the code, records upstream failures and write failures with details, absorbs a second start while in flight, and clears a failure on reroll.
-- The prompt names the host contract and samples a different direction on every call; the author use case strips fences, unwraps assigned or declared factories, retries replies that do not produce a runnable function (including a missing-helper throw caught by the stub-canvas smoke run) and upstream or empty replies up to 5 times, and uses the visuals writer's model.
+- The prompt names the host contract, carries the measured-score summary only when an analysis exists, and samples a different direction on every call; the author use case strips fences, unwraps assigned or declared factories, retries replies that do not produce a runnable function (including a missing-helper throw caught by the stub-canvas smoke run) and upstream or empty replies up to 5 times, and uses the visuals writer's model.
 - The visualizations slice reports the failure detail through `GET`, and `SongPlayer` shows it beside the badge so a failed reroll says why.
+- The visualization engine hands `host.cues` and `host.analysis` to the factory, still mounts an old four-method instance, and never calls `renderLyricFrame`; the trip modes find the latest downbeat at or before the playback time.
 - Wiring: compose creates a Song with AI configured, the visualization lands in the Song folder while the Song is still queued, and delete takes the file with the folder.
 - Claim skips `running` and `complete`.
 - Boot recovery: `running` becomes `failed`.
@@ -603,10 +623,12 @@ One page.
   melody, scaled to the audio duration. When both are missing, lines spread across the Song
   instead. Each line settles in 0.4 s and fades out near its end. A cue carries the active `[Tag]` as
   its section when its text matches a written line.
-- Backdrop: the four hand-written trip modes run behind everything. When the active Song has a
-  ready visualization (or a reroll in flight), its canvas replaces the trip mode. The visual
-  receives audio frames every `requestAnimationFrame` and lyric cues on change; the overlay hides
-  while it runs and returns on failure. A swap happens when the checksum changes.
+- Backdrop: the four hand-written trip modes run behind everything and pulse the surge on the
+  measured downbeats. When the active Song has a ready visualization (or a reroll in flight), its
+  canvas replaces the trip mode. The factory receives the canvas, the Song, the timed lyric cues,
+  and the measured analysis once at construction, and audio frames every `requestAnimationFrame`;
+  the overlay hides while it runs and returns on failure. A swap happens when the checksum
+  changes.
 - Reroll: the leftmost item in the top-right control cluster (and the failed-visual badge below it).
   It rerolls the active Song when AI is on and the visuals writer has a model, spins and glows while
   a run is in flight, and opens AI settings when the visuals writer is unconfigured. A failed
@@ -663,7 +685,7 @@ comes from the endpoint's live `/models`, and the API key is stored in
 | `GET /v1/ai/models?scope=style\|lyrics\|visuals` | Live model list; falls back to preset guesses with a `detail` |
 | `POST /v1/ai/enhance` | `{ kind, style?, lyrics? }` → `{ text }` |
 | `POST /v1/ai/songs/random` | Style call writes the brief, lyrics call writes the sheet, queued as a normal Song |
-| `GET /v1/songs/:id/visualization` | The Song's canvas factory: `ready`/`rerolling` with code and checksum, `pending`, `failed`, or 404 |
+| `GET /v1/songs/:id/visualization` | `{ visualization, analysis }`; the visual is null or `ready`/`rerolling` with code and checksum, `pending`, or `failed`, and the analysis is null or the measured score. 404 only for an unknown Song |
 | `POST /v1/songs/:id/visualization` | Reroll the canvas factory: 202, 409 when the visuals writer is not ready |
 
 `effort` maps to `reasoning_effort` and is only sent when not `off`. Each model
@@ -692,7 +714,10 @@ rotates the trip mode only when the finished Song has no ready visualization.
 | Complete Song's audio file missing | Audio route 404s |
 | Complete Song's `score.abc` missing | `scoreAbc` omitted from `GET /v1/songs/:id` |
 | Reference's media file missing | Song fails before transcription spawns, detail `reference audio is missing` |
-| Visualization authoring fails or replies empty | No file; `GET .../visualization` reports `failed` with the detail until a reroll clears it |
+| SheetSage2 missing or the transcript fails | Song `complete`; no `analysis.json`, `analysis: null` |
+| Raw transcript copy fails | Song `complete` with the parsed analysis; the detail is logged |
+| Visualization authoring fails or replies empty | No file; `GET .../visualization` reports a null or `failed` visual with the detail until a reroll clears it |
+| An old four-method `visualization.js` | Still mounts; its lyrics stop appearing until it is rerolled |
 | Server restarts mid-authoring | The run is dropped; the Song has no visual until rerolled |
 | Visualization code throws or misses a method in the browser | The loop detaches, the trip mode returns, and the badge shows until rerolled |
 

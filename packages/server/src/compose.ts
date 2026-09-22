@@ -7,6 +7,7 @@ import {
   EncodeFlacToMp3,
   RunLyricAlign,
   RunTranscribe,
+  RunVocalTranscript,
   RunYue2Generate,
 } from "./generation/generation.ports"
 import { assembleMediaSlice, MediaSlice } from "./media/media.assembly"
@@ -34,6 +35,7 @@ export type ComposeDeps = Readonly<{
   runYue2Generate: RunYue2Generate
   runTranscribe: RunTranscribe
   runLyricAlign: RunLyricAlign
+  runVocalTranscript: RunVocalTranscript
   encodeFlacToMp3: EncodeFlacToMp3
   referenceMaxBytes: number
   service: ServiceInfo
@@ -70,6 +72,7 @@ export const composeServer = (deps: ComposeDeps): ComposedServer => {
     runYue2Generate: deps.runYue2Generate,
     runTranscribe: deps.runTranscribe,
     runLyricAlign: deps.runLyricAlign,
+    runVocalTranscript: deps.runVocalTranscript,
     encodeFlacToMp3: deps.encodeFlacToMp3,
     logError: deps.logError,
   })
@@ -83,6 +86,7 @@ export const composeServer = (deps: ComposeDeps): ComposedServer => {
     findSongById: songs.findSongById,
     readVisualizationFile: songs.readVisualizationFile,
     writeVisualizationFile: songs.writeVisualizationFile,
+    readAnalysis: songs.readAnalysisFile,
     canAuthorVisualizations: ai.canAuthorVisualizations,
     authorVisualization: ai.authorVisualization,
     logError: deps.logError,

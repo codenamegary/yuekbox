@@ -11,8 +11,8 @@ import {
 import { Status, StatusSchema, statusPath } from "contracts/http/status"
 import { Reference, ReferenceSchema, referencesPath } from "contracts/http/references"
 import {
-  SongVisualization,
-  SongVisualizationSchema,
+  SongVisualizationResponse,
+  SongVisualizationResponseSchema,
   songVisualizationPath,
 } from "contracts/http/visualizations"
 import { ProblemDetailsSchema } from "contracts/http/error"
@@ -47,14 +47,14 @@ export const fetchSong = async (songId: string): Promise<Song> => {
 }
 
 /**
- * The Song's visualization, or null when it has none. The server answers 404
- * for both an unknown Song and a Song with no visual; the caller already knows
- * the Song exists.
+ * The Song's visualization and its measured analysis. The server answers 404
+ * only for an unknown Song; a Song without either returns null fields.
  */
-export const fetchSongVisualization = async (songId: string): Promise<SongVisualization | null> => {
+export const fetchSongVisualization = async (
+  songId: string,
+): Promise<SongVisualizationResponse> => {
   const response = await fetch(songVisualizationPath(songId))
-  if (response.status === 404) return null
-  return parseJson(response, (value) => SongVisualizationSchema.parse(value))
+  return parseJson(response, (value) => SongVisualizationResponseSchema.parse(value))
 }
 
 export const requestSongVisualization = async (songId: string): Promise<void> => {

@@ -2,7 +2,13 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { SongsCapabilities } from "../songs/songs.assembly"
-import { EncodeFlacToMp3, RunLyricAlign, RunTranscribe, RunYue2Generate } from "./generation.ports"
+import {
+  EncodeFlacToMp3,
+  RunLyricAlign,
+  RunTranscribe,
+  RunVocalTranscript,
+  RunYue2Generate,
+} from "./generation.ports"
 import { makeSongWorker, SongWorker } from "./generation.worker"
 
 export type GenerationSliceDeps = Readonly<{
@@ -10,6 +16,7 @@ export type GenerationSliceDeps = Readonly<{
   runYue2Generate: RunYue2Generate
   runTranscribe: RunTranscribe
   runLyricAlign: RunLyricAlign
+  runVocalTranscript: RunVocalTranscript
   encodeFlacToMp3: EncodeFlacToMp3
   logError?: (message: string, error: unknown) => void
 }>
@@ -25,6 +32,7 @@ export const assembleGenerationSlice = (deps: GenerationSliceDeps): GenerationSl
     runYue2Generate: deps.runYue2Generate,
     runTranscribe: deps.runTranscribe,
     runLyricAlign: deps.runLyricAlign,
+    runVocalTranscript: deps.runVocalTranscript,
     encodeFlacToMp3: deps.encodeFlacToMp3,
     createTempDir: () => mkdtemp(join(tmpdir(), "yuekbox-")),
     removeTempDir: (path) => rm(path, { recursive: true, force: true }),

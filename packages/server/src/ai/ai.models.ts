@@ -1,4 +1,5 @@
 import { AiModels, EffortLevel, EffortLevelSchema, EnhanceScope } from "contracts/http/ai"
+import { SongAnalysis } from "contracts/http/visualizations"
 
 export type OpenAIError = Readonly<{ kind: "upstream"; detail: string }>
 export type WriterSetting = Readonly<{
@@ -85,10 +86,12 @@ export type EnhanceError = AiSettingsError | AiAttemptError
 /** Random song reuses the enhance failure vocabulary; it is two prompt runs. */
 export type RandomSongError = EnhanceError
 
-/** One canvas visualization authored from a Song's style and lyrics. */
+/** One canvas visualization authored from a Song's style, lyrics, and measured score. */
 export type VisualizationAuthorInput = Readonly<{
   style: string
   lyrics: string
+  /** The measured transcript, present only when the Song has already completed. */
+  analysis: SongAnalysis | null
 }>
 
 /** Authoring reuses the enhance failure vocabulary. */

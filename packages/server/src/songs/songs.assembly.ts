@@ -1,5 +1,6 @@
 import { ulid } from "ulid"
 import { Calibration, CalibrationSchema } from "contracts/http/songs"
+import { SongAnalysis, SongAnalysisSchema } from "contracts/http/visualizations"
 import { Db } from "../db/client"
 import { MediaSlice } from "../media/media.assembly"
 import { StoredFile } from "../media/media.ports"
@@ -10,6 +11,7 @@ import { makeCompleteSong } from "./songs.complete.usecase"
 import { makeCreateSong } from "./songs.create.usecase"
 import { makeDeleteSong } from "./songs.delete.usecase"
 import {
+  analysisKey,
   calibrationKey,
   generatedAudioKey,
   parseReferenceFileName,
@@ -19,6 +21,7 @@ import {
   songFolderName,
   songFolderPattern,
   songTitleFromLyrics,
+  transcriptDirectoryKey,
   visualizationKey,
 } from "./songs.files"
 import { makeGetSong } from "./songs.get.usecase"
@@ -48,7 +51,9 @@ import {
   MarkSongProgress,
   MarkSongRunning,
   MarkSongStage,
+  ReadAnalysis,
   SaveReferenceScore,
+  SaveTranscriptRaw,
 } from "./songs.ports"
 import {
   makeClaimNextQueuedSong,
@@ -81,6 +86,7 @@ export type SongsCapabilities = Readonly<{
   markSongFailed: MarkSongFailed
   findReferenceBySongId: FindReferenceBySongId
   saveReferenceScore: SaveReferenceScore
+  saveTranscriptRaw: SaveTranscriptRaw
   completeSong: CompleteSong
 }>
 
@@ -94,6 +100,8 @@ export type SongsSlice = Readonly<{
   findSongById: FindSongById
   readVisualizationFile: (songId: string) => Promise<string | null>
   writeVisualizationFile: (songId: string, code: string) => Promise<number>
+  readAnalysisFile: ReadAnalysis
+  saveTranscriptRaw: SaveTranscriptRaw
   queueDepth: () => Promise<number>
   recoverInterruptedSongs: () => Promise<number>
   capabilities: SongsCapabilities
@@ -179,6 +187,25 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     return bytes === null ? null : new TextDecoder().decode(bytes)
   }
 
+  const readAnalysisFile = async (songId: string): Promise<SongAnalysis | null> => {
+    const folderKey = await findSongFolder(songId)
+    if (folderKey === null) return null
+    const bytes = await media.readFile(analysisKey(folderKey))
+    if (bytes === null) return null
+    try {
+      const parsed = SongAnalysisSchema.safeParse(JSON.parse(new TextDecoder().decode(bytes)))
+      return parsed.success ? parsed.data : null
+    } catch {
+      return null
+    }
+  }
+
+  const saveTranscriptRaw = async (songId: string, sourceDir: string): Promise<void> => {
+    const folderKey = await findSongFolder(songId)
+    if (folderKey === null) throw new Error(`song folder is missing for ${songId}`)
+    await media.copyDirectory(sourceDir, transcriptDirectoryKey(folderKey))
+  }
+
   const writeVisualizationFile = async (songId: string, code: string): Promise<number> => {
     const folderKey = await findSongFolder(songId)
     if (folderKey === null) throw new Error(`song folder is missing for ${songId}`)
@@ -261,6 +288,7 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     markSongFailed,
     findReferenceBySongId,
     saveReferenceScore,
+    saveTranscriptRaw,
     completeSong,
   })
 
@@ -274,6 +302,8 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
     findSongById,
     readVisualizationFile,
     writeVisualizationFile,
+    readAnalysisFile,
+    saveTranscriptRaw,
     queueDepth,
     recoverInterruptedSongs,
     capabilities,

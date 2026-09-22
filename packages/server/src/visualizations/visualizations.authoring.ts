@@ -1,10 +1,11 @@
 import { Song } from "../songs/songs.models"
 import { visualizationErrorDetail } from "./visualizations.models"
-import { AuthorVisualization, WriteVisualizationCode } from "./visualizations.ports"
+import { AuthorVisualization, ReadAnalysis, WriteVisualizationCode } from "./visualizations.ports"
 
 export type VisualizationAuthoringDeps = Readonly<{
   author: AuthorVisualization
   writeFile: WriteVisualizationCode
+  readAnalysis: ReadAnalysis
   logError?: (message: string, error: unknown) => void
 }>
 
@@ -32,7 +33,10 @@ export const makeVisualizationAuthoring = (
 
   const run = async (song: Song): Promise<void> => {
     try {
-      const authored = await deps.author({ style: song.style, lyrics: song.lyrics })
+      // The measured score exists only after the Song completes; a reroll is
+      // the author's only chance to see it, and a read failure is not fatal.
+      const analysis = await deps.readAnalysis(song.id).catch(() => null)
+      const authored = await deps.author({ style: song.style, lyrics: song.lyrics, analysis })
       if (!authored.ok) {
         failures.set(song.id, visualizationErrorDetail(authored.error.detail))
         return

@@ -1,6 +1,7 @@
-import { mkdir, readdir, rename, rm, stat } from "node:fs/promises"
+import { cp, mkdir, readdir, rename, rm, stat } from "node:fs/promises"
 import { dirname, join, resolve } from "node:path"
 import {
+  CopyDirectory,
   FindFiles,
   MakeDirectory,
   MoveFile,
@@ -115,6 +116,15 @@ const parsePattern = (pattern: string): readonly string[] | null => {
   return segments.some((segment) => segment === "" || segment === "." || segment === "..")
     ? null
     : segments
+}
+
+export const makeCopyDirectory = (mediaDir: string): CopyDirectory => {
+  const root = resolve(mediaDir)
+  return async (sourcePath, key) => {
+    const target = join(root, key)
+    await mkdir(dirname(target), { recursive: true })
+    await cp(sourcePath, target, { recursive: true, force: true })
+  }
 }
 
 export const makeFindFiles = (mediaDir: string): FindFiles => {

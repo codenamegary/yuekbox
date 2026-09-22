@@ -1,4 +1,5 @@
-import { cueIndexAt, LyricCue } from "./songs.lyrics.timing"
+import { SongAnalysis } from "contracts/http/visualizations"
+import { LyricCue } from "./songs.lyrics.timing"
 
 /** Sizes are CSS pixels. `dpr` is the ratio the host pre-scales the context for. */
 export type VisualizationSize = Readonly<{ width: number; height: number; dpr: number }>
@@ -20,22 +21,22 @@ export type AudioFrame = Readonly<{
   dpr: number
 }>
 
-export type LyricCueFrame = Readonly<{
-  line: string
-  section: string | null
-  startSeconds: number
-  endSeconds: number
-}>
-
+/**
+ * Everything the visual gets at construction: the Song's identity, its timed
+ * lyric lines, and the measured score of the rendered audio. The lyric lines
+ * and the analysis are the whole timeline, so the visual works out the active
+ * line and the current beat from `frame.time` itself.
+ */
 export type VisualizationHost = Readonly<{
   canvas: HTMLCanvasElement
   song: VisualizationSong
+  cues: readonly LyricCue[]
+  analysis: SongAnalysis | null
 }>
 
 export type VisualizationInstance = Readonly<{
   resize: (size: VisualizationSize) => void
   renderAudioFrame: (frame: AudioFrame) => void
-  renderLyricFrame: (cue: LyricCueFrame | null) => void
   dispose: () => void
 }>
 
@@ -60,7 +61,6 @@ const hasVisualizationMethods = (value: unknown): value is VisualizationInstance
   return (
     typeof candidate.resize === "function" &&
     typeof candidate.renderAudioFrame === "function" &&
-    typeof candidate.renderLyricFrame === "function" &&
     typeof candidate.dispose === "function"
   )
 }
@@ -77,6 +77,7 @@ export type VisualizationMount = Readonly<{
   song: VisualizationSong
   code: string
   cues: readonly LyricCue[]
+  analysis: SongAnalysis | null
   /** A throw stops the loop and comes back here; the caller falls back to a trip mode. */
   onError: (detail: string) => void
 }>
@@ -88,17 +89,15 @@ export type VisualizationEngine = Readonly<{
 
 /**
  * Drives one model-authored factory: resize on mount and window resize,
- * renderAudioFrame per rAF, renderLyricFrame when the cue changes. A throw
- * detaches and hands the detail back through the mount's `onError`, so the
- * caller can fall back to a trip mode.
+ * renderAudioFrame per rAF. The factory holds the cues and the measured score,
+ * so there is no per-line callback. A throw detaches and hands the detail back
+ * through the mount's `onError`, so the caller can fall back to a trip mode.
  */
 export const createVisualizationEngine = (source: VisualizationSource): VisualizationEngine => {
   const state: {
     canvas: HTMLCanvasElement | null
     context: CanvasRenderingContext2D | null
     instance: VisualizationInstance | null
-    cues: readonly LyricCue[]
-    cueIndex: number | null
     width: number
     height: number
     dpr: number
@@ -108,33 +107,11 @@ export const createVisualizationEngine = (source: VisualizationSource): Visualiz
     canvas: null,
     context: null,
     instance: null,
-    cues: [],
-    cueIndex: null,
     width: 0,
     height: 0,
     dpr: 1,
     handle: 0,
     onError: null,
-  }
-
-  const cueFrameAt = (index: number): LyricCueFrame | null => {
-    const cue = state.cues[index]
-    if (cue === undefined) return null
-    return {
-      line: cue.text,
-      section: cue.section,
-      startSeconds: cue.startSeconds,
-      endSeconds: cue.endSeconds,
-    }
-  }
-
-  /** The cue is active only until its end; between and after lines it clears. */
-  const activeCueIndex = (time: number): number | null => {
-    const index = cueIndexAt(state.cues, time)
-    if (index === null) return null
-    const cue = state.cues[index]
-    if (cue === undefined || time >= cue.endSeconds) return null
-    return index
   }
 
   const resize = () => {
@@ -158,7 +135,6 @@ export const createVisualizationEngine = (source: VisualizationSource): Visualiz
     window.removeEventListener("resize", resize)
     state.instance?.dispose()
     state.instance = null
-    state.cueIndex = null
   }
 
   const fail = (error: unknown) => {
@@ -171,15 +147,9 @@ export const createVisualizationEngine = (source: VisualizationSource): Visualiz
     const context = state.context
     if (instance === null || context === null) return
     try {
-      const time = source.time()
-      const index = activeCueIndex(time)
-      if (index !== state.cueIndex) {
-        state.cueIndex = index
-        instance.renderLyricFrame(index === null ? null : cueFrameAt(index))
-      }
       context.setTransform(state.dpr, 0, 0, state.dpr, 0, 0)
       instance.renderAudioFrame({
-        time,
+        time: source.time(),
         duration: source.duration(),
         playing: source.isPlaying(),
         bins: source.bins(),
@@ -208,7 +178,12 @@ export const createVisualizationEngine = (source: VisualizationSource): Visualiz
       return false
     }
     try {
-      const instance = factory({ canvas: mount.canvas, song: mount.song })
+      const instance = factory({
+        canvas: mount.canvas,
+        song: mount.song,
+        cues: mount.cues,
+        analysis: mount.analysis,
+      })
       if (!hasVisualizationMethods(instance)) {
         fail(new Error("the visualization instance is missing required methods"))
         return false
@@ -216,8 +191,6 @@ export const createVisualizationEngine = (source: VisualizationSource): Visualiz
       state.canvas = mount.canvas
       state.context = context
       state.instance = instance
-      state.cues = mount.cues
-      state.cueIndex = null
       resize()
       window.addEventListener("resize", resize)
       state.handle = requestAnimationFrame(tick)

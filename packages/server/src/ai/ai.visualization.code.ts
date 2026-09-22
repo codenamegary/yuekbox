@@ -103,7 +103,6 @@ export type VisualizationSmokeResult = Readonly<{ ok: true } | { ok: false; deta
 type SmokeInstance = Readonly<{
   resize: (size: unknown) => unknown
   renderAudioFrame: (frame: unknown) => unknown
-  renderLyricFrame: (cue: unknown) => unknown
   dispose: () => unknown
 }>
 
@@ -113,7 +112,6 @@ const asSmokeInstance = (value: unknown): SmokeInstance | null => {
   if (
     typeof candidate.resize !== "function" ||
     typeof candidate.renderAudioFrame !== "function" ||
-    typeof candidate.renderLyricFrame !== "function" ||
     typeof candidate.dispose !== "function"
   ) {
     return null
@@ -121,7 +119,6 @@ const asSmokeInstance = (value: unknown): SmokeInstance | null => {
   return {
     resize: candidate.resize,
     renderAudioFrame: candidate.renderAudioFrame,
-    renderLyricFrame: candidate.renderLyricFrame,
     dispose: candidate.dispose,
   }
 }
@@ -203,9 +200,10 @@ const stubContext = (): StubContext => {
 }
 
 /**
- * Runs the factory against a stub canvas for one frame and one lyric cue. This
- * is what catches replies that parse but call APIs that do not exist, so they
- * retry instead of landing as a visual that dies on the page.
+ * Runs the factory against a stub canvas for one frame, with a cue and a small
+ * measured score on the host. This is what catches replies that parse but call
+ * APIs that do not exist, so they retry instead of landing as a visual that
+ * dies on the page.
  */
 export const smokeVisualization = (code: string): VisualizationSmokeResult => {
   let factory: unknown
@@ -232,6 +230,14 @@ export const smokeVisualization = (code: string): VisualizationSmokeResult => {
       factory({
         canvas,
         song: { id: "smoke", style: "smoke test", lyrics: "smoke test", seed: 1 },
+        cues: [{ text: "smoke test", startSeconds: 0, endSeconds: 1 }],
+        analysis: {
+          version: 1,
+          source: "sheetsage2",
+          notes: [{ startSeconds: 0, endSeconds: 1, pitch: 60 }],
+          beats: [{ time: 0, position: 1, beatsPerBar: 4, beatUnit: 4 }],
+          sections: [{ name: "intro", startSeconds: 0, endSeconds: 4 }],
+        },
       }),
     )
     if (instance === null) {
@@ -239,12 +245,6 @@ export const smokeVisualization = (code: string): VisualizationSmokeResult => {
     }
 
     instance.resize({ width: 640, height: 360, dpr: 1 })
-    instance.renderLyricFrame({
-      line: "smoke test",
-      section: null,
-      startSeconds: 0,
-      endSeconds: 1,
-    })
     instance.renderAudioFrame({
       time: 0.5,
       duration: 10,
@@ -254,7 +254,6 @@ export const smokeVisualization = (code: string): VisualizationSmokeResult => {
       height: 360,
       dpr: 1,
     })
-    instance.renderLyricFrame(null)
     instance.dispose()
     return { ok: true }
   } catch (error) {
