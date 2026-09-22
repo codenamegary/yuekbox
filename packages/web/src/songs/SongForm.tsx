@@ -152,7 +152,7 @@ export const SongForm: React.FC<SongFormProps> = ({
       : Math.max(0, Math.min(100, (progress.completed / progress.total) * 100))
 
   return (
-    <div className="w-full max-w-4xl pointer-events-auto space-y-6">
+    <div className="w-full max-w-4xl mx-auto pointer-events-auto space-y-6">
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <div className="flex items-center justify-between pr-1">
@@ -203,11 +203,11 @@ export const SongForm: React.FC<SongFormProps> = ({
           <div className="hairline-glass-box rounded-2xl p-4">
             <Textarea
               id="lyrics-input"
-              rows={4}
+              rows={8}
               value={lyrics}
               onChange={(event) => onLyricsChange(event.target.value)}
               placeholder={"[Verse]\nwrite the words here\n\n[Chorus]\n..."}
-              className="w-full min-h-[4lh] max-h-[8lh] overflow-y-auto border-0 bg-transparent p-0 text-xs font-mono text-slate-200 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15"
+              className="w-full min-h-[8lh] max-h-[16lh] overflow-y-auto border-0 bg-transparent p-0 text-xs font-mono text-slate-200 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15"
             />
           </div>
         </div>
