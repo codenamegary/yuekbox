@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button"
 import { Label } from "@/components/ui/Label"
 import { Textarea } from "@/components/ui/Textarea"
 import { useCreateSongMutation, useUploadReferenceMutation } from "./songs.mutations"
-import { stageLabels, stageOrderFor } from "./songs.stages"
+import { stageLabels, stageOrderFor, stageProgressPercent } from "./songs.stages"
 
 type SongFormProps = Readonly<{
   activeSong: Song | null
@@ -144,12 +144,9 @@ export const SongForm: React.FC<SongFormProps> = ({
     )
   }
 
-  const progress =
-    activeSong !== null && activeSong.status === "running" ? activeSong.stageProgress : undefined
-  const progressPercent =
-    progress === undefined
-      ? null
-      : Math.max(0, Math.min(100, (progress.completed / progress.total) * 100))
+  const progressPercent = stageProgressPercent(
+    activeSong !== null && activeSong.status === "running" ? activeSong.stageProgress : undefined,
+  )
 
   return (
     <div className="w-full max-w-4xl mx-auto pointer-events-auto space-y-3">

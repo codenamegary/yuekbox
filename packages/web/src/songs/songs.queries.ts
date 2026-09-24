@@ -3,7 +3,7 @@ import { Song, SongStatus } from "contracts/http/songs"
 import { queryKeys } from "@/queryKeys"
 import { fetchSong, fetchSongVisualization, fetchSongs, fetchStatus } from "./songs.api"
 
-const isActiveStatus = (status: SongStatus | undefined) =>
+export const isActiveStatus = (status: SongStatus | undefined) =>
   status === "queued" || status === "running"
 
 export const useSongsQuery = () =>

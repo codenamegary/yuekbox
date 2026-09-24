@@ -613,6 +613,16 @@ One page.
   tempo, and `[Verse]` / `[Chorus]` lines.
 - Generate button. Submits `POST /v1/songs`. Stays enabled so the user can queue another Song. Show queue depth from `/v1/status`.
 - Active Song card: status, stage label, error text.
+- Generating reel: while a Song is queued or running, the form hides and a full-screen centered
+  overlay shows a slot-machine reel. Rows are `queued`, the stage labels in order, then `ready`. A
+  failed run ends on `failed`. The active row sits in the middle. On stage change the strip slides
+  to it over 0.6 s and settles. The active word shimmers and glows. `synthesize` and `decode` show
+  a real progress bar under it. Other stages show no bar. `queued` shows the queue depth in small
+  mono. `failed` shows `errorDetail` in small mono and stays open until dismissed. `complete`
+  rests on `ready` for about 1.2 s, then fades out. Esc, the dismiss control, or the sigil in the
+  top-right cluster hides it and the form comes back. The sigil shows it again while a Song is
+  queued or running. Full-auto's internal runs never open it. With reduced motion the rows
+  crossfade instead of sliding, with no shimmer and no glow.
 - Player: play/pause and the seek bar live in the top-left corner, mirroring the top-right control
   cluster. The play sigil is a circle in the same style. The seek bar grows a grabbable, draggable
   thumb on hover; click-to-seek still works. While a complete Song plays, the writer (style, lyrics,

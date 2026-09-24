@@ -2,6 +2,7 @@ import * as React from "react"
 import { cn } from "@/lib/cn"
 import { AudioEngine } from "./songs.audio.engine"
 import { LyricCue, cueIndexAt, lyricEnvelope, lyricFadeInSeconds } from "./songs.lyrics.timing"
+import { prefersReducedMotion } from "./songs.motion"
 
 type LyricOverlayProps = Readonly<{
   cues: readonly LyricCue[]
@@ -15,9 +16,6 @@ const fontClassFor = (text: string): string => {
   if (text.length > 28) return "text-4xl sm:text-5xl md:text-6xl lg:text-7xl"
   return "text-5xl sm:text-6xl md:text-7xl lg:text-8xl"
 }
-
-const prefersReducedMotion = () =>
-  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
 const lyricMotion = (progress: number, fadeInFraction: number) => {
   const opacity = lyricEnvelope(progress, fadeInFraction)
