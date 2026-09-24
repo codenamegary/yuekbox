@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn"
 import { AiSettings } from "@/ai/AiSettings"
 import { useAiConfigQuery } from "@/ai/ai.queries"
 import { useEnhanceMutation, useRandomSongMutation } from "@/ai/ai.mutations"
+import { GeneratingOverlay } from "./GeneratingOverlay"
 import { LoadSongDialog } from "./LoadSongDialog"
 import { LyricOverlay } from "./LyricOverlay"
 import { SongForm } from "./SongForm"
@@ -18,6 +19,7 @@ import { buildLyricCues } from "./songs.lyrics.timing"
 import { writerHidden } from "./songs.player"
 import { useDeleteSongMutation, useRerollVisualizationMutation } from "./songs.mutations"
 import {
+  isActiveStatus,
   pickActiveSong,
   useSongQuery,
   useSongsQuery,
@@ -26,6 +28,7 @@ import {
 } from "./songs.queries"
 import { useFullAuto } from "./songs.fullauto"
 import { FullAutoPhase } from "./songs.fullauto.machine"
+import { initialOverlayState, overlayCloseDelayMs, stepOverlay } from "./songs.overlay.machine"
 import { createVisualizationEngine, VisualizationSong } from "./songs.visualization"
 import { createWinampEngine, TripMode } from "./songs.winamp.engine"
 
@@ -55,6 +58,8 @@ export const SongsPage: React.FC = () => {
   const [activeId, setActiveId] = React.useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = React.useState(false)
   const [settingsOpen, setSettingsOpen] = React.useState(false)
+  const [overlay, dispatchOverlay] = React.useReducer(stepOverlay, initialOverlayState)
+  const [trackedSong, setTrackedSong] = React.useState<Song | null>(null)
   const [mode, setMode] = React.useState<TripMode>(0)
   const [draft, setDraft] = React.useState<Draft>({ style: "", lyrics: "" })
   const [loadCandidate, setLoadCandidate] = React.useState<Song | null>(null)
@@ -71,6 +76,19 @@ export const SongsPage: React.FC = () => {
   const activeFromList = pickActiveSong(songs, activeId)
   const songQuery = useSongQuery(activeFromList?.id ?? null)
   const activeSong: Song | null = songQuery.data ?? activeFromList
+  const overlayVisible = overlay.phase !== "hidden"
+  const trackedSongLive =
+    trackedSong === null
+      ? null
+      : activeSong?.id === trackedSong.id
+        ? activeSong
+        : (songs.find((song) => song.id === trackedSong.id) ?? trackedSong)
+  const overlaySong: Song | null =
+    trackedSongLive ??
+    (activeSong !== null && isActiveStatus(activeSong.status) ? activeSong : null) ??
+    songs.find((song) => isActiveStatus(song.status)) ??
+    activeSong
+  const songIsActive = isActiveStatus(overlaySong?.status)
   const visualizationQuery = useVisualizationQuery(activeSong?.id ?? null)
   const deleteSong = useDeleteSongMutation()
   const rerollVisualization = useRerollVisualizationMutation()
@@ -177,9 +195,32 @@ export const SongsPage: React.FC = () => {
     pendingAutoPlay.current = null
   }, [activeSong, playSignal, audio])
 
+  // Dismissing also forgets the tracked Song so a later sigil show starts fresh.
+  const dismissOverlay = React.useCallback(() => {
+    dispatchOverlay({ type: "dismiss" })
+    setTrackedSong(null)
+  }, [])
+
+  React.useEffect(() => {
+    if (overlay.phase !== "closing") return
+    const timer = window.setTimeout(() => {
+      setTrackedSong(null)
+      dispatchOverlay({ type: "closeElapsed" })
+    }, overlayCloseDelayMs)
+    return () => window.clearTimeout(timer)
+  }, [overlay.phase])
+
+  const overlayStatus = overlaySong?.status ?? null
+  React.useEffect(() => {
+    if (overlayStatus === "complete") dispatchOverlay({ type: "songComplete" })
+    if (overlayStatus === "failed") dispatchOverlay({ type: "songFailed" })
+  }, [overlayStatus])
+
   const handleCreated = (song: Song) => {
     setActiveId(song.id)
+    setTrackedSong(song)
     pendingAutoPlay.current = song.id
+    dispatchOverlay({ type: "generate" })
     poke()
   }
 
@@ -378,6 +419,26 @@ export const SongsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => {
+              if (overlayVisible) {
+                dismissOverlay()
+              } else {
+                setTrackedSong(overlaySong)
+                dispatchOverlay({ type: "show" })
+              }
+              poke()
+            }}
+            disabled={!overlayVisible && !songIsActive}
+            className={cn(
+              "alien-sigil disabled:opacity-40 disabled:pointer-events-none",
+              overlayVisible && "active",
+            )}
+            title={overlayVisible ? "Hide the generating reel" : "Show the generating reel"}
+          >
+            ☰
+          </button>
+          <button
+            type="button"
+            onClick={() => {
               setHistoryOpen((open) => !open)
               poke()
             }}
@@ -405,7 +466,8 @@ export const SongsPage: React.FC = () => {
           <div
             className={cn(
               "flex-1 min-h-0 overflow-y-auto transition-[opacity,visibility,transform] duration-700 ease-out",
-              writerIsHidden && "invisible opacity-0 -translate-y-2 pointer-events-none",
+              (writerIsHidden || overlayVisible) &&
+                "invisible opacity-0 -translate-y-2 pointer-events-none",
             )}
           >
             <div className="min-h-full flex flex-col justify-center">
@@ -468,6 +530,13 @@ export const SongsPage: React.FC = () => {
       </main>
 
       <LyricOverlay cues={lyricCues} engine={audio} muted={visualRunning} />
+
+      <GeneratingOverlay
+        song={overlaySong}
+        visible={overlayVisible}
+        queueDepth={statusQuery.data?.queueDepth ?? null}
+        onDismiss={dismissOverlay}
+      />
 
       <LoadSongDialog song={loadCandidate} onCancel={cancelLoad} onConfirm={confirmLoad} />
 
