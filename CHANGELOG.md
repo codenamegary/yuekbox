@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/codenamegary/yuekbox/compare/v0.1.0...v0.2.0) (2026-09-24)
+
+
+### Features
+
+* **web:** generating overlay with slot-machine stage reel ([#45](https://github.com/codenamegary/yuekbox/issues/45)) ([9d79816](https://github.com/codenamegary/yuekbox/commit/9d798162f52584081dd9d5ac6e28496fd8ff4ce8))
+
 ## [0.1.0](https://github.com/codenamegary/yuekbox/compare/v0.1.0...v0.1.0) (2026-09-22)
 
 
