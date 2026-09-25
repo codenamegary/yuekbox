@@ -4,6 +4,8 @@ import { Status, StatusSchema, statusPath } from "contracts/http/status"
 import { AiSlice } from "./ai/ai.assembly"
 import { aiRoutes } from "./ai/ai.routes"
 import { configRoutes, ConfigRoutesOptions } from "./config/config.routes"
+import { ModelsSlice } from "./models/models.assembly"
+import { modelsRoutes } from "./models/models.routes"
 import { ReadinessReader } from "./readiness/readiness.models"
 import { readinessRoutes } from "./readiness/readiness.routes"
 import { referencesRoutes } from "./songs/references.routes"
@@ -20,6 +22,7 @@ export type AppDeps = Readonly<{
   visualizations: VisualizationsSlice
   config: ConfigRoutesOptions
   readiness: ReadinessReader
+  models: ModelsSlice
   status: () => Promise<Status>
 }>
 
@@ -88,11 +91,19 @@ export const buildApp = (deps: AppDeps): FastifyInstance => {
       }),
   )
 
-  app.register(songsRoutes, { songs: deps.songs, wake: deps.wake })
+  app.register(songsRoutes, {
+    songs: deps.songs,
+    wake: deps.wake,
+    findMissingGenerationModels: deps.models.findMissingGenerationModels,
+  })
   app.register(referencesRoutes, { songs: deps.songs })
-  app.register(aiRoutes, { ai: deps.ai })
+  app.register(aiRoutes, {
+    ai: deps.ai,
+    findMissingGenerationModels: deps.models.findMissingGenerationModels,
+  })
   app.register(configRoutes, deps.config)
   app.register(readinessRoutes, { readReadiness: deps.readiness })
+  app.register(modelsRoutes, { downloads: deps.models.downloads })
   app.register(visualizationsRoutes, { visualizations: deps.visualizations })
 
   app.get(statusPath, async (_request, reply) => {
