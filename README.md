@@ -70,7 +70,7 @@ You need:
 - 🐧 Linux or WSL2 with an **NVIDIA GPU** (16 GB VRAM works with the default budget; 24 GB is YuE2's stated recommendation)
 - 🐍 **Python 3.12** for the YuE2 venv
 - 🎧 **ffmpeg** with `libmp3lame`
-- 🥟 **[Bun](https://bun.sh) 1.4+**
+- 🥟 **[Bun](https://bun.sh) 1.4+** — builds and runs from source. The compiled `./yuekbox` needs neither Bun nor a checkout.
 - 🧠 **The five model directories** — YuE2-3B, YuE2-Vae, SheetSage2, MERT-v2-FullSong, and Whisper large-v3-turbo. By default yuekbox looks for them under `~/.yuekbox/models/<name>`; `~/.yuekbox/config.yaml` (or a CLI flag) points anywhere else.
 
 ```bash
@@ -87,6 +87,35 @@ Open <http://127.0.0.1:3000> and go make something weird. The API hums along on
 curl -s http://127.0.0.1:3000/v1/status
 # {"version":"0.1.0","state":"online","ffmpeg":"ok","yue2":"ok",...}
 ```
+
+### 📦 Single binary (no Bun or source tree at runtime)
+
+Want one file instead of a checkout plus `node_modules`? Build the packaged
+executable — it embeds the SPA, the migrations, and the Python helpers:
+
+```bash
+bun run build:binary
+./yuekbox
+```
+
+It serves the UI and the API on one port: <http://127.0.0.1:3000> (`WEB_PORT`
+moves it). The first start extracts the Python helpers into
+`~/.yuekbox/scripts`; `--home`, `--config`, `--yue2-model` and the other config
+flags behave exactly as they do in dev. `--provision` is still the full setup
+step (venvs and model checks) and installs the same helpers. The binary needs
+no `node_modules`, no source tree, and no Bun.
+
+Cross-compile with `--target` and a local runtime:
+
+```bash
+bun run build:binary yuekbox-musl \
+  --target bun-linux-x64-musl \
+  --executable ~/.bun/install/cache/@oven/bun-linux-x64-musl@1.4.2@@@1/bin/bun
+```
+
+linux-x64 is the ship target. macos-arm64 is not supported: yuekbox wants a
+local NVIDIA GPU. `scripts/smoke-binary.sh ./yuekbox` runs the compiled
+acceptance smoke test locally; CI runs it on every PR.
 
 Yuekbox keeps everything it manages in `~/.yuekbox` (`--home` moves it): model defaults
 under `models/`, the Python venvs under `venvs/`, our scripts under `scripts/`, and the
@@ -323,7 +352,9 @@ yuekbox owns `~/.yuekbox` (override with `--home`):
 The scripts are ours (source: `packages/server/tools/`). The script installer
 (`packages/server/src/provisioning/`) copies them into `scripts/` flat and idempotently;
 provisioning builds the venvs around the runtime pinned in
-`packages/server/src/runtime/runtime.pins.ts`.
+`packages/server/src/runtime/runtime.pins.ts`. The packaged binary embeds the same
+five files and extracts them into `scripts/` on every start, so a fresh download
+needs no copy step.
 
 The only thing you configure is where the five model files live. `config.yaml` is optional
 and partial; unset keys fall back to `~/.yuekbox/models/<name>`:
@@ -350,7 +381,11 @@ Server and runtime overrides (advanced; everything else under the home is intern
 | `MEDIA_DIR` | `~/.yuekbox/data/media` | Per-Song folders: `<title>_<songId>/generated_<songId>.mp3`, `score.abc`, `reference_score.abc`, `references/<name>_<ulid>.<ext>`; uploads land in `temp/` |
 | `FFMPEG_BIN` | `ffmpeg` | Encoder binary |
 | `API_ORIGIN` | `http://127.0.0.1:8787` | Target the web `/v1` proxy forwards to |
+| `WEB_HOST` | `127.0.0.1` | Bun web server bind address (dev and binary) |
 | `WEB_PORT` | `3000` | Bun web server port |
+
+In the packaged binary the API binds an OS-assigned loopback port, so `HOST` and
+`PORT` apply to the dev server only; `WEB_HOST`/`WEB_PORT` are the public listener.
 
 ## 🧰 Scripts
 
@@ -359,6 +394,7 @@ Server and runtime overrides (advanced; everything else under the home is intern
 | `bun run dev` | Fastify (:8787) and the web app (:3000) in parallel |
 | `bun run check` | Lint, typecheck, and tests across all packages |
 | `bun run test` | `bun test` per package |
+| `bun run build:binary` | Compile the single `./yuekbox` executable |
 | `bun run db:generate <name>` | Drizzle migration from the schema |
 | `bun run format` / `format:check` | oxfmt |
 
