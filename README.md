@@ -44,13 +44,17 @@ queue, a worker, and the real YuE2 runtime. The visuals are just here to make th
 
 ## 🖼️ Gallery
 
-**Live progress**: pips light up per stage, and the bar tracks real step counts from YuE2's stderr.
+**Live progress**: the stage wheel spins through the pipeline while the pips light up per stage and the bar tracks real step counts from YuE2's stderr.
 
 ![Generating](docs/generating.png)
 
-**Playing**: the backdrop trips, the spectrum pulses, the scrubber obeys. Trip mode: Quantum Stardust Vortex.
+**Playing**: an AI-authored visualization takes the backdrop and draws the timed lyric line as it is sung.
 
 ![Playing](docs/playing.png)
+
+**Models**: download the five model files, or point yuekbox at copies you already have. The same panel reports ffmpeg and the NVIDIA driver when something is missing.
+
+![Models](docs/models.png)
 
 **History**: every song, its status, its duration, one click away.
 
