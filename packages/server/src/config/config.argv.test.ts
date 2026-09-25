@@ -1,12 +1,29 @@
 import { expect, test } from "bun:test"
 import { parseCliArgs } from "./config.argv"
 
-test("argv with no flags means no overrides and the default home", () => {
+test("argv with no flags means no overrides, no provisioning, and the default home", () => {
   expect(parseCliArgs(["bun", "src/server.ts"])).toEqual({
     home: null,
     configPath: null,
     models: {},
+    provision: false,
   })
+})
+
+test("--provision asks for a provisioning run and takes no value", () => {
+  expect(parseCliArgs(["bun", "src/server.ts", "--provision"])).toMatchObject({
+    provision: true,
+  })
+  expect(parseCliArgs(["--provision", "--home", "/srv/yuekbox"])).toEqual({
+    home: "/srv/yuekbox",
+    configPath: null,
+    models: {},
+    provision: true,
+  })
+})
+
+test("--provision=true is not a valid flag", () => {
+  expect(() => parseCliArgs(["--provision=true"])).toThrow("unknown flag: --provision")
 })
 
 test("model flags mirror the five config keys", () => {
@@ -35,6 +52,7 @@ test("model flags mirror the five config keys", () => {
       sheetsage2Base: "/mnt/MERT-v2-FullSong",
       whisper: "/mnt/whisper-large-v3-turbo",
     },
+    provision: false,
   })
 })
 
@@ -43,6 +61,7 @@ test("accepts --flag=value", () => {
     home: "/srv/yuekbox",
     configPath: null,
     models: { yue2: "/mnt/YuE2-3B" },
+    provision: false,
   })
 })
 
@@ -51,6 +70,7 @@ test("--home and --config point at a home and a config file", () => {
     home: "/srv/yuekbox",
     configPath: "/etc/yuekbox.yaml",
     models: {},
+    provision: false,
   })
 })
 
@@ -65,6 +85,7 @@ test("positional arguments and everything after -- are ignored", () => {
     home: null,
     configPath: null,
     models: {},
+    provision: false,
   })
 })
 

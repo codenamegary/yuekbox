@@ -18,6 +18,8 @@ import {
   Sheetsage2AdapterEnv,
 } from "./generation/generation.sheetsage2.adapters"
 import { checkYue2, makeRunYue2Generate } from "./generation/generation.yue2.adapters"
+import { assembleProvisioningSlice } from "./provisioning/provisioning.assembly"
+import { runProvisioningCommand } from "./provisioning/provisioning.cli"
 import { version } from "./version"
 
 const boot = await resolveBootEnv({
@@ -26,6 +28,17 @@ const boot = await resolveBootEnv({
   osHome: homedir(),
   loadModelOverrides: (configFilePath) => makeLoadModelOverrides(configFilePath)(),
 })
+
+if (boot.provision) {
+  const provisioning = assembleProvisioningSlice({ home: boot.home })
+  process.exit(
+    await runProvisioningCommand({
+      home: boot.home,
+      provisionAll: provisioning.provisionAll,
+      log: (line: string) => console.log(line),
+    }),
+  )
+}
 
 const database = openDatabase({ path: boot.sqlitePath })
 

@@ -19,6 +19,8 @@ export type BootEnv = Readonly<{
   configFilePath: string
   flags: ModelPathOverrides
   modelPaths: ModelPaths
+  /** `--provision`: build the runtime into the home, print progress, exit. */
+  provision: boolean
   host: string
   port: number
   sqlitePath: string
@@ -68,6 +70,7 @@ export const resolveBootEnv = async (input: BootEnvInput): Promise<BootEnv> => {
     configFilePath,
     flags: cli.models,
     modelPaths,
+    provision: cli.provision,
     host: env.HOST ?? "127.0.0.1",
     port: Number(env.PORT ?? 8787),
     sqlitePath: env.SQLITE_PATH ?? sqlitePath(home),

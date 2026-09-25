@@ -10,13 +10,16 @@ export type ProcessRunner = (
   command: readonly string[],
   cwd: string,
   onStderrLine: (line: string) => void,
+  /** Extra environment for the child, merged over the process environment. */
+  env?: Readonly<Record<string, string>>,
 ) => Promise<ProcessOutcome>
 
-export const runProcess: ProcessRunner = async (command, cwd, onStderrLine) => {
+export const runProcess: ProcessRunner = async (command, cwd, onStderrLine, env) => {
   const proc = Bun.spawn([...command], {
     cwd,
     stdout: "pipe",
     stderr: "pipe",
+    ...(env === undefined ? {} : { env: { ...process.env, ...env } }),
   })
 
   const decoder = new TextDecoder()

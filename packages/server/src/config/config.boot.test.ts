@@ -36,6 +36,16 @@ test("defaults every managed path under ~/.yuekbox", async () => {
   expect(boot.sheetsage2Script).toBe(join(home, "scripts/transcribe.py"))
   expect(boot.lyricAlignPython).toBe(join(home, "venvs/lyricalign/bin/python"))
   expect(boot.lyricAlignScript).toBe(join(home, "scripts/align.py"))
+  expect(boot.provision).toBe(false)
+})
+
+test("--provision reaches the boot env", async () => {
+  const boot = await resolveBootEnv(
+    withInput({ argv: ["bun", "src/server.ts", "--provision", "--home", "/srv/yuekbox"] }),
+  )
+
+  expect(boot.provision).toBe(true)
+  expect(boot.home).toBe("/srv/yuekbox")
 })
 
 test("runtime knobs keep their existing defaults", async () => {
