@@ -1,12 +1,12 @@
-import { ModelPaths } from "contracts/http/config"
 import { ModelReadiness, Readiness } from "contracts/http/readiness"
+import { ReadCurrentModelPaths } from "../config/config.current"
 import { expectedModelSizes, ModelReadinessKey } from "./readiness.models"
 import { CheckFfmpeg, MeasureModelSize, ReadGpuFacts } from "./readiness.ports"
 import { ffmpegCheck, nvidiaCheck } from "./readiness.preflight"
 
 export type ReadReadinessDeps = Readonly<{
-  /** The five resolved model paths from #49's resolution. */
-  modelPaths: ModelPaths
+  /** Resolved per read, so a saved path takes effect with no restart. */
+  readModelPaths: ReadCurrentModelPaths
   measureModelSize: MeasureModelSize
   checkFfmpeg: CheckFfmpeg
   readGpuFacts: ReadGpuFacts
@@ -18,8 +18,10 @@ export type ReadReadinessDeps = Readonly<{
  * are never part of this report.
  */
 export const makeReadReadiness = (deps: ReadReadinessDeps) => async (): Promise<Readiness> => {
+  const modelPaths = await deps.readModelPaths()
+
   const readModel = async (key: ModelReadinessKey): Promise<ModelReadiness> => {
-    const path = deps.modelPaths[key]
+    const path = modelPaths[key]
     const size = await deps.measureModelSize(path)
     return size === null
       ? { state: "missing", path, size: expectedModelSizes[key] }

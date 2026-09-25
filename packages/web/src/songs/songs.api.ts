@@ -15,24 +15,10 @@ import {
   SongVisualizationResponseSchema,
   songVisualizationPath,
 } from "contracts/http/visualizations"
-import { ProblemDetailsSchema } from "contracts/http/error"
-
-const toErrorMessage = async (response: Response): Promise<string> => {
-  try {
-    const problem = ProblemDetailsSchema.safeParse(await response.json())
-    if (problem.success) {
-      return problem.data.detail ?? problem.data.title
-    }
-  } catch {
-    // fall through to a generic message
-  }
-  return `Request failed with status ${response.status}`
-}
+import { toProblemError } from "@/lib/problems"
 
 const parseJson = async <T>(response: Response, parse: (value: unknown) => T): Promise<T> => {
-  if (!response.ok) {
-    throw new Error(await toErrorMessage(response))
-  }
+  if (!response.ok) throw await toProblemError(response)
   return parse(await response.json())
 }
 
@@ -59,9 +45,7 @@ export const fetchSongVisualization = async (
 
 export const requestSongVisualization = async (songId: string): Promise<void> => {
   const response = await fetch(songVisualizationPath(songId), { method: "POST" })
-  if (!response.ok) {
-    throw new Error(await toErrorMessage(response))
-  }
+  if (!response.ok) throw await toProblemError(response)
 }
 
 export const createSong = async (body: CreateSongBody): Promise<Song> => {
@@ -75,9 +59,7 @@ export const createSong = async (body: CreateSongBody): Promise<Song> => {
 
 export const deleteSong = async (songId: string): Promise<void> => {
   const response = await fetch(songPath(songId), { method: "DELETE" })
-  if (!response.ok) {
-    throw new Error(await toErrorMessage(response))
-  }
+  if (!response.ok) throw await toProblemError(response)
 }
 
 export const fetchStatus = async (): Promise<Status> => {

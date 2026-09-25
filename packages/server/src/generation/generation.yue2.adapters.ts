@@ -3,20 +3,38 @@ import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { SongStage } from "contracts/http/songs"
 import { z } from "zod"
-import { runProcess } from "../shared/process"
+import { ReadCurrentModelPaths } from "../config/config.current"
+import { ProcessRunner, runProcess } from "../shared/process"
 import { err, ok, Result } from "../shared/result"
 import { TruncatedFlags } from "../songs/songs.models"
 import { GenerateSongError, RunYue2GenerateInput, RunYue2GenerateOutput } from "./generation.models"
 import { RunYue2Generate } from "./generation.ports"
 
-export type Yue2AdapterEnv = Readonly<{
+/** The boot-time check input: the paths resolved at boot, as `/v1/status` sees them. */
+export type Yue2CheckEnv = Readonly<{
   pythonBin: string
-  /** Our generate entrypoint in `<home>/scripts`, not a YuE checkout. */
+  scriptPath: string
+  model: string
+  vae: string
+}>
+
+/** One run's flags, after the model paths are resolved. */
+export type Yue2ArgsEnv = Readonly<{
+  pythonBin: string
   scriptPath: string
   model: string
   vae: string
   gpuBudget: number
+}>
+
+export type Yue2AdapterEnv = Readonly<{
+  pythonBin: string
+  /** Our generate entrypoint in `<home>/scripts`, not a YuE checkout. */
+  scriptPath: string
+  gpuBudget: number
   cwd: string
+  /** Resolved at call time, so a path saved before the next run is used. */
+  readModelPaths: ReadCurrentModelPaths
 }>
 
 const stageMarkers: ReadonlyArray<readonly [string, SongStage]> = [
@@ -55,9 +73,7 @@ const resultFileSchema = z.object({
   truncated: z.object({ abc: z.boolean(), semantic: z.boolean() }),
 })
 
-export const checkYue2 = (
-  env: Pick<Yue2AdapterEnv, "pythonBin" | "scriptPath" | "model" | "vae">,
-): "ok" | "missing" =>
+export const checkYue2 = (env: Yue2CheckEnv): "ok" | "missing" =>
   existsSync(env.pythonBin) &&
   existsSync(env.scriptPath) &&
   existsSync(env.model) &&
@@ -66,7 +82,7 @@ export const checkYue2 = (
     : "missing"
 
 export const generateArgs = (
-  env: Yue2AdapterEnv,
+  env: Yue2ArgsEnv,
   input: RunYue2GenerateInput,
   requestPath: string,
 ) => [
@@ -88,9 +104,22 @@ export const generateArgs = (
 ]
 
 export const makeRunYue2Generate =
-  (env: Yue2AdapterEnv): RunYue2Generate =>
+  (env: Yue2AdapterEnv, run: ProcessRunner = runProcess): RunYue2Generate =>
   async (input): Promise<Result<RunYue2GenerateOutput, GenerateSongError>> => {
     const requestPath = join(input.outputDir, "request.json")
+    // Resolve the five paths now: a config save between songs is honored here.
+    const modelPaths = await env.readModelPaths()
+    const args = generateArgs(
+      {
+        pythonBin: env.pythonBin,
+        scriptPath: env.scriptPath,
+        model: modelPaths.yue2,
+        vae: modelPaths.yue2Vae,
+        gpuBudget: env.gpuBudget,
+      },
+      input,
+      requestPath,
+    )
     await writeFile(
       requestPath,
       `${JSON.stringify(
@@ -128,7 +157,7 @@ export const makeRunYue2Generate =
       }
     }
 
-    const outcome = await runProcess(generateArgs(env, input, requestPath), env.cwd, parseLine)
+    const outcome = await run(args, env.cwd, parseLine)
 
     if (outcome.exitCode !== 0) {
       const detail =

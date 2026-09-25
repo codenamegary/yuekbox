@@ -2,6 +2,7 @@ import { existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { AnalysisBeat, AnalysisNote, AnalysisSection } from "contracts/http/visualizations"
+import { ReadCurrentModelPaths } from "../config/config.current"
 import { ProcessRunner, runProcess } from "../shared/process"
 import { err, ok, Result } from "../shared/result"
 import {
@@ -15,16 +16,39 @@ import { RunTranscribe, RunVocalTranscript } from "./generation.ports"
 export type Sheetsage2AdapterEnv = Readonly<{
   pythonBin: string
   scriptPath: string
+  device: string
+  offline: boolean
+  cwd: string
+  /** Resolved at call time, so a path saved before the next run is used. */
+  readModelPaths: ReadCurrentModelPaths
+}>
+
+/** One run's flags, after the model paths are resolved. */
+export type Sheetsage2ArgsEnv = Readonly<{
+  pythonBin: string
+  scriptPath: string
   model: string
   baseModel: string | null
   device: string
   offline: boolean
-  cwd: string
 }>
 
 export const checkSheetsage2 = (
   env: Pick<Sheetsage2AdapterEnv, "pythonBin" | "scriptPath">,
 ): "ok" | "missing" => (existsSync(env.pythonBin) && existsSync(env.scriptPath) ? "ok" : "missing")
+
+/** The maker env plus the five live paths, flattened into one run's flags. */
+const argsEnvFor = async (env: Sheetsage2AdapterEnv): Promise<Sheetsage2ArgsEnv> => {
+  const modelPaths = await env.readModelPaths()
+  return {
+    pythonBin: env.pythonBin,
+    scriptPath: env.scriptPath,
+    model: modelPaths.sheetsage2,
+    baseModel: modelPaths.sheetsage2Base,
+    device: env.device,
+    offline: env.offline,
+  }
+}
 
 export type TranscribeArgsInput = Readonly<{
   audioPath: string
@@ -32,7 +56,7 @@ export type TranscribeArgsInput = Readonly<{
 }>
 
 const sheetsageArgs = (
-  env: Sheetsage2AdapterEnv,
+  env: Sheetsage2ArgsEnv,
   input: TranscribeArgsInput,
   task: "melody-full" | "melody-vocal",
 ): string[] => [
@@ -51,13 +75,11 @@ const sheetsageArgs = (
   ...(env.offline ? ["--offline"] : []),
 ]
 
-export const transcribeArgs = (env: Sheetsage2AdapterEnv, input: TranscribeArgsInput): string[] =>
+export const transcribeArgs = (env: Sheetsage2ArgsEnv, input: TranscribeArgsInput): string[] =>
   sheetsageArgs(env, input, "melody-full")
 
-export const vocalTranscribeArgs = (
-  env: Sheetsage2AdapterEnv,
-  input: TranscribeArgsInput,
-): string[] => sheetsageArgs(env, input, "melody-vocal")
+export const vocalTranscribeArgs = (env: Sheetsage2ArgsEnv, input: TranscribeArgsInput): string[] =>
+  sheetsageArgs(env, input, "melody-vocal")
 
 /** The transcript output directory inside a temp dir. The raw tree is kept from here. */
 export const transcriptDirectoryName = "transcript"
@@ -145,8 +167,9 @@ export const makeRunTranscribe =
 
     const scriptOutputDir = join(input.outputDir, "transcribe")
 
+    const args = await argsEnvFor(env)
     const outcome = await run(
-      transcribeArgs(env, { audioPath: input.audioPath, outputDir: scriptOutputDir }),
+      transcribeArgs(args, { audioPath: input.audioPath, outputDir: scriptOutputDir }),
       env.cwd,
       () => {},
     )
@@ -187,8 +210,9 @@ export const makeRunVocalTranscript =
     }
 
     const transcriptDir = join(input.outputDir, transcriptDirectoryName)
+    const args = await argsEnvFor(env)
     const outcome = await run(
-      vocalTranscribeArgs(env, { audioPath: input.audioPath, outputDir: transcriptDir }),
+      vocalTranscribeArgs(args, { audioPath: input.audioPath, outputDir: transcriptDir }),
       env.cwd,
       () => {},
     )

@@ -96,11 +96,16 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
       service: { version: "0.1.0", state: () => "online", startedAt: "2026-09-17T04:00:00.000Z" },
       dependencies: { ffmpeg: "ok", yue2: "ok", sheetsage2: "ok" },
       readiness: {
-        modelPaths,
+        readModelPaths: async () => modelPaths,
         checkFfmpeg: async () => false,
         readGpuFacts: async () => ({ kind: "absent", detail: "no GPU in this test" }),
       },
-      models: { home: configHome, modelPaths, pins: stubPins, fetchImpl: fakeHuggingFace },
+      models: {
+        home: configHome,
+        readModelPaths: async () => modelPaths,
+        pins: stubPins,
+        fetchImpl: fakeHuggingFace,
+      },
       now: () => "2026-09-17T04:00:00.000Z",
     })
 
@@ -283,7 +288,12 @@ test("creating a Song authors a visualization and deleting it takes the file alo
       service: { version: "0.1.0", state: () => "online", startedAt: "2026-09-17T04:00:00.000Z" },
       dependencies: { ffmpeg: "ok", yue2: "ok", sheetsage2: "ok" },
       readiness: unusedReadinessDepsFixture(),
-      models: { home: mediaDir, modelPaths, pins: stubPins, fetchImpl: fakeHuggingFace },
+      models: {
+        home: mediaDir,
+        readModelPaths: async () => modelPaths,
+        pins: stubPins,
+        fetchImpl: fakeHuggingFace,
+      },
       now: () => "2026-09-17T04:00:00.000Z",
     })
 
@@ -371,11 +381,16 @@ test("an empty home downloads the generator and then creates a Song", async () =
       service: { version: "0.1.0", state: () => "online", startedAt: "2026-09-17T04:00:00.000Z" },
       dependencies: { ffmpeg: "ok", yue2: "ok", sheetsage2: "ok" },
       readiness: {
-        modelPaths,
+        readModelPaths: async () => modelPaths,
         checkFfmpeg: async () => true,
         readGpuFacts: async () => ({ kind: "nvidia", driverVersion: "616.56" }),
       },
-      models: { home, modelPaths, pins: stubPins, fetchImpl: fakeHuggingFace },
+      models: {
+        home,
+        readModelPaths: async () => modelPaths,
+        pins: stubPins,
+        fetchImpl: fakeHuggingFace,
+      },
       now: () => "2026-09-17T04:00:00.000Z",
     })
 

@@ -15,7 +15,7 @@ const modelPaths: ModelPaths = Object.freeze({
 test("reports only the missing keys, in input order, with pinned names and sizes", async () => {
   const findMissingModels = makeFindMissingModels({
     home,
-    modelPaths,
+    readModelPaths: async () => modelPaths,
     pins: modelDownloadPins,
     pathExists: async (path) => path === modelPaths.yue2,
   })
@@ -43,7 +43,7 @@ test("reports only the missing keys, in input order, with pinned names and sizes
 test("a custom path the user pointed inside the home is still downloadable", async () => {
   const findMissingModels = makeFindMissingModels({
     home,
-    modelPaths: { ...modelPaths, yue2: `${home}/models/custom-yue2` },
+    readModelPaths: async () => ({ ...modelPaths, yue2: `${home}/models/custom-yue2` }),
     pins: modelDownloadPins,
     pathExists: async () => false,
   })
