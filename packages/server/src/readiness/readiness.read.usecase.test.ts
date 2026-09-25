@@ -68,7 +68,7 @@ test("expected sizes come from the upstream repositories read on 2026-09-24", ()
   expect(expectedModelSizes).toEqual({
     yue2: 7_295_775_491,
     yue2Vae: 531_343_726,
-    sheetsage2: 231_243_659,
+    sheetsage2: 233_240_091,
     sheetsage2Base: 2_530_365_136,
     whisper: 1_622_466_054,
   })

@@ -182,6 +182,10 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
       checkFfmpeg: async () => (await checkFfmpeg(boot.ffmpegBin)) === "ok",
       readGpuFacts,
     },
+    models: {
+      home: boot.home,
+      modelPaths: boot.modelPaths,
+    },
   })
 
   const recoveredCount = await songs.recoverInterruptedSongs()

@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { PROBLEM_TYPES } from "contracts/http/error"
+import { PROBLEM_TYPES, ProblemDetailsSchema } from "contracts/http/error"
 import { CreateSongBody, SongSchema } from "contracts/http/songs"
 import { Status } from "contracts/http/status"
 import { buildApp, AppDeps } from "../app"
 import { unusedConfigFixture } from "../config/config.fixtures"
+import { missingModelsFixture, unusedModelsFixture } from "../models/models.fixtures"
 import { unusedReadinessFixture } from "../readiness/readiness.fixtures"
 import { ok } from "../shared/result"
 import { makeSongsSliceFixture, songFixture } from "../songs/songs.fixtures"
@@ -12,7 +13,11 @@ import { unusedVisualizationsFixture } from "../visualizations/visualizations.fi
 import { AiSlice, assembleAiSlice } from "./ai.assembly"
 
 const makeApp = (
-  deps: Omit<AppDeps, "referenceMaxBytes" | "wake" | "visualizations" | "config" | "readiness">,
+  deps: Omit<
+    AppDeps,
+    "referenceMaxBytes" | "wake" | "visualizations" | "config" | "readiness" | "models"
+  > &
+    Readonly<{ models?: AppDeps["models"] }>,
   wake: () => void = () => {},
 ) =>
   buildApp({
@@ -21,6 +26,7 @@ const makeApp = (
     visualizations: unusedVisualizationsFixture(),
     readiness: unusedReadinessFixture(),
     config: unusedConfigFixture(),
+    models: unusedModelsFixture(),
     ...deps,
   })
 
@@ -306,6 +312,34 @@ describe("ai routes", () => {
       expect(fake.calls.map((call) => call.model)).toEqual(["style-model", "lyrics-model"])
       expect(fake.calls[0]?.user).toContain("Invent a brand new musical direction")
       expect(fake.calls[1]?.user).not.toContain(styleBrief)
+    } finally {
+      void fake.stop()
+    }
+  })
+
+  test("random song is blocked before any AI call when the generator model is missing", async () => {
+    const fake = startFakeOpenAI()
+    try {
+      const app = makeApp({
+        songs: songsSlice(),
+        ai: buildAi(),
+        models: missingModelsFixture([
+          {
+            key: "yue2",
+            name: "YuE2-3B",
+            path: "/home/u/.yuekbox/models/YuE2-3B",
+            sizeBytes: 7_295_775_491,
+            downloadable: true,
+          },
+        ]),
+        status: async () => statusFixture,
+      })
+
+      const response = await app.inject({ method: "POST", url: "/v1/ai/songs/random" })
+
+      expect(response.statusCode).toBe(409)
+      expect(ProblemDetailsSchema.parse(response.json()).type).toBe(PROBLEM_TYPES.modelRequired)
+      expect(fake.calls).toHaveLength(0)
     } finally {
       void fake.stop()
     }

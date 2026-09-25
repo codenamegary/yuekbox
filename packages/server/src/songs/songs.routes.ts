@@ -7,9 +7,11 @@ import {
   songsPath,
 } from "contracts/http/songs"
 import { UlidSchema } from "contracts/http/primitives"
+import { FindMissingGenerationModels } from "../models/models.models"
 import {
   conflictProblem,
   issuePointer,
+  modelRequiredProblem,
   notFoundProblem,
   sendProblem,
   validationProblem,
@@ -21,6 +23,8 @@ import { toSongResponse } from "./songs.responses"
 export type SongsRoutesOptions = Readonly<{
   songs: SongsSlice
   wake: () => void
+  /** Answers which models this generation needs that are not on disk. */
+  findMissingGenerationModels: FindMissingGenerationModels
 }>
 
 const parseRangeHeader = (
@@ -65,6 +69,13 @@ export const songsRoutes: FastifyPluginAsync<SongsRoutesOptions> = async (fastif
           "Request body failed validation",
         ),
       )
+    }
+
+    const missing = await options.findMissingGenerationModels({
+      hasReference: parsed.data.referenceId !== undefined,
+    })
+    if (missing.length > 0) {
+      return sendProblem(reply, modelRequiredProblem(missing))
     }
 
     const result = await songs.createSong(parsed.data)

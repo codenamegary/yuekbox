@@ -211,7 +211,11 @@ No `{ data: ... }` wrapper. Song JSON never includes MP3 bytes.
 ./http/collection
 ./http/status
 ./http/readiness
+./http/models
 ./http/songs
+./http/references
+./http/ai
+./http/visualizations
 ./http/config
 ```
 
@@ -295,9 +299,9 @@ to `ready` on the next request. The ffmpeg and nvidia-smi probes each spawn a
 process, cached for 30 s. Expected sizes are the current-revision byte totals
 the Hugging Face model API reports for the five upstream repositories
 (`m-a-p/YuE2-3B`, `m-a-p/YuE2-Vae`, `m-a-p/SheetSage2`,
-`m-a-p/MERT-v2-FullSong`, `openai/whisper-large-v3-turbo`) on 2026-09-24; a
-later change to what a download fetches updates the constants in
-`readiness.models.ts`.
+`m-a-p/MERT-v2-FullSong`, `openai/whisper-large-v3-turbo`) on 2026-09-24; what a
+download fetches is pinned in `models/models.pins.ts`, and a test keeps the two
+lists in step, so a later change updates both.
 
 Contracts tests parse fixtures with the schemas. No network.
 
@@ -329,6 +333,20 @@ packages/server/src/
 │   ├── media.ports.ts
 │   ├── media.adapters.ts
 │   └── media.assembly.ts
+├── models/                   # model downloads: pins, staging, progress
+│   ├── models.models.ts
+│   ├── models.ports.ts
+│   ├── models.pins.ts        # the five Hugging Face repos and revision SHAs
+│   ├── models.paths.ts       # the only write target: <home>/models
+│   ├── models.needs.ts       # which models a generation needs
+│   ├── models.tree.ts        # pinned-revision file list parsing
+│   ├── models.find.usecase.ts # the missing-models answer for the gate
+│   ├── models.downloads.ts   # in-memory jobs, resume, atomic move
+│   ├── models.hf.adapters.ts # the Hugging Face tree/file network seam
+│   ├── models.fs.adapters.ts # staging filesystem seam
+│   ├── models.assembly.ts
+│   ├── models.fixtures.ts
+│   └── models.routes.ts
 ├── generation/               # worker and vendor adapters; depends on songs
 │   ├── generation.models.ts
 │   ├── generation.ports.ts
@@ -411,6 +429,7 @@ One direction only: `media` depends on nothing, `songs` depends on media, `gener
 - `provisioning` builds everything the app needs outside Bun: it finds or fetches `uv`, installs the managed interpreters, checks the driver and picks the torch wheels, builds the three pinned environments, and installs our entrypoints. It depends on `shared` and the runtime pin only. `--provision` drives it; the server never provisions behind the user's back.
 - `visualizations` owns the `/v1/songs/:id/visualization` routes, the in-memory per-Song pending/failed state, single-flight rerolls, and the author flow. The file on disk is the durable record; there is no table and no boot recovery.
 - `readiness` owns `GET /v1/readiness`: the five model states and the system preflight. It reads the resolved model paths from `config` and reuses `provisioning.gpu.ts`'s driver evaluation instead of restating the CUDA floor; it never provisions and never reports runtimes, venvs, or our scripts.
+- `models` owns model downloads: the pinned Hugging Face revisions, the in-memory download jobs, the missing-models gate on `POST /v1/songs`, and the `/v1/models` routes. It reads the boot-resolved paths handed to it and writes only under `<home>/models/`; it never provisions and never reports runtimes, venvs, or our scripts.
 - `wake` (`() => void`) starts the worker. `compose.ts` passes it to the songs POST route and the AI slice. `/v1/status` reads queue depth from songs and `isBusy` from the generation worker.
 
 ### Ports
@@ -701,6 +720,60 @@ REFERENCE_MAX_BYTES     default 26214400 (25 MiB)
 
 The yue2 adapter runs `<home>/venvs/yue2/bin/python <home>/scripts/generate.py`. The venv's `yue2-infer` comes from the pin in `runtime.pins.ts`; the app never falls back to a checkout's module or console script.
 
+### Model downloads
+
+Models are the expensive part, and the user chooses how to get them: point at an existing copy or let yuekbox fetch. Nothing multi-GB downloads silently. Pins live in `models/models.pins.ts`; the jobs and routes live in the `models` slice.
+
+**Endpoints.**
+
+```text
+POST /v1/models/:key/download   body { confirm: boolean }
+  -> 202 the running snapshot, or 200 when the model is already present
+  -> 400 validation, 404 unknown key
+  -> 409 download-confirmation-required { expectedBytes, thresholdBytes }
+  -> 409 model-path-external { key, path }
+
+GET /v1/models/:key/download    -> 200 a snapshot, 404 unknown key
+GET /v1/models/downloads        -> 200 { items: [snapshot x5] }
+```
+
+`:key` is one of `yue2`, `yue2Vae`, `sheetsage2`, `sheetsage2Base`, `whisper`. A snapshot is `{ key, state, path, totalBytes, bytesDone, currentFile, errorDetail? }`; `state` is `idle | preparing | downloading | failed | present`.
+
+**Pins.** Each model names its Hugging Face `repo`, an immutable revision SHA, and the revision's byte total. The current pins (2026-09-24):
+
+```text
+yue2           m-a-p/YuE2-3B                14fc6c6f146441b1dd6363fcb2e01e82a6914cb7   7,295,775,491
+yue2Vae        m-a-p/YuE2-Vae               9a94e1d0ea9f8087e98f77fa88df4a4068104d2a     531,343,726
+sheetsage2     m-a-p/SheetSage2             55bfe14e32d8b663629b3a86b0f3285c2ca5da0b     233,240,091
+sheetsage2Base m-a-p/MERT-v2-FullSong       d8ba1c745e733b3908ce6ad16ebeb17ac7600a42   2,530,365,136
+whisper        openai/whisper-large-v3-turbo 41f01f3fe87f28c78e2fbf8b568835947dd65ed9   1,622,466,054
+```
+
+The totals are the same `size` values `GET /v1/readiness` reports for a missing model; `models.pins.test.ts` fails when the two lists drift. To bump a pin: read the new revision and its recursive tree total, update both constants, and download once into a scratch home before landing.
+
+**Downloading.** The job lists the pinned revision with `https://huggingface.co/api/models/<repo>/tree/<revision>?recursive=true`, cross-checks the tree total against the pin, and fetches each file from `https://huggingface.co/<repo>/resolve/<revision>/<path>`. Every file's byte count is checked, and the LFS SHA-256 (`lfs.oid`) is checked whenever the repository provides one. Files land under `<home>/models/.downloads/<key>/` and the whole folder is renamed onto the resolved path only when the download is complete, so an interrupted run never leaves a half model where generation looks.
+
+**Idempotent and resumable.** A present path is a no-op. A restart keeps the staging folder: a new start skips files already there at their pinned size and resumes a partial file with an HTTP `Range` request, falling back to a full fetch when the server ignores the range. A file that fails size or checksum verification is discarded, not kept.
+
+**Safety.** yuekbox writes only under `<home>/models/`. When the resolved path is a user-configured path outside the home, the start is refused with a `model-path-external` problem and the dialog steers to "choose a path". An existing path is never overwritten or deleted.
+
+**Confirmation.** A download over `downloadConfirmationThresholdBytes` (128 MiB) requires `{ "confirm": true }` in the start request; without it the response is a `download-confirmation-required` problem carrying `expectedBytes` and `thresholdBytes`.
+
+**Progress and restart behavior.** Progress lives in process memory. A finished model reads `present` from disk even after a restart; an interrupted one reads `idle` until a new start resumes it. A failed job keeps its `errorDetail` until the next start clears it.
+
+**Needs.** A freeform Song needs `yue2` and `yue2Vae`; a reference cover also needs `sheetsage2` and `sheetsage2Base`, because the reference is transcribed before generation. When a needed model is missing, `POST /v1/songs` (and the AI random-Song route) answers `409` with a `model-required` problem:
+
+```text
+type    https://yuekbox.local/problems/model-required
+title   Model Required
+status  409
+models  [{ key, name, path, sizeBytes, downloadable }]
+```
+
+Each entry names the model, its pinned size, the path the app looked at, and whether a download may write there. `whisper` never blocks: a missing whisper only drops the lyric cues and the Song completes without a calibration. MERT-v2-FullSong is only ever prompted for a reference cover, never at first run.
+
+**Prompt once per model.** There is no extra "prompted" state to store. A model stops being missing when the user points `PUT /v1/config` at an existing copy or the download lands; readiness and the gate read disk and config, so neither prompts again.
+
 ### Provisioning (`--provision`)
 
 The user never installs or chooses a language runtime, and never sees one's
@@ -807,6 +880,13 @@ Cover at least:
 - The system preflight names ffmpeg and the NVIDIA driver; a failure carries a short message and a Linux and WSL2 install instruction, and an old driver names both versions. No runtime, venv, or helper-script data appears in the payload.
 - A present model's size is measured once inside the TTL; a missing path is checked live on every read and never measured; a cached size is dropped when the path disappears.
 - The assembled slice and the composed app serve `/v1/readiness`, and the ffmpeg and nvidia-smi probes are reused across reads inside their TTL.
+- The download pins cover the five models, match readiness's expected sizes and folder names, and name immutable revision SHAs.
+- The model tree parser maps files with sizes and LFS checksums, skips directories, sorts by path, and rejects escaping or malformed entries.
+- The download adapter verifies size and SHA-256, reports progress, resumes a `.part` with an HTTP range request, restarts when the server ignores the range, replaces an oversized part, and leaves nothing at the destination on a failure or mismatch.
+- The download coordinator refuses a download over the threshold without an explicit confirmation (carrying the expected bytes), refuses a resolved path outside `<home>/models`, treats a present path as a no-op, coalesces a second start into the running job, skips files already staged at their pinned size, retries a failed job on a new start, and fails loudly when the tree total disagrees with the pin.
+- The model routes serve the five snapshots in report order, map confirmation and external-path refusals to their problems, and reject an unknown key or a malformed start body.
+- `POST /v1/songs` is blocked by a `model-required` problem naming the missing models; a reference cover asks for the transcription models; the AI random-Song route is blocked the same way.
+- From an empty home the composed app reports the missing models, downloads the generator and VAE through the stubbed network seam, flips readiness to ready, and creates the next Song.
 - Boot env: home, tools, venvs, scripts, SQLite, and media default under `~/.yuekbox`; explicit env overrides still win; `--home` moves the layout.
 - Config resolution per model: CLI flag > `config.yaml` > `<home>/models/<name>`, with each of the five keys covered and unrelated keys left alone.
 - Config CLI flags parse `--flag value` and `--flag=value`, the last occurrence wins, and an unknown or value-less flag fails loud.

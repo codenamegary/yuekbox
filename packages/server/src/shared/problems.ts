@@ -1,4 +1,5 @@
 import { PROBLEM_TYPES, ProblemError } from "contracts/http/error"
+import { MissingModel, ModelKey } from "contracts/http/models"
 import { FastifyReply } from "fastify"
 
 export type ProblemBody = Readonly<{
@@ -33,6 +34,40 @@ export const conflictProblem = (detail: string): ProblemBody => ({
   title: "Conflict",
   status: 409,
   detail,
+})
+
+/** A generation gate: the named models are missing; the dialog resolves them. */
+export const modelRequiredProblem = (models: readonly MissingModel[]) => ({
+  type: PROBLEM_TYPES.modelRequired,
+  title: "Model Required",
+  status: 409,
+  detail: "This Song needs model files that are not on disk yet.",
+  models,
+})
+
+/** A download over the threshold needs the user's explicit confirmation. */
+export const confirmationRequiredProblem = (
+  input: Readonly<{
+    expectedBytes: number
+    thresholdBytes: number
+  }>,
+) => ({
+  type: PROBLEM_TYPES.confirmationRequired,
+  title: "Confirmation Required",
+  status: 409,
+  detail: "This is a large download; confirm it explicitly",
+  expectedBytes: input.expectedBytes,
+  thresholdBytes: input.thresholdBytes,
+})
+
+/** The resolved path is outside `<home>/models`, so the user picks a folder. */
+export const modelPathExternalProblem = (input: Readonly<{ key: ModelKey; path: string }>) => ({
+  type: PROBLEM_TYPES.modelPathExternal,
+  title: "Download Unavailable",
+  status: 409,
+  detail: `yuekbox does not download into ${input.path}; choose a folder instead`,
+  key: input.key,
+  path: input.path,
 })
 
 export const sendProblem = (reply: FastifyReply, problem: ProblemBody) =>
