@@ -4,6 +4,7 @@ import { homedir } from "node:os"
 import { ServiceState } from "contracts/http/status"
 import { composeServer } from "./compose"
 import { BootEnv, resolveBootEnv } from "./config/config.boot"
+import { makeCurrentModelPaths } from "./config/config.current"
 import { makeLoadModelOverrides } from "./config/config.yaml.adapters"
 import { openDatabase } from "./db/client"
 import { checkFfmpeg, makeEncodeFlacToMp3 } from "./generation/generation.ffmpeg.adapters"
@@ -80,6 +81,14 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
 
   await input.ensureScripts?.(boot)
 
+  // One live resolver for readiness, downloads, and the generation adapters;
+  // reading the small config file per request keeps a `PUT /v1/config` live.
+  const readModelPaths = makeCurrentModelPaths({
+    home: boot.home,
+    flags: boot.flags,
+    loadModelOverrides: makeLoadModelOverrides(boot.configFilePath),
+  })
+
   const database = openDatabase({ path: boot.sqlitePath })
 
   const ffmpegState = await checkFfmpeg(boot.ffmpegBin)
@@ -128,11 +137,10 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
   const sheetsage2Env: Sheetsage2AdapterEnv = {
     pythonBin: boot.sheetsage2Python,
     scriptPath: boot.sheetsage2Script,
-    model: boot.modelPaths.sheetsage2,
-    baseModel: boot.modelPaths.sheetsage2Base,
     device: boot.sheetsage2Device,
     offline: boot.sheetsage2Offline,
     cwd: boot.home,
+    readModelPaths,
   }
 
   const lyricAlignEnv: LyricAlignAdapterEnv = {
@@ -142,8 +150,9 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
     cwd: boot.home,
   }
 
-  // Readiness re-probes both system checks behind its own TTL; #49's resolved
-  // paths are fixed at boot, the same paths the generation adapters run.
+  // Readiness, downloads, and the generation adapters resolve the five paths
+  // per request/call, so `PUT /v1/config` takes effect with no restart. Only
+  // the boot-time `/v1/status` checks keep the paths resolved at boot.
   const readGpuFacts = makeReadGpuFacts({ cwd: boot.home, runProcess })
 
   const { app, songs } = composeServer({
@@ -157,10 +166,9 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
     runYue2Generate: makeRunYue2Generate({
       pythonBin: boot.yue2Python,
       scriptPath: boot.generateScript,
-      model: boot.modelPaths.yue2,
-      vae: boot.modelPaths.yue2Vae,
       gpuBudget: boot.gpuBudget,
       cwd: boot.home,
+      readModelPaths,
     }),
     runTranscribe: makeRunTranscribe(sheetsage2Env),
     runLyricAlign: makeRunLyricAlign(lyricAlignEnv),
@@ -178,13 +186,13 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
       sheetsage2: sheetsage2State,
     },
     readiness: {
-      modelPaths: boot.modelPaths,
+      readModelPaths,
       checkFfmpeg: async () => (await checkFfmpeg(boot.ffmpegBin)) === "ok",
       readGpuFacts,
     },
     models: {
       home: boot.home,
-      modelPaths: boot.modelPaths,
+      readModelPaths,
     },
   })
 

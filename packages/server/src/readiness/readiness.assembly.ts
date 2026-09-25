@@ -1,4 +1,4 @@
-import { ModelPaths } from "contracts/http/config"
+import { ReadCurrentModelPaths } from "../config/config.current"
 import {
   makeCachedModelSize,
   makeCachedProbe,
@@ -16,8 +16,8 @@ export const systemProbeTtlMs = 30_000
 export const modelSizeTtlMs = 60_000
 
 export type AssembleReadinessDeps = Readonly<{
-  /** The five resolved model paths from #49's resolution. */
-  modelPaths: ModelPaths
+  /** Resolved per read, so `PUT /v1/config` takes effect with no restart. */
+  readModelPaths: ReadCurrentModelPaths
   checkFfmpeg: CheckFfmpeg
   readGpuFacts: ReadGpuFacts
   /** Test seam; the process root leaves it at `Date.now`. */
@@ -34,7 +34,7 @@ export type ReadinessSlice = Readonly<{ readReadiness: ReadinessReader }>
 export const assembleReadinessSlice = (deps: AssembleReadinessDeps): ReadinessSlice => {
   const now = deps.now ?? Date.now
   const readReadiness = makeReadReadiness({
-    modelPaths: deps.modelPaths,
+    readModelPaths: deps.readModelPaths,
     measureModelSize: makeCachedModelSize({
       pathExists: makePathExists(),
       measurePathSize: makeMeasurePathSize(),

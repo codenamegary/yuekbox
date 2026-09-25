@@ -1,10 +1,13 @@
 import * as React from "react"
 import { EnhanceScope } from "contracts/http/ai"
+import { MissingModel } from "contracts/http/models"
 import { Song, SongStage } from "contracts/http/songs"
 import { cn } from "@/lib/cn"
 import { AiSettings } from "@/ai/AiSettings"
 import { useAiConfigQuery } from "@/ai/ai.queries"
 import { useEnhanceMutation, useRandomSongMutation } from "@/ai/ai.mutations"
+import { MissingModelDialog } from "@/models/MissingModelDialog"
+import { ModelsPanel } from "@/models/ModelsPanel"
 import { GeneratingOverlay } from "./GeneratingOverlay"
 import { LoadSongDialog } from "./LoadSongDialog"
 import { LyricOverlay } from "./LyricOverlay"
@@ -58,6 +61,8 @@ export const SongsPage: React.FC = () => {
   const [activeId, setActiveId] = React.useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = React.useState(false)
   const [settingsOpen, setSettingsOpen] = React.useState(false)
+  const [modelsOpen, setModelsOpen] = React.useState(false)
+  const [blockedModels, setBlockedModels] = React.useState<readonly MissingModel[] | null>(null)
   const [overlay, dispatchOverlay] = React.useReducer(stepOverlay, initialOverlayState)
   const [trackedSong, setTrackedSong] = React.useState<Song | null>(null)
   const [mode, setMode] = React.useState<TripMode>(0)
@@ -224,6 +229,16 @@ export const SongsPage: React.FC = () => {
     poke()
   }
 
+  // A blocked generation carries the server's missing models; the dialog reads
+  // them as-is instead of guessing which models are absent.
+  const handleBlocked = React.useCallback(
+    (models: readonly MissingModel[]) => {
+      setBlockedModels(models)
+      poke()
+    },
+    [poke],
+  )
+
   const handleSelect = (songId: string) => {
     setActiveId(songId)
     const selected = songs.find((song) => song.id === songId)
@@ -323,9 +338,9 @@ export const SongsPage: React.FC = () => {
     poke()
   }
 
-  const manualRandom = useRandomSongMutation(handleCreated)
+  const manualRandom = useRandomSongMutation(handleCreated, handleBlocked)
 
-  const autoRandom = useRandomSongMutation(() => {})
+  const autoRandom = useRandomSongMutation(() => {}, handleBlocked)
   const requestRandom = React.useCallback(async () => {
     try {
       const song = await autoRandom.mutateAsync()
@@ -450,6 +465,17 @@ export const SongsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => {
+              setModelsOpen(true)
+              poke()
+            }}
+            className={cn("alien-sigil", modelsOpen && "active")}
+            title="Models — point at a copy or download one"
+          >
+            ▤
+          </button>
+          <button
+            type="button"
+            onClick={() => {
               setSettingsOpen(true)
               poke()
             }}
@@ -489,6 +515,7 @@ export const SongsPage: React.FC = () => {
                   typing()
                 }}
                 onCreated={handleCreated}
+                onBlocked={handleBlocked}
                 onEnhance={handleEnhance}
                 onRandom={() => {
                   manualRandom.mutate()
@@ -541,6 +568,12 @@ export const SongsPage: React.FC = () => {
       <LoadSongDialog song={loadCandidate} onCancel={cancelLoad} onConfirm={confirmLoad} />
 
       {settingsOpen ? <AiSettings onClose={() => setSettingsOpen(false)} /> : null}
+
+      {modelsOpen ? <ModelsPanel onClose={() => setModelsOpen(false)} /> : null}
+
+      {blockedModels !== null && blockedModels.length > 0 ? (
+        <MissingModelDialog models={blockedModels} onClose={() => setBlockedModels(null)} />
+      ) : null}
 
       <SongList
         open={historyOpen}
