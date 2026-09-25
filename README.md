@@ -119,11 +119,14 @@ python3.11 -m venv ~/.yuekbox/venvs/sheetsage2
 ~/.yuekbox/venvs/sheetsage2/bin/python -m pip install -r ~/.yuekbox/models/SheetSage2/requirements.txt
 ```
 
-yuekbox runs the venv at `~/.yuekbox/venvs/sheetsage2` and the script at
-`~/.yuekbox/scripts/transcribe.py`. The SheetSage2 and MERT-v2-FullSong directories are
-configured with `models.sheetsage2` and `models.sheetsage2Base` (defaults under
-`~/.yuekbox/models/`). `SHEETSAGE2_OFFLINE=0` allows first-run downloads through the Hugging
-Face cache. Uploads are capped at 25 MB (`REFERENCE_MAX_BYTES`).
+yuekbox runs the venv at `~/.yuekbox/venvs/sheetsage2` and our own
+`~/.yuekbox/scripts/transcribe.py` (source: `packages/server/tools/sheetsage2/`, vendored
+from YuE at the revision pinned in `packages/server/src/runtime/runtime.pins.ts`,
+Apache-2.0). The script installer copies it into the home. The SheetSage2 and
+MERT-v2-FullSong directories are configured with `models.sheetsage2` and
+`models.sheetsage2Base` (defaults under `~/.yuekbox/models/`). `SHEETSAGE2_OFFLINE=0`
+allows first-run downloads through the Hugging Face cache. Uploads are capped at 25 MB
+(`REFERENCE_MAX_BYTES`).
 
 ## 🤖 The "just make it work" prompt
 
@@ -142,13 +145,15 @@ Assumptions
 - `python3.12` is available. If `bun` is missing, install it with
   `curl -fsSL https://bun.sh/install | bash`.
 
-1) Make yuekbox's home, the YuE2 venv, and the YuE checkout
+1) Make yuekbox's home and install the pinned YuE2 runtime
      mkdir -p ~/.yuekbox/models ~/.yuekbox/venvs ~/.yuekbox/scripts ~/.yuekbox/data
      python3.12 -m venv ~/.yuekbox/venvs/yue2
      . ~/.yuekbox/venvs/yue2/bin/activate
      python -m pip install --upgrade pip
-     git clone https://github.com/multimodal-art-projection/YuE.git /tmp/YuE
-     cd /tmp/YuE && python -m pip install .
+     python -m pip install "yue2-infer @ git+https://github.com/multimodal-art-projection/YuE.git@bd90e4ccae671d869b3ecaca6d7e893927d29442"
+   That commit is the runtime pin; `packages/server/src/runtime/runtime.pins.ts` in the
+   yuekbox repo (cloned in step 3) is the source of truth, and it is not on PyPI. Do not
+   install a checkout's HEAD.
    Verify: `~/.yuekbox/venvs/yue2/bin/yue2 doctor` reports `"dependencies_ready": true`.
    If the Hugging Face download later requires access, log in first with
    `~/.yuekbox/venvs/yue2/bin/hf auth login`.
@@ -167,8 +172,14 @@ Assumptions
 4) Install and run
      cd ui
      bun install
+     cp packages/server/tools/yue2/generate.py \
+        packages/server/tools/sheetsage2/transcribe.py \
+        packages/server/tools/sheetsage2/abc_tools.py \
+        packages/server/tools/sheetsage2/common.py \
+        packages/server/tools/lyric-align/align.py ~/.yuekbox/scripts/
      bun run dev
    The web app is at http://127.0.0.1:3000 and the API at http://127.0.0.1:8787.
+   (That copy is what the script installer does; provisioning will run it for you.)
 
 5) Verify end to end
      curl -s http://127.0.0.1:3000/v1/status
@@ -194,13 +205,15 @@ packages/server     Fastify 5, Drizzle ORM, bun:sqlite, a single worker loop
 packages/contracts  Zod wire schemas, paths, RFC 7807 problems
 ```
 
-One worker claims the oldest `queued` Song, marks it `running`, and shells out to
-`python -m yue2 generate`. YuE2's stderr is parsed live: known stage names move the
-pips, numeric lines move the progress bar. Success means: encode the FLAC to MP3 with
-ffmpeg, transcribe the vocals with SheetSage2 to calibrate the lyric timing, write the
-MP3, the ABC scores, and `calibration.json` into the Song's own folder under `MEDIA_DIR`,
-mark it `complete`, nuke the temp dir. Failure stores a short stderr tail and marks it
-`failed`. If the server dies mid-run, the next boot confesses: `interrupted`.
+One worker claims the oldest `queued` Song, marks it `running`, and runs our
+`~/.yuekbox/scripts/generate.py` with the YuE2 venv (the runtime that script drives is
+pinned in `packages/server/src/runtime/runtime.pins.ts`). The runtime's stderr is parsed
+live: known stage names move the pips, numeric lines move the progress bar. Success
+means: encode the FLAC to MP3 with ffmpeg, transcribe the vocals with SheetSage2 to
+calibrate the lyric timing, write the MP3, the ABC scores, and `calibration.json` into
+the Song's own folder under `MEDIA_DIR`, mark it `complete`, nuke the temp dir. Failure
+stores a short stderr tail and marks it `failed`. If the server dies mid-run, the next
+boot confesses: `interrupted`.
 
 Songs move through `queued → running → complete | failed`, and while running they carry
 a `stage` (`plan`, `semantic`, `synthesize`, `decode`, `encode`, `sync`) plus `stageProgress`
@@ -303,9 +316,14 @@ yuekbox owns `~/.yuekbox` (override with `--home`):
 ├── config.yaml           # the only user-editable file
 ├── models/<name>/        # the five model directories
 ├── venvs/<name>/         # python venvs: yue2, sheetsage2, lyricalign
-├── scripts/              # transcribe.py and align.py
+├── scripts/              # generate.py, transcribe.py, abc_tools.py, common.py, align.py
 └── data/                 # yuekbox.sqlite and per-Song media
 ```
+
+The scripts are ours (source: `packages/server/tools/`). The script installer
+(`packages/server/src/provisioning/`) copies them into `scripts/` flat and idempotently;
+provisioning builds the venvs around the runtime pinned in
+`packages/server/src/runtime/runtime.pins.ts`.
 
 The only thing you configure is where the five model files live. `config.yaml` is optional
 and partial; unset keys fall back to `~/.yuekbox/models/<name>`:

@@ -12,7 +12,7 @@ _Avoid_: Track, generation, job, run, render (in the UI and on the wire)
 
 **Request**:
 The lyrics and style the user submitted, and the title derived from the first sung line. Stored on the Song.
-_Avoid_: Prompt, prompt JSON (except when talking to the YuE2 CLI)
+_Avoid_: Prompt, prompt JSON (the request JSON `generate.py` reads is the exception)
 
 **Score**:
 ABC lead sheet YuE2 wrote for the Song. Stored as `score.abc` in the Song's folder. Hidden in v1.
@@ -89,7 +89,7 @@ ui/
 ├── .oxfmtrc.json
 ├── packages/
 │   ├── contracts/            # Zod wire schemas and paths
-│   ├── server/               # Fastify API, SQLite, worker
+│   ├── server/               # Fastify API, SQLite, worker, Python entrypoints
 │   └── web/                  # React SPA
 ```
 
@@ -294,7 +294,14 @@ packages/server/src/
 │   ├── generation.worker.ts
 │   ├── generation.yue2.adapters.ts
 │   ├── generation.ffmpeg.adapters.ts
-│   └── generation.sheetsage2.adapters.ts
+│   ├── generation.sheetsage2.adapters.ts
+│   └── generation.lyricalign.adapters.ts
+├── provisioning/             # installs our Python entrypoints into the home
+│   ├── provisioning.models.ts
+│   ├── provisioning.ports.ts
+│   └── provisioning.scripts.adapters.ts
+├── runtime/
+│   └── runtime.pins.ts       # the one pinned yue2-infer source
 ├── shared/
 │   ├── home.ts               # the ~/.yuekbox layout: models, venvs, scripts, data
 │   ├── problems.ts
@@ -340,6 +347,7 @@ One direction only: `media` depends on nothing, `songs` depends on media, `gener
 - `generation` owns the worker loop plus the yue2, ffmpeg, and sheetsage2 adapters. It reaches songs only through the capabilities record.
 - `ai` owns the writer config, prompts, model calls, and validation for style, lyrics, and visuals. It never touches songs directly; compose hands it `createSong` and wires its visual authoring into the visualizations slice.
 - `config` owns the `~/.yuekbox` layout and the five user-configurable model paths. Resolution lives in one module (`config.resolve.ts`), with precedence CLI flag > `config.yaml` > `<home>/models/<name>`. It reads and writes `config.yaml` atomically and serves `GET`/`PUT /v1/config`. Adapters receive resolved paths; none of them read `YUE2_KIT` or work out a model location on their own.
+- `provisioning` installs our Python entrypoints into the home, and later builds the venvs around the pinned runtime. It depends on nothing but `shared`.
 - `visualizations` owns the `/v1/songs/:id/visualization` routes, the in-memory per-Song pending/failed state, single-flight rerolls, and the author flow. The file on disk is the durable record; there is no table and no boot recovery.
 - `wake` (`() => void`) starts the worker. `compose.ts` passes it to the songs POST route and the AI slice. `/v1/status` reads queue depth from songs and `isBusy` from the generation worker.
 
@@ -387,7 +395,7 @@ CreateTempDir
 RemoveTempDir
 ```
 
-`RunYue2Generate` takes `{ lyrics, style, seed, cot, abc, outputDir, onStage, onProgress }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter shells out to the YuE2 venv. It does not import Python.
+`RunYue2Generate` takes `{ lyrics, style, seed, cot, abc, outputDir, onStage, onProgress }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter runs our `generate.py` at `<home>/scripts/generate.py` (source: `packages/server/tools/yue2/generate.py`) with the YuE2 venv's Python. It does not import Python.
 
 `RunLyricAlign` takes `{ audioPath, outputDir }` and returns the calibration, or a Result error. The adapter runs the lyric-align script at `<home>/scripts/align.py` (source: `packages/server/tools/lyric-align/align.py`; Demucs vocal stem, Whisper word timings, silence gate, display-line grouping) and reads back the `calibration.json` it writes under the output dir.
 
@@ -396,6 +404,59 @@ RemoveTempDir
 `EncodeFlacToMp3` takes a FLAC path and returns MP3 `Uint8Array`.
 
 `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the folder, plus `calibration.json` when the input carries cues, then marks the row complete. If the row update fails it removes those files and rethrows.
+
+### Python entrypoints
+
+Every Python entrypoint is ours, under `packages/server/tools/`:
+
+```text
+tools/
+├── yue2/
+│   ├── generate.py           # generation, calls the pinned runtime library
+│   └── README.md
+├── sheetsage2/
+│   ├── transcribe.py         # reference and analysis transcription (vendored)
+│   ├── abc_tools.py          # transcribe.py imports these as siblings
+│   ├── common.py
+│   └── README.md
+└── lyric-align/
+    ├── align.py              # lyric calibration
+    └── README.md
+```
+
+The scripts receive model paths and device flags as arguments. They do not know
+about `~/.yuekbox`, kits, or venv locations. A self-contained app owns every
+entrypoint it invokes; no adapter path points into a YuE checkout.
+
+The installer port is `InstallScripts`; the adapter
+(`provisioning.scripts.adapters.ts`) copies the tools flat into
+`<home>/scripts/`: `generate.py`, `transcribe.py`, `abc_tools.py`, `common.py`,
+and `align.py` sit side by side so the sibling imports resolve. It is
+idempotent, overwrites only its own files, and never deletes anything else.
+Provisioning calls it, then builds the venvs.
+
+`generate.py` calls the yue2 library directly instead of forwarding to
+`python -m yue2 generate`. It owns our flags and the
+`<output>/<id>/{audio.flac,result.json,score.abc}` layout, so a runtime bump
+cannot change them silently; a changed library API fails loudly there.
+
+`transcribe.py` and its helpers are vendored from YuE
+(`https://github.com/multimodal-art-projection/YuE`) at the revision in
+`runtime.pins.ts`, Apache-2.0, with the origin in a header comment. A vendored
+copy changes only to follow a reviewed upstream revision.
+
+`runtime.pins.ts` is the one place the runtime is written down:
+
+```text
+package     yue2-infer
+version     0.1.6
+repository  https://github.com/multimodal-art-projection/YuE.git
+commit      bd90e4ccae671d869b3ecaca6d7e893927d29442
+```
+
+`yue2-infer` is not on PyPI, so provisioning installs it from that git source
+at that commit. To bump: edit the constant, install into a fresh home, and
+generate one Song end to end before landing.
 
 ### SQLite
 
@@ -476,7 +537,7 @@ Each Song may own one AI-authored canvas visualization.
 4. Adapter writes a temp request JSON and runs:
 
 ```text
-<yue2-python> -m yue2 generate
+<home>/venvs/yue2/bin/python <home>/scripts/generate.py
   --request <tmp>/request.json
   --output <tmp>/out
   --model <models.yue2>
@@ -486,7 +547,11 @@ Each Song may own one AI-authored canvas visualization.
   --device cuda
 ```
 
-CLI flags must match the installed `yue2` parser. If the module form fails, call the venv `yue2` script with the same flags. `<models.yue2>` and `<models.yue2Vae>` are the resolved config values (CLI flag > `config.yaml` > `<home>/models/<name>`), never a checkout path.
+Those flags are ours: `generate.py` owns them and the
+`<tmp>/out/<song id>/{audio.flac,result.json,score.abc}` layout, and calls the
+pinned runtime as a library. `<models.yue2>` and `<models.yue2Vae>` are the
+resolved config values (CLI flag > `config.yaml` > `<home>/models/<name>`),
+never a checkout path.
 
 5. Worker updates `stage` when stderr progress names a known stage. If parsing fails, leave the stage until done. Status stays `running`.
 6. If the Song has a Reference, transcribe it before generation. Run `<home>/venvs/sheetsage2/bin/python <home>/scripts/transcribe.py <MEDIA_DIR>/<TITLE>_<SONG_ID>/references/<name>_<ulid>.<ext> --output <tmp>/transcribe --task melody-full --device cuda --model <models.sheetsage2> --base-model <models.sheetsage2Base> [--offline]`, read `score.abc`, write it to `reference_score.abc` in the Song folder, then generate with `cot = melody` and the ABC in the request JSON. A missing Reference file fails the Song before the script spawns; any other failure fails the Song.
@@ -520,7 +585,7 @@ yuekbox owns `~/.yuekbox` (override with `--home`). Everything the app manages l
 ├── config.yaml           # the only user-editable file
 ├── models/<name>/        # the five model directories
 ├── venvs/<name>/         # python venvs: yue2, sheetsage2, lyricalign
-├── scripts/              # transcribe.py and align.py
+├── scripts/              # generate.py, transcribe.py, abc_tools.py, common.py, align.py
 └── data/                 # yuekbox.sqlite and per-Song media
 ```
 
@@ -570,7 +635,7 @@ LYRIC_ALIGN_DEVICE      default cuda:0
 REFERENCE_MAX_BYTES     default 26214400 (25 MiB)
 ```
 
-The yue2 adapter runs `<home>/venvs/yue2/bin/python -m yue2`, falling back to `<home>/venvs/yue2/bin/yue2`.
+The yue2 adapter runs `<home>/venvs/yue2/bin/python <home>/scripts/generate.py`. The venv's `yue2-infer` comes from the pin in `runtime.pins.ts`; the app never falls back to a checkout's module or console script.
 
 Bind localhost by default. This app talks to a local GPU.
 
@@ -598,6 +663,9 @@ Cover at least:
 - `GET /v1/songs/:id/audio` serves a range from a multi-megabyte file in the folder, 416s an unsatisfiable range, and 404s when the file is gone.
 - Transcribe points the script at the stored path and fails before spawning when the file is missing.
 - Lyric align parses the calibration, rejects an empty or contract-breaking one, and fails before spawning when the environment or audio is missing.
+- Generate args call `<home>/scripts/generate.py` with the resolved model and vae and no checkout path; `checkYue2` needs the python, script, model, and vae.
+- The script installer copies every tool flat into the scripts dir, reruns over its own files, leaves unrelated files alone, and reports a missing source with its path.
+- The runtime pin names one immutable git commit.
 - Config resolution per model: CLI flag > `config.yaml` > `<home>/models/<name>`, with each of the five keys covered and unrelated keys left alone.
 - Config CLI flags parse `--flag value` and `--flag=value`, the last occurrence wins, and an unknown or value-less flag fails loud.
 - `config.yaml` parses partial overrides, rejects unknown keys and wrong types with a clear error, and an empty or missing file means no overrides.
