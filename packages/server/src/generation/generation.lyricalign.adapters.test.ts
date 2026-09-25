@@ -2,31 +2,48 @@ import { expect, test } from "bun:test"
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
+import { ModelPaths } from "contracts/http/config"
 import { ProcessRunner } from "../shared/process"
 import {
   LyricAlignAdapterEnv,
+  LyricAlignArgsEnv,
   lyricAlignArgs,
   makeRunLyricAlign,
 } from "./generation.lyricalign.adapters"
 
-const env: LyricAlignAdapterEnv = {
+const modelPaths: ModelPaths = Object.freeze({
+  yue2: "/kit/models/YuE2-3B",
+  yue2Vae: "/kit/models/YuE2-Vae",
+  sheetsage2: "/kit/models/SheetSage2",
+  sheetsage2Base: "/kit/models/MERT-v2-FullSong",
+  whisper: "/kit/models/whisper-large-v3-turbo",
+})
+
+const argsEnv: LyricAlignArgsEnv = {
   pythonBin: process.execPath,
   scriptPath: import.meta.path,
   device: "cuda:0",
-  cwd: "/kit",
+  whisperModel: "/kit/models/whisper-large-v3-turbo",
 }
 
-test("lyric align args point the script at the audio and the calibration file", () => {
-  const args = lyricAlignArgs(env, {
+const env: LyricAlignAdapterEnv = {
+  ...argsEnv,
+  cwd: "/kit",
+  readModelPaths: async () => modelPaths,
+}
+
+test("lyric align args point the script at the audio, the calibration, and the whisper model", () => {
+  const args = lyricAlignArgs(argsEnv, {
     audioPath: "/tmp/out/audio.flac",
     outputDir: "/tmp/out",
   })
 
-  expect(args.slice(0, 2)).toEqual([env.pythonBin, env.scriptPath])
+  expect(args.slice(0, 2)).toEqual([argsEnv.pythonBin, argsEnv.scriptPath])
   expect(args.join(" ")).toContain("--audio /tmp/out/audio.flac")
   expect(args.join(" ")).toContain("--out /tmp/out/lyric-align")
   expect(args.join(" ")).toContain("--calibration-out /tmp/out/lyric-align/calibration.json")
   expect(args.join(" ")).toContain("--device cuda:0")
+  expect(args.join(" ")).toContain("--whisper-model /kit/models/whisper-large-v3-turbo")
 })
 
 const calibrationFixture = {
@@ -50,6 +67,41 @@ test("a successful run returns the parsed calibration", async () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.value.calibration).toEqual(calibrationFixture)
+  })
+})
+
+test("the whisper model is resolved at call time, not when the adapter is made", async () => {
+  await withStoredAudio(async (audioPath, outputRoot) => {
+    const whispers = ["/kit/models/whisper-one", "/kit/models/whisper-two"]
+    const commands: string[][] = []
+    const runner = makeFakeRunner(async (calibrationPath) => {
+      await mkdir(dirname(calibrationPath), { recursive: true })
+      await writeFile(calibrationPath, JSON.stringify(calibrationFixture), "utf8")
+      return 0
+    })
+    const runLyricAlign = makeRunLyricAlign(
+      {
+        ...env,
+        readModelPaths: async () => ({ ...modelPaths, whisper: whispers.shift() ?? "" }),
+      },
+      async (command, cwd, onLine) => {
+        commands.push([...command])
+        return runner(command, cwd, onLine)
+      },
+    )
+
+    const first = await runLyricAlign({ audioPath, outputDir: outputRoot })
+    const second = await runLyricAlign({ audioPath, outputDir: outputRoot })
+
+    expect(first.ok).toBe(true)
+    expect(second.ok).toBe(true)
+    expect(commands[0]).toContain("--whisper-model")
+    expect(commands[0]?.[commands[0].indexOf("--whisper-model") + 1]).toBe(
+      "/kit/models/whisper-one",
+    )
+    expect(commands[1]?.[commands[1].indexOf("--whisper-model") + 1]).toBe(
+      "/kit/models/whisper-two",
+    )
   })
 })
 
