@@ -50,14 +50,14 @@ test("summary and unrelated lines are ignored", () => {
 
 const env: Yue2AdapterEnv = {
   pythonBin: process.execPath,
-  scriptBin: process.execPath,
+  scriptPath: import.meta.path,
   model: "/models/YuE2-3B",
   vae: "/models/YuE2-Vae",
   gpuBudget: 16,
   cwd: "/tmp",
 }
 
-test("generate args pass the resolved model and vae, not a kit root", () => {
+test("generate args call our script with the resolved model and vae, not a kit", () => {
   const args = generateArgs(
     env,
     {
@@ -75,7 +75,8 @@ test("generate args pass the resolved model and vae, not a kit root", () => {
   )
 
   expect(args).toEqual([
-    "generate",
+    env.pythonBin,
+    env.scriptPath,
     "--request",
     "/tmp/output/request.json",
     "--output",
@@ -92,12 +93,17 @@ test("generate args pass the resolved model and vae, not a kit root", () => {
   ])
 })
 
-test("checkYue2 needs the python, the model, and the vae", () => {
-  expect(checkYue2({ pythonBin: process.execPath, model: import.meta.path, vae: "/nope" })).toBe(
-    "missing",
-  )
-  expect(checkYue2({ pythonBin: "/nope", model: import.meta.path, vae: "/nope" })).toBe("missing")
-  expect(
-    checkYue2({ pythonBin: process.execPath, model: import.meta.path, vae: process.execPath }),
-  ).toBe("ok")
+test("checkYue2 needs the python, the script, the model, and the vae", () => {
+  const ready = {
+    pythonBin: process.execPath,
+    scriptPath: import.meta.path,
+    model: import.meta.path,
+    vae: process.execPath,
+  }
+
+  expect(checkYue2(ready)).toBe("ok")
+  expect(checkYue2({ ...ready, scriptPath: "/nope" })).toBe("missing")
+  expect(checkYue2({ ...ready, pythonBin: "/nope" })).toBe("missing")
+  expect(checkYue2({ ...ready, model: "/nope" })).toBe("missing")
+  expect(checkYue2({ ...ready, vae: "/nope" })).toBe("missing")
 })

@@ -31,7 +31,7 @@ test("defaults every managed path under ~/.yuekbox", async () => {
   expect(boot.sqlitePath).toBe(join(home, "data", "yuekbox.sqlite"))
   expect(boot.mediaDir).toBe(join(home, "data", "media"))
   expect(boot.yue2Python).toBe(join(home, "venvs/yue2/bin/python"))
-  expect(boot.yue2Script).toBe(join(home, "venvs/yue2/bin/yue2"))
+  expect(boot.generateScript).toBe(join(home, "scripts/generate.py"))
   expect(boot.sheetsage2Python).toBe(join(home, "venvs/sheetsage2/bin/python"))
   expect(boot.sheetsage2Script).toBe(join(home, "scripts/transcribe.py"))
   expect(boot.lyricAlignPython).toBe(join(home, "venvs/lyricalign/bin/python"))

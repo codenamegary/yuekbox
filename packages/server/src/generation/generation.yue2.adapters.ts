@@ -11,7 +11,8 @@ import { RunYue2Generate } from "./generation.ports"
 
 export type Yue2AdapterEnv = Readonly<{
   pythonBin: string
-  scriptBin: string
+  /** Our generate entrypoint in `<home>/scripts`, not a YuE checkout. */
+  scriptPath: string
   model: string
   vae: string
   gpuBudget: number
@@ -55,16 +56,22 @@ const resultFileSchema = z.object({
 })
 
 export const checkYue2 = (
-  env: Pick<Yue2AdapterEnv, "pythonBin" | "model" | "vae">,
+  env: Pick<Yue2AdapterEnv, "pythonBin" | "scriptPath" | "model" | "vae">,
 ): "ok" | "missing" =>
-  existsSync(env.pythonBin) && existsSync(env.model) && existsSync(env.vae) ? "ok" : "missing"
+  existsSync(env.pythonBin) &&
+  existsSync(env.scriptPath) &&
+  existsSync(env.model) &&
+  existsSync(env.vae)
+    ? "ok"
+    : "missing"
 
 export const generateArgs = (
   env: Yue2AdapterEnv,
   input: RunYue2GenerateInput,
   requestPath: string,
 ) => [
-  "generate",
+  env.pythonBin,
+  env.scriptPath,
   "--request",
   requestPath,
   "--output",
@@ -121,17 +128,11 @@ export const makeRunYue2Generate =
       }
     }
 
-    const args = generateArgs(env, input, requestPath)
-    const first = await runProcess([env.pythonBin, "-m", "yue2", ...args], env.cwd, parseLine)
-
-    let outcome = first
-    if (first.exitCode !== 0 && first.stderrTail.includes("No module named")) {
-      outcome = await runProcess([env.scriptBin, ...args], env.cwd, parseLine)
-    }
+    const outcome = await runProcess(generateArgs(env, input, requestPath), env.cwd, parseLine)
 
     if (outcome.exitCode !== 0) {
       const detail =
-        outcome.stderrTail.trim().slice(-2000) || `yue2 exited with code ${outcome.exitCode}`
+        outcome.stderrTail.trim().slice(-2000) || `generate.py exited with code ${outcome.exitCode}`
       return err({ kind: "yue2_failed", detail })
     }
 

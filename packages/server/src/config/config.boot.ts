@@ -2,6 +2,7 @@ import { join } from "node:path"
 import { ModelPathOverrides, ModelPaths } from "contracts/http/config"
 import {
   defaultHome,
+  generateScriptPath,
   lyricAlignPythonPath,
   lyricAlignScriptPath,
   mediaDir,
@@ -9,7 +10,6 @@ import {
   sheetsage2ScriptPath,
   sqlitePath,
   yue2PythonPath,
-  yue2ScriptPath,
 } from "../shared/home"
 import { parseCliArgs } from "./config.argv"
 import { resolveModelPaths } from "./config.resolve"
@@ -24,7 +24,7 @@ export type BootEnv = Readonly<{
   sqlitePath: string
   mediaDir: string
   yue2Python: string
-  yue2Script: string
+  generateScript: string
   gpuBudget: number
   ffmpegBin: string
   sheetsage2Python: string
@@ -73,7 +73,7 @@ export const resolveBootEnv = async (input: BootEnvInput): Promise<BootEnv> => {
     sqlitePath: env.SQLITE_PATH ?? sqlitePath(home),
     mediaDir: env.MEDIA_DIR ?? mediaDir(home),
     yue2Python: env.YUE2_PYTHON ?? yue2PythonPath(home),
-    yue2Script: yue2ScriptPath(home),
+    generateScript: generateScriptPath(home),
     gpuBudget: Number(env.YUE2_GPU_BUDGET ?? 16),
     ffmpegBin: env.FFMPEG_BIN ?? "ffmpeg",
     sheetsage2Python: env.SHEETSAGE2_PYTHON ?? sheetsage2PythonPath(home),

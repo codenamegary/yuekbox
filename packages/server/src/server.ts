@@ -32,6 +32,7 @@ const database = openDatabase({ path: boot.sqlitePath })
 const ffmpegState = await checkFfmpeg(boot.ffmpegBin)
 const yue2State = checkYue2({
   pythonBin: boot.yue2Python,
+  scriptPath: boot.generateScript,
   model: boot.modelPaths.yue2,
   vae: boot.modelPaths.yue2Vae,
 })
@@ -50,7 +51,7 @@ if (ffmpegState === "missing") {
 }
 if (yue2State === "missing") {
   console.warn(
-    `yue2 not found (python=${boot.yue2Python}, model=${boot.modelPaths.yue2}, vae=${boot.modelPaths.yue2Vae}); generates will fail`,
+    `yue2 not found (python=${boot.yue2Python}, script=${boot.generateScript}, model=${boot.modelPaths.yue2}, vae=${boot.modelPaths.yue2Vae}); generates will fail`,
   )
 }
 if (sheetsage2State === "missing") {
@@ -98,7 +99,7 @@ const { app, songs } = composeServer({
   },
   runYue2Generate: makeRunYue2Generate({
     pythonBin: boot.yue2Python,
-    scriptBin: boot.yue2Script,
+    scriptPath: boot.generateScript,
     model: boot.modelPaths.yue2,
     vae: boot.modelPaths.yue2Vae,
     gpuBudget: boot.gpuBudget,
