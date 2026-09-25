@@ -11,7 +11,8 @@
     "./http/songs": "./src/http/songs.ts",
     "./http/references": "./src/http/references.ts",
     "./http/ai": "./src/http/ai.ts",
-    "./http/visualizations": "./src/http/visualizations.ts"
+    "./http/visualizations": "./src/http/visualizations.ts",
+    "./http/config": "./src/http/config.ts"
   },
   "scripts": {
     "lint": "oxlint --deny-warnings",

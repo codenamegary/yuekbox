@@ -71,11 +71,9 @@ You need:
 - 🐍 **Python 3.12** for the YuE2 venv
 - 🎧 **ffmpeg** with `libmp3lame`
 - 🥟 **[Bun](https://bun.sh) 1.4+**
-- 🧠 A **YuE2 kit**: a checkout of the [YuE repo](https://github.com/multimodal-art-projection/YuE) that has `models/YuE2-3B`, `models/YuE2-Vae`, and `.venv/`
-- 🎼 **Optional: SheetSage2** only if you want reference covers — a `.venv-sheetsage2` and `models/SheetSage2` inside the YuE kit
+- 🧠 **The five model directories** — YuE2-3B, YuE2-Vae, SheetSage2, MERT-v2-FullSong, and Whisper large-v3-turbo. By default yuekbox looks for them under `~/.yuekbox/models/<name>`; `~/.yuekbox/config.yaml` (or a CLI flag) points anywhere else.
 
 ```bash
-# inside the YuE checkout that has models/ and .venv/
 git clone https://github.com/codenamegary/yuekbox.git ui
 cd ui
 bun install
@@ -90,28 +88,42 @@ curl -s http://127.0.0.1:3000/v1/status
 # {"version":"0.1.0","state":"online","ffmpeg":"ok","yue2":"ok",...}
 ```
 
-If your YuE kit lives somewhere else, point `YUE2_KIT` at it when starting the server.
+Yuekbox keeps everything it manages in `~/.yuekbox` (`--home` moves it): model defaults
+under `models/`, the Python venvs under `venvs/`, our scripts under `scripts/`, and the
+SQLite file plus Song media under `data/`. The only thing you configure is where the five
+model files live:
+
+```yaml
+# ~/.yuekbox/config.yaml
+models:
+  yue2: /mnt/audio/YuE2-3B
+  yue2Vae: /mnt/audio/YuE2-Vae
+```
+
+Keys you leave out fall back to `~/.yuekbox/models/<name>`. A CLI flag beats the file:
+`bun src/server.ts --yue2-model /mnt/audio/YuE2-3B`. `YUE2_KIT` is gone; yuekbox never
+asks about a checkout.
 
 ### 🎼 Reference covers (optional)
 
 Reference covers need [SheetSage2](https://huggingface.co/m-a-p/SheetSage2) to turn your uploaded
 audio into a melody. Without it the app works fine; a reference upload fails cleanly on the first
-generate. Install it inside the YuE kit with Python 3.10 or 3.11:
+generate. Install it into yuekbox's home with Python 3.10 or 3.11:
 
 ```bash
-python3.11 -m venv .venv-sheetsage2
-.venv-sheetsage2/bin/python -m pip install huggingface-hub==0.36.0
-.venv-sheetsage2/bin/huggingface-cli download m-a-p/SheetSage2 --local-dir models/SheetSage2
-.venv-sheetsage2/bin/python -m pip install torch==2.8.0 torchaudio==2.8.0 \
+python3.11 -m venv ~/.yuekbox/venvs/sheetsage2
+~/.yuekbox/venvs/sheetsage2/bin/python -m pip install huggingface-hub==0.36.0
+~/.yuekbox/venvs/sheetsage2/bin/huggingface-cli download m-a-p/SheetSage2 --local-dir ~/.yuekbox/models/SheetSage2
+~/.yuekbox/venvs/sheetsage2/bin/python -m pip install torch==2.8.0 torchaudio==2.8.0 \
   --index-url https://download.pytorch.org/whl/cu126
-.venv-sheetsage2/bin/python -m pip install -r models/SheetSage2/requirements.txt
+~/.yuekbox/venvs/sheetsage2/bin/python -m pip install -r ~/.yuekbox/models/SheetSage2/requirements.txt
 ```
 
-The app finds that layout by default. When the kit has `models/MERT-v2-FullSong`, the app
-uses it as the offline base model with no env var. Override with `SHEETSAGE2_PYTHON`,
-`SHEETSAGE2_SCRIPT`, `SHEETSAGE2_MODEL`, or `SHEETSAGE2_BASE_MODEL` if yours differs.
-`SHEETSAGE2_OFFLINE=0` allows first-run downloads through the Hugging Face cache. Uploads are
-capped at 25 MB (`REFERENCE_MAX_BYTES`).
+yuekbox runs the venv at `~/.yuekbox/venvs/sheetsage2` and the script at
+`~/.yuekbox/scripts/transcribe.py`. The SheetSage2 and MERT-v2-FullSong directories are
+configured with `models.sheetsage2` and `models.sheetsage2Base` (defaults under
+`~/.yuekbox/models/`). `SHEETSAGE2_OFFLINE=0` allows first-run downloads through the Hugging
+Face cache. Uploads are capped at 25 MB (`REFERENCE_MAX_BYTES`).
 
 ## 🤖 The "just make it work" prompt
 
@@ -130,27 +142,27 @@ Assumptions
 - `python3.12` is available. If `bun` is missing, install it with
   `curl -fsSL https://bun.sh/install | bash`.
 
-1) Get and install the YuE2 kit (skip if you already have a YuE checkout with
-   models/ and .venv/)
-     git clone https://github.com/multimodal-art-projection/YuE.git
-     cd YuE
-     python3.12 -m venv .venv
-     . .venv/bin/activate
+1) Make yuekbox's home, the YuE2 venv, and the YuE checkout
+     mkdir -p ~/.yuekbox/models ~/.yuekbox/venvs ~/.yuekbox/scripts ~/.yuekbox/data
+     python3.12 -m venv ~/.yuekbox/venvs/yue2
+     . ~/.yuekbox/venvs/yue2/bin/activate
      python -m pip install --upgrade pip
-     python -m pip install .
-   Verify: `.venv/bin/yue2 doctor` reports `"dependencies_ready": true`.
+     git clone https://github.com/multimodal-art-projection/YuE.git /tmp/YuE
+     cd /tmp/YuE && python -m pip install .
+   Verify: `~/.yuekbox/venvs/yue2/bin/yue2 doctor` reports `"dependencies_ready": true`.
    If the Hugging Face download later requires access, log in first with
-   `.venv/bin/hf auth login`.
+   `~/.yuekbox/venvs/yue2/bin/hf auth login`.
 
-2) Download the two model sets into the kit (ask me first)
-     .venv/bin/huggingface-cli download m-a-p/YuE2-3B --local-dir models/YuE2-3B
-     .venv/bin/huggingface-cli download m-a-p/YuE2-Vae --local-dir models/YuE2-Vae
-   Verify: models/YuE2-3B/config.json and models/YuE2-Vae/config.json exist.
+2) Download the two model sets into the home (ask me first)
+     ~/.yuekbox/venvs/yue2/bin/huggingface-cli download m-a-p/YuE2-3B --local-dir ~/.yuekbox/models/YuE2-3B
+     ~/.yuekbox/venvs/yue2/bin/huggingface-cli download m-a-p/YuE2-Vae --local-dir ~/.yuekbox/models/YuE2-Vae
+   Verify: ~/.yuekbox/models/YuE2-3B/config.json and ~/.yuekbox/models/YuE2-Vae/config.json exist.
 
-3) Clone Yuekbox into the kit
+3) Clone Yuekbox
      git clone https://github.com/codenamegary/yuekbox.git ui
-   (If it already lives elsewhere, that is fine: export YUE2_KIT to the YuE root
-   that contains models/ and .venv/ when starting the server.)
+   (Model locations come from ~/.yuekbox/config.yaml or CLI flags. If the models
+   live elsewhere, write models.yue2 and models.yue2Vae there or pass
+   --yue2-model/--yue2-vae. There is no YUE2_KIT to point at.)
 
 4) Install and run
      cd ui
@@ -282,17 +294,42 @@ Include:
 Be kind, assume good faith, and remember that this is a small app made for joy.
 If a PR needs work, a maintainer will say so warmly and specifically.
 
-## ⚙️ Env vars
+## ⚙️ Home and config
+
+yuekbox owns `~/.yuekbox` (override with `--home`):
+
+```text
+~/.yuekbox/
+├── config.yaml           # the only user-editable file
+├── models/<name>/        # the five model directories
+├── venvs/<name>/         # python venvs: yue2, sheetsage2, lyricalign
+├── scripts/              # transcribe.py and align.py
+└── data/                 # yuekbox.sqlite and per-Song media
+```
+
+The only thing you configure is where the five model files live. `config.yaml` is optional
+and partial; unset keys fall back to `~/.yuekbox/models/<name>`:
+
+| Config key | Model |
+| --- | --- |
+| `models.yue2` | YuE2-3B |
+| `models.yue2Vae` | YuE2-Vae |
+| `models.sheetsage2` | SheetSage2 |
+| `models.sheetsage2Base` | MERT-v2-FullSong |
+| `models.whisper` | Whisper large-v3-turbo |
+
+A CLI flag beats the file: `--yue2-model`, `--yue2-vae`, `--sheetsage2`,
+`--sheetsage2-base`, `--whisper`, plus `--home` and `--config`. `GET /v1/config` returns the
+effective paths and `PUT /v1/config` writes partial `{ "models": { ... } }` updates.
+
+Server and runtime overrides (advanced; everything else under the home is internal):
 
 | Name | Default | Purpose |
 | --- | --- | --- |
 | `HOST` | `127.0.0.1` | Fastify bind address |
 | `PORT` | `8787` | Fastify port |
-| `SQLITE_PATH` | `./data/yuekbox.sqlite` | SQLite file (relative to `packages/server`) |
-| `MEDIA_DIR` | `./data/media` | Per-Song folders: `<title>_<songId>/generated_<songId>.mp3`, `score.abc`, `reference_score.abc`, `references/<name>_<ulid>.<ext>`; uploads land in `temp/` (relative to `packages/server`) |
-| `YUE2_KIT` | four levels above `packages/server/src` | YuE root holding `models/` and `.venv/` |
-| `YUE2_PYTHON` | `$YUE2_KIT/.venv/bin/python` | Interpreter for `python -m yue2` |
-| `YUE2_GPU_BUDGET` | `16` | Passed to `yue2 generate --budget` (GiB) |
+| `SQLITE_PATH` | `~/.yuekbox/data/yuekbox.sqlite` | SQLite file |
+| `MEDIA_DIR` | `~/.yuekbox/data/media` | Per-Song folders: `<title>_<songId>/generated_<songId>.mp3`, `score.abc`, `reference_score.abc`, `references/<name>_<ulid>.<ext>`; uploads land in `temp/` |
 | `FFMPEG_BIN` | `ffmpeg` | Encoder binary |
 | `API_ORIGIN` | `http://127.0.0.1:8787` | Target the web `/v1` proxy forwards to |
 | `WEB_PORT` | `3000` | Bun web server port |
@@ -315,6 +352,7 @@ If a PR needs work, a maintainer will say so warmly and specifically.
 - `GET /v1/songs/:songId/audio` — `audio/mpeg` with Range support; `409` before completion.
 - `DELETE /v1/songs/:songId` — `204`.
 - `GET /v1/status` — version, state, `ffmpeg`, `yue2`, `queueDepth`, `gpuBusy`.
+- `GET` / `PUT /v1/config` — the five model paths; `PUT` writes `~/.yuekbox/config.yaml`.
 - `GET /v1/ai/presets` — known OpenAI-compatible endpoints and icons.
 - `GET` / `PUT /v1/ai/config` — AI settings; API keys are write-only.
 - `GET /v1/ai/models?scope=style|lyrics` — live model list from that endpoint.

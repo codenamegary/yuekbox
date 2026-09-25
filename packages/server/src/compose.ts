@@ -1,6 +1,7 @@
 import { ServiceState, Status } from "contracts/http/status"
 import { AiSlice, assembleAiSlice } from "./ai/ai.assembly"
 import { buildApp } from "./app"
+import { ConfigRoutesOptions } from "./config/config.routes"
 import { Db } from "./db/client"
 import { assembleGenerationSlice, GenerationSlice } from "./generation/generation.assembly"
 import {
@@ -32,6 +33,7 @@ export type ServiceInfo = Readonly<{
 export type ComposeDeps = Readonly<{
   db: Db
   mediaDir: string
+  config: ConfigRoutesOptions
   runYue2Generate: RunYue2Generate
   runTranscribe: RunTranscribe
   runLyricAlign: RunLyricAlign
@@ -114,6 +116,7 @@ export const composeServer = (deps: ComposeDeps): ComposedServer => {
     referenceMaxBytes: deps.referenceMaxBytes,
     ai,
     visualizations,
+    config: deps.config,
     status,
   })
 

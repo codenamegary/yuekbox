@@ -3,6 +3,7 @@ import { PROBLEM_TYPES } from "contracts/http/error"
 import { Status, StatusSchema, statusPath } from "contracts/http/status"
 import { AiSlice } from "./ai/ai.assembly"
 import { aiRoutes } from "./ai/ai.routes"
+import { configRoutes, ConfigRoutesOptions } from "./config/config.routes"
 import { referencesRoutes } from "./songs/references.routes"
 import { SongsSlice } from "./songs/songs.assembly"
 import { songsRoutes } from "./songs/songs.routes"
@@ -15,6 +16,7 @@ export type AppDeps = Readonly<{
   referenceMaxBytes: number
   ai: AiSlice
   visualizations: VisualizationsSlice
+  config: ConfigRoutesOptions
   status: () => Promise<Status>
 }>
 
@@ -86,6 +88,7 @@ export const buildApp = (deps: AppDeps): FastifyInstance => {
   app.register(songsRoutes, { songs: deps.songs, wake: deps.wake })
   app.register(referencesRoutes, { songs: deps.songs })
   app.register(aiRoutes, { ai: deps.ai })
+  app.register(configRoutes, deps.config)
   app.register(visualizationsRoutes, { visualizations: deps.visualizations })
 
   app.get(statusPath, async (_request, reply) => {
