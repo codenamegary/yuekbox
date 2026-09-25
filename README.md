@@ -6,7 +6,7 @@
 
 A local, single-user web app that turns **a style + some lyrics** into a **full song** with [YuE2](https://github.com/multimodal-art-projection/YuE) running on your machine. Just you, a graphics card, and increasingly questionable lyrics.
 
-![Yuekbox](docs/hero.png)
+![Yuekbox playing](docs/playing.png)
 
 </div>
 
@@ -48,9 +48,9 @@ queue, a worker, and the real YuE2 runtime. The visuals are just here to make th
 
 ![Generating](docs/generating.png)
 
-**Playing**: an AI-authored visualization takes the backdrop and draws the timed lyric line as it is sung.
+**AI visualizations**: with AI on, every new Song gets its own backdrop, built from its style and lyrics while the GPU works.
 
-![Playing](docs/playing.png)
+![AI visualization](docs/hero.png)
 
 **Models**: download the five model files, or point yuekbox at copies you already have. The same panel reports ffmpeg and the NVIDIA driver when something is missing.
 
