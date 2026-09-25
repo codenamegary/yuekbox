@@ -15,7 +15,7 @@ Reference before generation, and `--task melody-vocal` on the rendered FLAC to
 measure notes, beats, and sections.
 
 ```bash
-~/.yuekbox/venvs/sheetsage2/bin/python \
+~/.yuekbox/venvs/python/bin/python \
   ~/.yuekbox/scripts/transcribe.py "<audio>" \
   --output "<fresh output dir>" \
   --task melody-full \
@@ -31,8 +31,9 @@ measure notes, beats, and sections.
   the adapter parses them into `analysis.json`.
 - Model paths come from the config resolver, never from a YuE checkout.
 
-The server runs the venv and script from yuekbox's home
-(`~/.yuekbox/venvs/sheetsage2/bin/python` and `~/.yuekbox/scripts/transcribe.py`
-by default; `SHEETSAGE2_PYTHON`, `SHEETSAGE2_SCRIPT`, `SHEETSAGE2_DEVICE`, and
-`SHEETSAGE2_OFFLINE` are internal env overrides). The script source lives in
+The server runs the shared environment's interpreter and its script from
+yuekbox's home (`~/.yuekbox/venvs/python/bin/python` and
+`~/.yuekbox/scripts/transcribe.py` by default; `YUEKBOX_PYTHON`,
+`SHEETSAGE2_SCRIPT`, `SHEETSAGE2_DEVICE`, and `SHEETSAGE2_OFFLINE` are internal
+env overrides). The script source lives in
 this folder; the installer copies it into the home.

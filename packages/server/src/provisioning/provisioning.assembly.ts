@@ -22,7 +22,7 @@ export type AssembleProvisioningDeps = Readonly<{
 
 /**
  * Wires the provisioning slice for the process root: the pinned uv fetch,
- * the managed interpreters, the three environments, the driver probe, and
+ * the managed interpreter, the one shared environment, the driver probe, and
  * the #50 script installer.
  */
 export const assembleProvisioningSlice = (deps: AssembleProvisioningDeps): ProvisioningSlice => {

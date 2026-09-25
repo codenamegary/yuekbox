@@ -363,11 +363,11 @@ packages/server/src/
 ├── provisioning/             # builds the runtime and our entrypoints into the home
 │   ├── provisioning.models.ts        # steps, failures, ports' shapes
 │   ├── provisioning.ports.ts         # atomic capability ports
-│   ├── provisioning.packages.ts      # uv pin, torch indexes, the three pinned sets
+│   ├── provisioning.packages.ts      # uv pin, the one torch index, the one pinned set
 │   ├── provisioning.gpu.ts           # driver floor and the chosen torch wheel
 │   ├── provisioning.gpu.adapters.ts  # nvidia-smi probe
 │   ├── provisioning.uv.adapters.ts   # find uv, else fetch the pinned release
-│   ├── provisioning.python.adapters.ts # managed interpreters and the three environments
+│   ├── provisioning.python.adapters.ts # managed interpreter and the shared environment
 │   ├── provisioning.download.adapters.ts # the one network seam
 │   ├── provisioning.provision-all.usecase.ts # ordered, resumable step runner
 │   ├── provisioning.messages.ts      # plain-English failure mapper
@@ -430,7 +430,7 @@ One direction only: `media` depends on nothing, `songs` depends on media, `gener
 - `generation` owns the worker loop plus the yue2, ffmpeg, and sheetsage2 adapters. It reaches songs only through the capabilities record.
 - `ai` owns the writer config, prompts, model calls, and validation for style, lyrics, and visuals. It never touches songs directly; compose hands it `createSong` and wires its visual authoring into the visualizations slice.
 - `config` owns the `~/.yuekbox` layout and the five user-configurable model paths. Resolution lives in one module (`config.resolve.ts`), with precedence CLI flag > `config.yaml` > `<home>/models/<name>`. It reads and writes `config.yaml` atomically and serves `GET`/`PUT /v1/config`. Adapters receive resolved paths; none of them read `YUE2_KIT` or work out a model location on their own.
-- `provisioning` builds everything the app needs outside Bun: it finds or fetches `uv`, installs the managed interpreters, checks the driver and picks the torch wheels, builds the three pinned environments, and installs our entrypoints. It depends on `shared` and the runtime pin only. `--provision` drives it; the server never provisions behind the user's back.
+- `provisioning` builds everything the app needs outside Bun: it finds or fetches `uv`, installs the managed interpreter, checks the driver and picks the torch wheels, builds the one shared environment, and installs our entrypoints. It depends on `shared` and the runtime pin only. `--provision` drives it; the server never provisions behind the user's back.
 - `visualizations` owns the `/v1/songs/:id/visualization` routes, the in-memory per-Song pending/failed state, single-flight rerolls, and the author flow. The file on disk is the durable record; there is no table and no boot recovery.
 - `readiness` owns `GET /v1/readiness`: the five model states and the system preflight. It reads the resolved model paths from `config` and reuses `provisioning.gpu.ts`'s driver evaluation instead of restating the CUDA floor; it never provisions and never reports runtimes, venvs, or our scripts.
 - `models` owns model downloads: the pinned Hugging Face revisions, the in-memory download jobs, the missing-models gate on `POST /v1/songs`, and the `/v1/models` routes. It reads the boot-resolved paths handed to it and writes only under `<home>/models/`; it never provisions and never reports runtimes, venvs, or our scripts.
@@ -480,7 +480,7 @@ CreateTempDir
 RemoveTempDir
 ```
 
-`RunYue2Generate` takes `{ lyrics, style, seed, cot, abc, outputDir, onStage, onProgress }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter runs our `generate.py` at `<home>/scripts/generate.py` (source: `packages/server/tools/yue2/generate.py`) with the YuE2 venv's Python. It does not import Python.
+`RunYue2Generate` takes `{ lyrics, style, seed, cot, abc, outputDir, onStage, onProgress }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter runs our `generate.py` at `<home>/scripts/generate.py` (source: `packages/server/tools/yue2/generate.py`) with the shared environment's Python. It does not import Python.
 
 `RunLyricAlign` takes `{ audioPath, outputDir }` and returns the calibration, or a Result error. The adapter runs the lyric-align script at `<home>/scripts/align.py` (source: `packages/server/tools/lyric-align/align.py`; Demucs vocal stem, Whisper word timings, silence gate, display-line grouping) and reads back the `calibration.json` it writes under the output dir.
 
@@ -623,7 +623,7 @@ Each Song may own one AI-authored canvas visualization.
 4. Adapter writes a temp request JSON and runs:
 
 ```text
-<home>/venvs/yue2/bin/python <home>/scripts/generate.py
+<home>/venvs/python/bin/python <home>/scripts/generate.py
   --request <tmp>/request.json
   --output <tmp>/out
   --model <models.yue2>
@@ -640,9 +640,9 @@ resolved config values (CLI flag > `config.yaml` > `<home>/models/<name>`),
 never a checkout path.
 
 5. Worker updates `stage` when stderr progress names a known stage. If parsing fails, leave the stage until done. Status stays `running`.
-6. If the Song has a Reference, transcribe it before generation. Run `<home>/venvs/sheetsage2/bin/python <home>/scripts/transcribe.py <MEDIA_DIR>/<TITLE>_<SONG_ID>/references/<name>_<ulid>.<ext> --output <tmp>/transcribe --task melody-full --device cuda --model <models.sheetsage2> --base-model <models.sheetsage2Base> [--offline]`, read `score.abc`, write it to `reference_score.abc` in the Song folder, then generate with `cot = melody` and the ABC in the request JSON. A missing Reference file fails the Song before the script spawns; any other failure fails the Song.
-7. On success, read `audio.flac`. Encode MP3. Run the lyric aligner with `<home>/venvs/lyricalign/bin/python <home>/scripts/align.py --audio <FLAC> --out <tmp>/lyric-align --calibration-out <tmp>/lyric-align/calibration.json --device <LYRIC_ALIGN_DEVICE>`, read the `calibration.json` it writes, and pass the cues to `CompleteSong`, which writes `calibration.json` in the Song folder. The overlay shows the transcript as sung.
-8. Still inside `sync`, run the transcript pass on the rendered FLAC with `<home>/venvs/sheetsage2/bin/python <home>/scripts/transcribe.py <FLAC> --output <tmp>/transcript --task melody-vocal --device <SHEETSAGE2_DEVICE> --model <models.sheetsage2> --base-model <models.sheetsage2Base> [--offline]`. Parse `melody_vocal.lab`, `beat.lab`, and `structure.lab` into notes, beats, and sections, copy the raw `<tmp>/transcript` tree into `analysis/sheetsage2/`, and pass the derived analysis to `CompleteSong`, which writes `analysis.json`. A failed run, a missing SheetSage2, or a failed copy logs and leaves the Song without an analysis; the Song still completes. `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the Song folder and marks the row `complete` with `durationSeconds` and the truncation flags. Delete the temp dir (FLAC does not stay on disk).
+6. If the Song has a Reference, transcribe it before generation. Run `<home>/venvs/python/bin/python <home>/scripts/transcribe.py <MEDIA_DIR>/<TITLE>_<SONG_ID>/references/<name>_<ulid>.<ext> --output <tmp>/transcribe --task melody-full --device cuda --model <models.sheetsage2> --base-model <models.sheetsage2Base> [--offline]`, read `score.abc`, write it to `reference_score.abc` in the Song folder, then generate with `cot = melody` and the ABC in the request JSON. A missing Reference file fails the Song before the script spawns; any other failure fails the Song.
+7. On success, read `audio.flac`. Encode MP3. Run the lyric aligner with `<home>/venvs/python/bin/python <home>/scripts/align.py --audio <FLAC> --out <tmp>/lyric-align --calibration-out <tmp>/lyric-align/calibration.json --device <LYRIC_ALIGN_DEVICE>`, read the `calibration.json` it writes, and pass the cues to `CompleteSong`, which writes `calibration.json` in the Song folder. The overlay shows the transcript as sung.
+8. Still inside `sync`, run the transcript pass on the rendered FLAC with `<home>/venvs/python/bin/python <home>/scripts/transcribe.py <FLAC> --output <tmp>/transcript --task melody-vocal --device <SHEETSAGE2_DEVICE> --model <models.sheetsage2> --base-model <models.sheetsage2Base> [--offline]`. Parse `melody_vocal.lab`, `beat.lab`, and `structure.lab` into notes, beats, and sections, copy the raw `<tmp>/transcript` tree into `analysis/sheetsage2/`, and pass the derived analysis to `CompleteSong`, which writes `analysis.json`. A failed run, a missing SheetSage2, or a failed copy logs and leaves the Song without an analysis; the Song still completes. `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the Song folder and marks the row `complete` with `durationSeconds` and the truncation flags. Delete the temp dir (FLAC does not stay on disk).
 9. On failure, mark `failed`, store a short `errorDetail`, delete the temp dir.
 9. Claim the next queued Song.
 
@@ -669,9 +669,9 @@ yuekbox owns `~/.yuekbox` (override with `--home`). Everything the app manages l
 ```text
 ~/.yuekbox/
 ├── config.yaml           # the only user-editable file
-├── tools/                # uv and the managed interpreters, fetched by yuekbox
+├── tools/                # uv and the managed interpreter, fetched by yuekbox
 ├── models/<name>/        # the five model directories
-├── venvs/<name>/         # environments: yue2, sheetsage2, lyricalign
+├── venvs/python/         # the one shared environment every Python pass runs in
 ├── scripts/              # generate.py, transcribe.py, abc_tools.py, common.py, align.py
 └── data/                 # yuekbox.sqlite and per-Song media
 ```
@@ -709,20 +709,18 @@ HOST                    default 127.0.0.1
 PORT                    default 8787
 SQLITE_PATH             default <home>/data/yuekbox.sqlite
 MEDIA_DIR               default <home>/data/media
-YUE2_PYTHON             default <home>/venvs/yue2/bin/python
+YUEKBOX_PYTHON          default <home>/venvs/python/bin/python; one for every Python pass
 YUE2_GPU_BUDGET         default 16
 FFMPEG_BIN              default ffmpeg
-SHEETSAGE2_PYTHON       default <home>/venvs/sheetsage2/bin/python
 SHEETSAGE2_SCRIPT       default <home>/scripts/transcribe.py
 SHEETSAGE2_DEVICE       default cuda
 SHEETSAGE2_OFFLINE      default 1; set 0 to allow the Hugging Face cache to resolve
-LYRIC_ALIGN_PYTHON      default <home>/venvs/lyricalign/bin/python
 LYRIC_ALIGN_SCRIPT      default <home>/scripts/align.py
 LYRIC_ALIGN_DEVICE      default cuda:0
 REFERENCE_MAX_BYTES     default 26214400 (25 MiB)
 ```
 
-The yue2 adapter runs `<home>/venvs/yue2/bin/python <home>/scripts/generate.py`. The venv's `yue2-infer` comes from the pin in `runtime.pins.ts`; the app never falls back to a checkout's module or console script.
+The yue2 adapter runs `<home>/venvs/python/bin/python <home>/scripts/generate.py`. The shared environment's `yue2-infer` comes from the pin in `runtime.pins.ts`; the app never falls back to a checkout's module or console script.
 
 ### Model downloads
 
@@ -792,31 +790,34 @@ Mechanism: `uv`.
   `0.9.18` (`uv-x86_64-unknown-linux-gnu.tar.gz`) into
   `<home>/tools/uv-0.9.18/` and verify its SHA-256 before extracting. The
   version, URL, and checksum live in `provisioning.packages.ts`.
-- Install the managed interpreters into `<home>/tools/python`: `3.12.3` for
-  yue2 and lyric-align, `3.11.14` for sheetsage2 (the local reference
-  environments' versions; numpy 1.24 needs 3.11). uv's downloads cache under
-  `<home>/tools/cache`, and no launchers land in the user's bin directory.
-- Build the three environments under `<home>/venvs/` from exact pinned sets
-  (`uv pip freeze` of the working local environments, 2026-09-24):
-  - `yue2`: `yue2-infer` at the `runtime.pins.ts` commit plus `torch==2.10.0`
-    from PyTorch's CUDA 12.8 wheel index (`download.pytorch.org/whl/cu128`).
-    The local reference environment runs `torch 2.10.0+cu128`; that tag is the
-    evidence for the index.
-  - `sheetsage2`: `torch==2.8.0`/`torchaudio==2.8.0` (cu126),
-    `transformers==4.45.2`, `numpy==1.24.3`.
-  - `lyricalign`: `torch==2.8.0`/`torchaudio==2.8.0` (cu126),
-    `transformers==4.57.6`, `demucs==4.1.0`, `soundfile==0.14.0`.
+- Install the managed interpreter into `<home>/tools/python`: `3.12.3`. uv's
+  downloads cache under `<home>/tools/cache`, and no launchers land in the
+  user's bin directory.
+- Build the one shared environment under `<home>/venvs/python/` from the
+  tested union (the tested local environment runs numpy 2 and transformers
+  4.57.6). It serves all three Python passes: the song generator, the
+  SheetSage2 transcriber (`melody-full` and `melody-vocal`), and the lyric
+  aligner (Demucs plus Whisper):
+  - `yue2-infer` at the `runtime.pins.ts` commit plus
+    `torch==2.10.0`/`torchaudio==2.10.0` from PyTorch's CUDA 12.8 wheel index
+    (`download.pytorch.org/whl/cu128`). The tested environment runs
+    `torch 2.10.0+cu128`; that tag is the evidence for the index.
+  - `transformers==4.57.6`, `tokenizers==0.22.2`,
+    `huggingface-hub==0.36.2`, `safetensors==0.7.0`, `numpy==2.2.6`,
+    `scipy==1.18.1`, `pretty-midi==0.2.10`, `mir-eval==0.8.2`,
+    `mido==1.3.3`, `soundfile==0.13.1`, `setuptools==78.1.1`, and
+    `demucs==4.1.0`.
 - Every other package resolves from PyPI (`pypi.org/simple`).
 
-Driver check. All pinned torch builds are CUDA 12.x, which runs on any 12.x
+Driver check. The pinned torch build is CUDA 12.x, which runs on any 12.x
 driver (NVIDIA minor version compatibility), so the floor is `525.60.13`.
-Provisioning asks `nvidia-smi` for the driver version before the first
-environment. Missing card, missing driver, or an older driver stops the run
-and the user is told to install the NVIDIA driver. A passing check reports the
-cu128 index that the yue2 environment installs against.
+Provisioning asks `nvidia-smi` for the driver version before the environment.
+Missing card, missing driver, or an older driver stops the run and the user is
+told to install the NVIDIA driver. A passing check reports the cu128 index
+that the shared environment installs against.
 
 Idempotent and resumable. `uv` found on PATH is used as-is; a fetched copy is
-reused. Installed interpreters are stamped under `<home>/tools/python`. Each
+reused. The installed interpreter is stamped under `<home>/tools/python`. The
 environment carries a `.yuekbox.json` fingerprint of its pins; a matching
 fingerprint is a no-op, a pin bump or an interrupted build clears and rebuilds,
 and a failed install leaves no stamp so the next run retries it. The entrypoint
@@ -873,9 +874,10 @@ Cover at least:
 - Generate args call `<home>/scripts/generate.py` with the resolved model and vae and no checkout path; `checkYue2` needs the python, script, model, and vae.
 - The script installer copies every tool flat into the scripts dir, reruns over its own files, leaves unrelated files alone, and reports a missing source with its path.
 - The runtime pin names one immutable git commit.
-- The package manifest pins one uv release archive with a SHA-256, the per-venv Python versions, and exact dependency sets; the yue2 set carries the runtime git pin on the cu128 index and the other two carry their cu126 sets.
+- The package manifest pins one uv release archive with a SHA-256, one managed Python version, one cu128 torch index, and one shared dependency set carrying the runtime git pin and the tested union.
 - The driver check passes at the CUDA 12 floor, fails an older or unreadable driver with both versions named, and fails a missing card; a passing check reports the cu128 wheel index.
-- `--provision` steps run in order and stop at the first failure: uv, interpreters, driver, yue2, sheetsage2, lyricalign, entrypoints; each step reports `completed` or `skipped`, and a rerun through the same ports changes nothing.
+- `--provision` steps run in order and stop at the first failure: uv, interpreter, driver, environment, entrypoints; each step reports `completed` or `skipped`, and a rerun through the same ports changes nothing.
+- The one boot-resolved interpreter is the one all three generation adapters run, and provisioning builds exactly one environment at `<home>/venvs/python`.
 - Provisioning output and failure messages never contain venv, pip, interpreter, package, or Python; each failure names the piece and offers a retry; the CLI exits `1` on failure and prints the mapped message, never raw error text.
 - The uv provider prefers PATH, reuses the fetched copy on a rerun, fetches the pinned URL with the pinned checksum, and fails cleanly when the download or extraction fails.
 - The interpreter provider installs only missing versions, stamps them, and retries a failed install; the environment provider builds with the pinned indexes and packages, skips on a matching fingerprint, rebuilds on a changed or corrupt one, and leaves no stamp when the package install fails.
@@ -942,7 +944,7 @@ The packaged process root is `packages/server/src/binary.ts`. In one pid it:
   Fastify port, mirroring `packages/web/src/serve.ts`.
 
 `HOST`/`PORT` stay dev-only knobs; the binary ignores them for the API. Full
-setup (venvs, models) still requires `--provision`, which exits before the
+setup (the environment, models) still requires `--provision`, which exits before the
 helper install. Extra helper installs are idempotent and overwrite only the
 five files the manifest owns.
 

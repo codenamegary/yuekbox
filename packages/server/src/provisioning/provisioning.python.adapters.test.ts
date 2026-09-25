@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { ProcessRunner } from "../shared/process"
 import { UvTool, VenvRequest } from "./provisioning.models"
-import { venvFingerprint, venvPins } from "./provisioning.packages"
+import { venvFingerprint, venvPin } from "./provisioning.packages"
 import { makeEnsurePython, makeEnsureVenv, pythonStampPath } from "./provisioning.python.adapters"
 
 const uvTool: UvTool = { path: "/tools/uv", source: "managed" }
@@ -130,19 +130,19 @@ test("an installer that cannot start fails cleanly", async () => {
   })
 })
 
-const requestFor = (dir: string, fingerprint = venvFingerprint(venvPins.yue2)): VenvRequest => ({
-  name: venvPins.yue2.name,
+const requestFor = (dir: string, fingerprint = venvFingerprint(venvPin)): VenvRequest => ({
+  name: venvPin.name,
   dir,
-  pythonVersion: venvPins.yue2.python,
-  indexUrl: venvPins.yue2.indexUrl,
-  extraIndexUrl: venvPins.yue2.extraIndexUrl,
-  packages: venvPins.yue2.packages,
+  pythonVersion: venvPin.python,
+  indexUrl: venvPin.indexUrl,
+  extraIndexUrl: venvPin.extraIndexUrl,
+  packages: venvPin.packages,
   fingerprint,
 })
 
 test("builds the venv then installs the pinned packages", async () => {
   await withTempDir(async (dir) => {
-    const venvDir = join(dir, "venvs", "yue2")
+    const venvDir = join(dir, "venvs", "python")
     const runs: Run[] = []
     const runProcess: ProcessRunner = async (command, _cwd, _onLine, env) => {
       runs.push({ command, env })
@@ -170,8 +170,7 @@ test("builds the venv then installs the pinned packages", async () => {
         "https://download.pytorch.org/whl/cu128",
         "--extra-index-url",
         "https://pypi.org/simple",
-        `yue2-infer @ git+https://github.com/multimodal-art-projection/YuE.git@bd90e4ccae671d869b3ecaca6d7e893927d29442`,
-        "torch==2.10.0",
+        ...venvPin.packages,
       ],
     ])
     const pythonDir = join(dir, "tools", "python")
@@ -187,7 +186,7 @@ test("builds the venv then installs the pinned packages", async () => {
 
 test("a current venv is ready and runs nothing", async () => {
   await withTempDir(async (dir) => {
-    const venvDir = join(dir, "venvs", "yue2")
+    const venvDir = join(dir, "venvs", "python")
     const first = async (command: readonly string[]) => {
       if (command[1] === "venv") {
         await mkdir(join(venvDir, "bin"), { recursive: true })
@@ -207,7 +206,7 @@ test("a current venv is ready and runs nothing", async () => {
 
 test("a changed fingerprint rebuilds the venv", async () => {
   await withTempDir(async (dir) => {
-    const venvDir = join(dir, "venvs", "yue2")
+    const venvDir = join(dir, "venvs", "python")
     const commands: string[][] = []
     const runProcess: ProcessRunner = async (command) => {
       commands.push([...command])
@@ -227,7 +226,7 @@ test("a changed fingerprint rebuilds the venv", async () => {
 
 test("a corrupt stamp rebuilds the venv", async () => {
   await withTempDir(async (dir) => {
-    const venvDir = join(dir, "venvs", "yue2")
+    const venvDir = join(dir, "venvs", "python")
     await mkdir(venvDir, { recursive: true })
     await writeFile(join(venvDir, ".yuekbox.json"), "not json", "utf8")
     const commands: string[][] = []
@@ -248,7 +247,7 @@ test("a corrupt stamp rebuilds the venv", async () => {
 
 test("a failed package install leaves no stamp so a retry redoes the venv", async () => {
   await withTempDir(async (dir) => {
-    const venvDir = join(dir, "venvs", "yue2")
+    const venvDir = join(dir, "venvs", "python")
     const commands: string[][] = []
     const runProcess: ProcessRunner = async (command) => {
       commands.push([...command])
@@ -282,7 +281,7 @@ test("a venv command that cannot start fails cleanly", async () => {
 
     const result = await makeEnsureVenv({ home: dir, runProcess })(
       uvTool,
-      requestFor(join(dir, "venvs", "yue2")),
+      requestFor(join(dir, "venvs", "python")),
     )
 
     expect(result.ok).toBe(false)
@@ -294,7 +293,7 @@ test("a venv command that cannot start fails cleanly", async () => {
 
 test("a package install that cannot start fails cleanly", async () => {
   await withTempDir(async (dir) => {
-    const venvDir = join(dir, "venvs", "yue2")
+    const venvDir = join(dir, "venvs", "python")
     const runProcess: ProcessRunner = async (command) => {
       if (command[1] === "venv") {
         await mkdir(join(venvDir, "bin"), { recursive: true })

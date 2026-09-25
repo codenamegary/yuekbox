@@ -4,12 +4,12 @@
 the pinned `yue2-infer` runtime
 (`packages/server/src/runtime/runtime.pins.ts`): the flags, the request fields,
 and the artifact layout. The runtime is not on PyPI, so provisioning installs
-it from the pinned git commit into `<home>/venvs/yue2`.
+it from the pinned git commit into the shared environment at `<home>/venvs/python`.
 
 ## Usage
 
 ```bash
-~/.yuekbox/venvs/yue2/bin/python \
+~/.yuekbox/venvs/python/bin/python \
   ~/.yuekbox/scripts/generate.py \
   --request "<tmp>/request.json" \
   --output "<tmp>/out" \
