@@ -21,6 +21,8 @@ import {
 import { checkYue2, makeRunYue2Generate } from "./generation/generation.yue2.adapters"
 import { assembleProvisioningSlice } from "./provisioning/provisioning.assembly"
 import { runProvisioningCommand } from "./provisioning/provisioning.cli"
+import { makeReadGpuFacts } from "./provisioning/provisioning.gpu.adapters"
+import { runProcess } from "./shared/process"
 import { version } from "./version"
 
 export type StartServerInput = Readonly<{
@@ -140,6 +142,10 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
     cwd: boot.home,
   }
 
+  // Readiness re-probes both system checks behind its own TTL; #49's resolved
+  // paths are fixed at boot, the same paths the generation adapters run.
+  const readGpuFacts = makeReadGpuFacts({ cwd: boot.home, runProcess })
+
   const { app, songs } = composeServer({
     db: database.db,
     mediaDir: boot.mediaDir,
@@ -170,6 +176,11 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
       ffmpeg: ffmpegState,
       yue2: yue2State,
       sheetsage2: sheetsage2State,
+    },
+    readiness: {
+      modelPaths: boot.modelPaths,
+      checkFfmpeg: async () => (await checkFfmpeg(boot.ffmpegBin)) === "ok",
+      readGpuFacts,
     },
   })
 
