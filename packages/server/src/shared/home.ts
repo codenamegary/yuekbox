@@ -1,12 +1,13 @@
 import { join } from "node:path"
 
 /**
- * yuekbox's own home. Everything the app manages (models, venvs, our scripts,
- * app data) lives under these folders. The user only configures the five model
- * directories under `models/`.
+ * yuekbox's own home. Everything the app manages (tools, models, venvs, our
+ * scripts, app data) lives under these folders. The user only configures the
+ * five model directories under `models/`.
  */
 export type HomeLayout = Readonly<{
   home: string
+  tools: string
   models: string
   venvs: string
   scripts: string
@@ -16,11 +17,14 @@ export type HomeLayout = Readonly<{
 export const homeLayout = (home: string): HomeLayout =>
   Object.freeze({
     home,
+    tools: join(home, "tools"),
     models: join(home, "models"),
     venvs: join(home, "venvs"),
     scripts: join(home, "scripts"),
     data: join(home, "data"),
   })
+
+export const venvPath = (home: string, name: string): string => join(homeLayout(home).venvs, name)
 
 export const defaultHome = (osHome: string): string => join(osHome, ".yuekbox")
 
