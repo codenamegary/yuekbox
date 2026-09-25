@@ -9,6 +9,7 @@ import { buildApp } from "../app"
 import { unusedConfigFixture } from "../config/config.fixtures"
 import { openDatabase } from "../db/client"
 import { assembleMediaSlice } from "../media/media.assembly"
+import { unusedReadinessFixture } from "../readiness/readiness.fixtures"
 import { ok } from "../shared/result"
 import { assembleSongsSlice, SongsSlice } from "./songs.assembly"
 import { makeSongsSliceFixture, songFolderKey, writeMediaFile } from "./songs.fixtures"
@@ -38,6 +39,7 @@ const makeApp = (songs: SongsSlice) =>
     ai: unusedAiFixture(),
     visualizations: unusedVisualizationsFixture(),
     config: unusedConfigFixture(),
+    readiness: unusedReadinessFixture(),
     status: async () => statusFixture,
   })
 
