@@ -85,6 +85,9 @@ Existing Bun workspaces under `ui/`:
 ui/
 ├── package.json              # workspace root, catalog, scripts
 ├── spec.md
+├── scripts/
+│   ├── build-binary.ts       # compiles the single yuekbox executable
+│   └── smoke-binary.sh       # compiled-artifact smoke test (CI)
 ├── .oxlintrc.json
 ├── .oxfmtrc.json
 ├── packages/
@@ -109,6 +112,7 @@ test           bun run --filter '*' test
 format         oxfmt
 format:check   oxfmt --check
 check          lint && typecheck && test
+build:binary   bun scripts/build-binary.ts
 db:generate    bun run --filter server db:generate
 ```
 
@@ -270,6 +274,7 @@ Layout:
 packages/server/src/
 ├── app.ts
 ├── server.ts                 # boot env, real vendor adapters, boot recovery, listen, signals
+├── binary.ts                 # compiled-binary root: helper install, Fastify on :0, SPA listener
 ├── compose.ts                # media -> songs -> generation -> app wiring
 ├── config/                   # home layout and the five user-configurable model paths
 │   ├── config.models.ts
@@ -344,7 +349,7 @@ packages/server/src/
     └── visualizations.assembly.ts
 ```
 
-`server.ts` resolves the boot env (home, config.yaml, CLI flags), builds the real vendor adapters, calls `composeServer`, runs boot recovery, listens, and handles SIGTERM. `compose.ts` builds media, then songs, then generation, then the app and the AI slice; the process-root wiring test calls the same function.
+`server.ts` resolves the boot env (home, config.yaml, CLI flags), builds the real vendor adapters, calls `composeServer`, runs boot recovery, listens, and handles SIGTERM. `binary.ts` (the compiled binary's root) calls the same `startServer` and fronts it with the SPA listener; see [Packaging](#packaging-single-binary). `compose.ts` builds media, then songs, then generation, then the app and the AI slice; the process-root wiring test calls the same function.
 
 Use cases are single-shot. The worker loop lives in `generation.worker.ts`. Routes enqueue then return. The worker claims work.
 
@@ -714,6 +719,9 @@ What later work does instead:
 
 Bind localhost by default. This app talks to a local GPU.
 
+In the compiled binary the API port is an OS-assigned loopback port, so
+`HOST`/`PORT` do not apply there; the public listener is `WEB_HOST`/`WEB_PORT`.
+
 ### Tests
 
 bun:test. Zero mocks. Inline stub ports.
@@ -771,6 +779,48 @@ Fixture helpers in `songs/songs.fixtures.ts` build song rows, a capabilities stu
 
 No GPU in unit tests. No real ffmpeg in unit tests.
 
+## Packaging (single binary)
+
+`bun run build:binary` (`scripts/build-binary.ts`) compiles one `yuekbox`
+executable. It uses the `Bun.build` API plus `compile` because the CLI cannot
+run plugins and the SPA entry is an HTML import that needs
+`bun-plugin-tailwind`. Two asset trees are embedded, basename-rooted under
+`/$bunfs/root`:
+
+- `packages/server/src/db/migrations` → `/$bunfs/root/migrations`, which is
+  exactly what `db/client.ts` already asks for via `import.meta.dir`.
+- `packages/server/tools` → `/$bunfs/root/tools`, the Python helpers.
+
+The web bundle is compiled from `packages/web/src/index.html` at the same time,
+so the packaged binary does not use `packages/web/dist` and ships no sidecar
+sourcemaps (`minify: true`, `sourcemap: "none"`). Dotenv files are not read
+(`compile.autoloadDotenv: false`); configuration lives in the home.
+
+The packaged process root is `packages/server/src/binary.ts`. In one pid it:
+
+- starts Fastify on `127.0.0.1:0` (an OS-assigned loopback port that cannot
+  collide with anything), through the same `startServer` the dev root uses;
+- installs the embedded Python helpers into `<home>/scripts` with the
+  provisioning byte-copy installer, so a fresh binary can exec them;
+- puts `Bun.serve` on `WEB_HOST`/`WEB_PORT` (default `127.0.0.1:3000`) as the
+  only public listener: `/*` serves the embedded SPA and `/v1/*` proxies to the
+  Fastify port, mirroring `packages/web/src/serve.ts`.
+
+`HOST`/`PORT` stay dev-only knobs; the binary ignores them for the API. Full
+setup (venvs, models) still requires `--provision`, which exits before the
+helper install. Extra helper installs are idempotent and overwrite only the
+five files the manifest owns.
+
+`bun run dev` is unchanged: `packages/server` on 8787 and
+`packages/web/src/serve.ts` on 3000, two processes. Cross-compile with
+`bun run build:binary <outfile> --target <bun-target> --executable
+<local-bun-runtime>`; `--target` alone downloads the runtime from npm.
+linux-x64 is the ship target; macos-arm64 is not supported because the app
+needs a local NVIDIA GPU. `scripts/smoke-binary.sh` is the compiled-artifact
+proof: it runs a copy of the binary from an empty directory against a scratch
+home, checks `/`, `/v1/status`, `/v1/config` precedence, runs an extracted
+helper with `--help`, and stops it with SIGTERM. CI runs it on ubuntu-latest.
+
 ## Web
 
 React 19. Tailwind CSS 4. Bun HTML serving. `bun-plugin-tailwind`. shadcn/ui New York, css variables, lucide icons (already in `components.json`).
@@ -781,7 +831,7 @@ shadcn primitives live in `src/components/ui/`. App screens live in feature fold
 
 `src/serve.ts` calls `Bun.serve`. It mounts `src/index.html` for `/*`. For `/v1/*` it `fetch`es the Fastify origin (`http://127.0.0.1:8787` by default) and returns that response, including `audio/mpeg`. Do not reimplement Song routes in web.
 
-`dev` is `bun --hot src/serve.ts`. Production build stays `build.ts` plus `bun src/serve.ts` against `dist`. Name the HTML server `serve.ts`, not `index.ts`, so oxlint barrel rules stay clean.
+`dev` is `bun --hot src/serve.ts`. The source-tree production build stays `build.ts` plus `bun src/serve.ts` against `dist`; the shipped artifact is the single binary (see [Packaging](#packaging-single-binary)). Name the HTML server `serve.ts`, not `index.ts`, so oxlint barrel rules stay clean.
 
 ```text
 packages/web/src/

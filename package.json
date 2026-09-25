@@ -25,6 +25,7 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "check": "bun run lint && bun run lint:boundaries && bun run typecheck && bun run test",
+    "build:binary": "bun scripts/build-binary.ts",
     "db:generate": "bun run --filter server db:generate",
     "prepare": "husky"
   },

@@ -34,20 +34,20 @@ module.exports = {
     },
     {
       name: "adapters-mounted-at-composition",
-      comment: "backend skill: only assemblies, routes, the process root, and tests wire adapters",
+      comment: "backend skill: only assemblies, routes, the process roots, and tests wire adapters",
       severity: "error",
       from: {
-        pathNot: `(\\.assembly\\.ts|\\.routes\\.ts|compose\\.ts|server\\.ts)$|\\.test\\.ts$`,
+        pathNot: `(\\.assembly\\.ts|\\.routes\\.ts|compose\\.ts|server\\.ts|binary\\.ts)$|\\.test\\.ts$`,
       },
       to: { path: `^${SERVER}/.*\\.adapters\\.ts$` },
     },
     {
       name: "db-through-adapters",
       comment:
-        "backend skill: only adapters, assemblies, the process root, and tests reach the database",
+        "backend skill: only adapters, assemblies, the process roots, and tests reach the database",
       severity: "error",
       from: {
-        pathNot: `(\\.adapters\\.ts|\\.assembly\\.ts)$|^${SERVER}/(db|compose\\.ts|server\\.ts)|\\.test\\.ts$`,
+        pathNot: `(\\.adapters\\.ts|\\.assembly\\.ts)$|^${SERVER}/(db|compose\\.ts|server\\.ts|binary\\.ts)|\\.test\\.ts$`,
       },
       to: { path: `^${SERVER}/db/(client|db\\.schema)\\.ts$` },
     },

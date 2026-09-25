@@ -17,8 +17,9 @@ check layers enforce it (see [Checks](#checks)).
 
 Dependencies point inward: routes and assemblies wire use cases, use cases depend
 on ports, ports depend on models, adapters implement ports. Only assemblies,
-routes, `compose.ts`, `server.ts`, and tests wire adapters. Slices talk through
-capability ports, never through another slice's adapters.
+routes, `compose.ts`, the process roots (`server.ts`, `binary.ts`), and tests
+wire adapters. Slices talk through capability ports, never through another
+slice's adapters.
 
 `src/checks/` holds the structure check itself. It is tooling, not a slice.
 
@@ -34,7 +35,7 @@ backend skill so the fix is obvious.
 2. `bun run lint:boundaries` (dependency-cruiser, root) covers the whole graph:
    - no dependency cycles;
    - a slice never imports another slice's adapters;
-   - only assemblies, routes, `compose.ts`, `server.ts`, and tests import adapters;
+   - only assemblies, routes, `compose.ts`, the process roots (`server.ts`, `binary.ts`), and tests import adapters;
    - only adapters, assemblies, the process root, and tests import `db/client.ts` or `db/db.schema.ts`;
    - no orphan modules.
 

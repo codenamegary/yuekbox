@@ -1,0 +1,87 @@
+// The compiled binary's process root (#52). One pid serves the SPA from the
+// build-time HTML bundle on WEB_PORT and answers /v1 by proxying loopback to
+// the Fastify listener inside the same process.
+//
+// Fastify binds 127.0.0.1:0, so the API port is ephemeral and can never
+// collide with the public one. `bun run dev` keeps the two-process shape
+// (packages/web/src/serve.ts on :3000 proxying packages/server/src/server.ts
+// on :8787); only the compiled executable start here.
+//
+// Build: `bun run build:binary` -> scripts/build-binary.ts.
+import { homedir } from "node:os"
+// Build-time SPA: the compiler bundles the HTML entry and every asset it
+// references (Tailwind CSS included) into the executable.
+import index from "../../web/src/index.html"
+import { BootEnv } from "./config/config.boot"
+import { makeInstallScripts, toolsRoot } from "./provisioning/provisioning.scripts.adapters"
+import { startServer } from "./server"
+import { homeLayout } from "./shared/home"
+
+const webHost = process.env.WEB_HOST ?? "127.0.0.1"
+const webPort = Number(process.env.WEB_PORT ?? 3000)
+
+/**
+ * Extracts the embedded Python helpers into `<home>/scripts` before the
+ * dependency checks run. Idempotent and overwrite-only, like provisioning's
+ * own installer: a new binary refreshes the helpers it shipped. Full setup
+ * (venvs, models) still needs the explicit `--provision`, which exits before
+ * this point.
+ */
+const ensureScripts = async (boot: BootEnv): Promise<void> => {
+  const result = await makeInstallScripts(toolsRoot)(homeLayout(boot.home).scripts)
+  if (!result.ok) {
+    throw new Error(`could not install the bundled Python helpers: ${result.error.detail}`)
+  }
+  console.log(`installed ${result.value.files.length} Python helpers to ${result.value.scriptsDir}`)
+}
+
+const api = await startServer({
+  argv: Bun.argv,
+  env: process.env,
+  osHome: homedir(),
+  standalone: true,
+  ensureScripts,
+})
+
+// One proxy hop to the API, mirroring packages/web/src/serve.ts so streaming
+// and error responses behave the same in dev and in the binary. The server's
+// type libs (no DOM) reject the `new Request(target, request)` form web uses,
+// but fetch accepts the original Request as init and behaves identically.
+const proxyToApi = async (request: Request): Promise<Response> => {
+  const url = new URL(request.url)
+  const target = new URL(`${url.pathname}${url.search}`, `http://${api.host}:${api.port}`)
+  const upstream = await fetch(target, request)
+  const body = await upstream.arrayBuffer()
+  const headers = new Headers(upstream.headers)
+  headers.delete("content-encoding")
+  return new Response(body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers,
+  })
+}
+
+const web = Bun.serve({
+  hostname: webHost,
+  port: webPort,
+  routes: {
+    "/v1/*": proxyToApi,
+    "/*": index,
+  },
+})
+
+console.log(`yuekbox listening on ${web.url.href}`)
+
+const shutdown = async (signal: string): Promise<void> => {
+  console.log(`received ${signal}; shutting down`)
+  await web.stop(true)
+  await api.close()
+  process.exit(0)
+}
+
+process.on("SIGTERM", () => {
+  void shutdown("SIGTERM")
+})
+process.on("SIGINT", () => {
+  void shutdown("SIGINT")
+})
