@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { describeError } from "../shared/describe"
 import { err, ok } from "../shared/result"
 import { InstallScripts } from "./provisioning.ports"
 
@@ -26,9 +27,6 @@ export const scriptManifest = Object.freeze([
 export const toolsRoot = Bun.isStandaloneExecutable
   ? join(import.meta.dir, "tools")
   : fileURLToPath(new URL("../../tools/", import.meta.url))
-
-const describeError = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 export const makeInstallScripts = (sourceRoot: string): InstallScripts => {
   return async (scriptsDir) => {

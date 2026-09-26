@@ -1,14 +1,19 @@
 import { expect, test } from "bun:test"
 import { existsSync } from "node:fs"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { ProcessRunner } from "../shared/process"
 import { UvTool, VenvRequest } from "./provisioning.models"
 import { venvFingerprint, venvPin } from "./provisioning.packages"
-import { makeEnsurePython, makeEnsureVenv, pythonStampPath } from "./provisioning.python.adapters"
+import {
+  makeEnsurePython,
+  makeEnsureVenv,
+  managedPythonDir,
+  pythonStampPath,
+} from "./provisioning.python.adapters"
 
-const uvTool: UvTool = { path: "/tools/uv", source: "managed" }
+const uvTool: UvTool = { path: "/tools/uv" }
 
 const withTempDir = async (run: (dir: string) => Promise<void>): Promise<void> => {
   const dir = await mkdtemp(join(tmpdir(), "yuekbox-python-test-"))
@@ -45,10 +50,9 @@ test("installs each missing python once and records it", async () => {
       ["/tools/uv", "python", "install", "--install-dir", installDir, "--no-bin", "3.12.3"],
       ["/tools/uv", "python", "install", "--install-dir", installDir, "--no-bin", "3.11.14"],
     ])
-    expect(runs[0]?.env).toEqual({
-      UV_PYTHON_INSTALL_DIR: installDir,
-      UV_CACHE_DIR: join(dir, "tools", "cache"),
-    })
+    expect(runs[0]?.env?.UV_PYTHON_INSTALL_DIR).toBe(installDir)
+    expect(runs[0]?.env?.UV_CACHE_DIR).toBe(join(dir, "tools", "cache"))
+    expect(runs[0]?.env?.UV_NO_CONFIG).toBe("1")
     expect(existsSync(pythonStampPath(dir, "3.12.3"))).toBe(true)
     expect(existsSync(pythonStampPath(dir, "3.11.14"))).toBe(true)
 
@@ -130,6 +134,60 @@ test("an installer that cannot start fails cleanly", async () => {
   })
 })
 
+test("the user's own UV_ variables never reach the uv child", async () => {
+  await withTempDir(async (dir) => {
+    const previous = {
+      index: process.env.UV_INDEX_URL,
+      python: process.env.UV_PYTHON,
+    }
+    process.env.UV_INDEX_URL = "https://example.invalid/simple"
+    process.env.UV_PYTHON = "/usr/bin/python3.9"
+    try {
+      const runs: Run[] = []
+      const runProcess: ProcessRunner = async (command, _cwd, _onLine, env) => {
+        runs.push({ command, env })
+        return { exitCode: 0, stdout: "", stderrTail: "" }
+      }
+
+      const result = await makeEnsurePython({ home: dir, runProcess })(uvTool, ["3.12.3"])
+
+      expect(result.ok).toBe(true)
+      expect(runs[0]?.env?.UV_INDEX_URL).toBeUndefined()
+      expect(runs[0]?.env?.UV_PYTHON).toBeUndefined()
+      expect(runs[0]?.env?.UV_PYTHON_INSTALL_DIR).toBe(join(dir, "tools", "python"))
+    } finally {
+      if (previous.index === undefined) delete process.env.UV_INDEX_URL
+      else process.env.UV_INDEX_URL = previous.index
+      if (previous.python === undefined) delete process.env.UV_PYTHON
+      else process.env.UV_PYTHON = previous.python
+    }
+  })
+})
+
+test("a stamp that cannot be written fails loudly instead of half-succeeding", async () => {
+  await withTempDir(async (dir) => {
+    const installDir = managedPythonDir(dir)
+    await mkdir(installDir, { recursive: true })
+    await chmod(installDir, 0o555)
+    try {
+      const runProcess: ProcessRunner = async () => ({
+        exitCode: 0,
+        stdout: "",
+        stderrTail: "",
+      })
+
+      const result = await makeEnsurePython({ home: dir, runProcess })(uvTool, ["3.12.3"])
+
+      expect(result.ok).toBe(false)
+      if (result.ok) return
+      expect(result.error.kind).toBe("python_unavailable")
+      expect(result.error.detail).toContain("could not stamp 3.12.3")
+    } finally {
+      await chmod(installDir, 0o755)
+    }
+  })
+})
+
 const requestFor = (dir: string, fingerprint = venvFingerprint(venvPin)): VenvRequest => ({
   name: venvPin.name,
   dir,
@@ -167,9 +225,9 @@ test("builds the venv then installs the pinned packages", async () => {
         "--python",
         join(venvDir, "bin", "python"),
         "--index-url",
-        "https://download.pytorch.org/whl/cu128",
-        "--extra-index-url",
         "https://pypi.org/simple",
+        "--extra-index-url",
+        "https://download.pytorch.org/whl/cu128",
         ...venvPin.packages,
       ],
     ])

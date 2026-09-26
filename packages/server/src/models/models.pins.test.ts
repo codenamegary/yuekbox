@@ -1,11 +1,14 @@
+import { modelKeyOrder } from "contracts/http/models"
 import { expect, test } from "bun:test"
-import { expectedModelSizes, modelReadinessKeys } from "../readiness/readiness.models"
 import { modelDirectoryNames } from "../shared/home"
 import { modelDownloadKeys } from "./models.models"
-import { modelDownloadPins } from "./models.pins"
+import { expectedModelSizes, modelDownloadPins } from "./models.pins"
+
+/** The report order every consumer shares, straight from the contract. */
+const modelReadinessKeyOrder = modelKeyOrder
 
 test("pins every model with the same keys and folders readiness reports", () => {
-  expect(modelDownloadKeys).toEqual(modelReadinessKeys)
+  expect(modelDownloadKeys).toEqual(modelReadinessKeyOrder)
   for (const key of modelDownloadKeys) {
     expect(modelDownloadPins[key].key).toBe(key)
     expect(modelDownloadPins[key].directory).toBe(modelDirectoryNames[key])
@@ -24,9 +27,16 @@ test("pins the five upstream repositories at immutable revision SHAs", () => {
   }
 })
 
-test("pinned byte totals are the totals readiness promises for a download", () => {
+test("readiness sizes are the pinned byte totals, so the two cannot drift", () => {
+  expect(expectedModelSizes).toEqual({
+    yue2: 7_295_775_491,
+    yue2Vae: 531_343_726,
+    sheetsage2: 233_240_091,
+    sheetsage2Base: 2_530_365_136,
+    whisper: 1_622_466_054,
+  })
   for (const key of modelDownloadKeys) {
-    expect(modelDownloadPins[key].totalBytes).toBe(expectedModelSizes[key])
+    expect(expectedModelSizes[key]).toBe(modelDownloadPins[key].totalBytes)
   }
 })
 

@@ -91,7 +91,7 @@ GPU, no Bun, and no checkout.
 2. Confirm `~/.local/bin/yuekbox` exists and is executable. The installer
    printed no checksum error.
 3. Set up the runtime: `yuekbox --provision`. Needs the NVIDIA driver and
-   network access. It builds the Python environments under `~/.yuekbox`.
+   network access. It builds the one shared Python environment under `~/.yuekbox`.
 4. Start the app: `yuekbox`. Open <http://127.0.0.1:3000>. `GET /v1/status`
    reports `ffmpeg` and `yue2`.
 5. Pin a version with `YUEKBOX_VERSION=v0.3.0` and confirm the same result.

@@ -1,5 +1,6 @@
 import { Calibration } from "contracts/http/songs"
 import { SongAnalysis } from "contracts/http/visualizations"
+import { err, ok, Result } from "../shared/result"
 import { Song, SongCot, StageProgressUpdate } from "../songs/songs.models"
 import {
   ClaimNextQueuedSong,
@@ -55,6 +56,88 @@ const missingReferenceDetail = "reference audio is missing"
 const toErrorDetail = (value: string): string =>
   value.trim().slice(0, errorDetailLimit) || "unknown error"
 
+/**
+ * The cot level and score abc generation receives, given whether reference
+ * audio exists. The transcribe stage runs here, and a failure has already
+ * marked the song failed by the time the error comes back.
+ */
+const referenceInputs = async (
+  deps: SongWorkerDeps,
+  song: Song,
+  reference: Awaited<ReturnType<FindReferenceBySongId>>,
+  tempDir: string,
+): Promise<Result<Readonly<{ cot: SongCot; abc: string | null }>, string>> => {
+  if (reference === null) return ok({ cot: "full", abc: null })
+  if (reference.audioPath === null) {
+    await deps.markSongFailed(song.id, missingReferenceDetail)
+    return err(missingReferenceDetail)
+  }
+  await deps.markSongStage(song.id, "transcribe")
+  const transcribed = await deps.runTranscribe({
+    audioPath: reference.audioPath,
+    outputDir: tempDir,
+  })
+  if (!transcribed.ok) {
+    await deps.markSongFailed(song.id, toErrorDetail(transcribed.error.detail))
+    return err(transcribed.error.detail)
+  }
+  await deps.saveReferenceScore(song.id, transcribed.value.scoreAbc)
+  return ok({ cot: "melody", abc: transcribed.value.scoreAbc })
+}
+
+/** The alignment result when it can be produced; a failure is logged, not fatal. */
+const alignCalibration = async (
+  deps: SongWorkerDeps,
+  flacPath: string,
+  tempDir: string,
+): Promise<Calibration | null> => {
+  try {
+    const aligned = await deps.runLyricAlign({ audioPath: flacPath, outputDir: tempDir })
+    if (aligned.ok) return aligned.value.calibration
+    deps.logError("lyric alignment failed", aligned.error.detail)
+    return null
+  } catch (error) {
+    deps.logError("lyric alignment failed", error)
+    return null
+  }
+}
+
+/** The measured analysis when the vocal transcript succeeds; logged, not fatal. */
+const transcriptAnalysis = async (
+  deps: SongWorkerDeps,
+  songId: string,
+  flacPath: string,
+  durationSeconds: number,
+  tempDir: string,
+): Promise<SongAnalysis | null> => {
+  try {
+    const transcript = await deps.runVocalTranscript({
+      audioPath: flacPath,
+      outputDir: tempDir,
+      durationSeconds,
+    })
+    if (!transcript.ok) {
+      deps.logError("vocal transcription failed", transcript.error.detail)
+      return null
+    }
+    try {
+      await deps.saveTranscriptRaw(songId, transcript.value.transcriptDir)
+    } catch (error) {
+      deps.logError("saving the raw transcript failed", error)
+    }
+    return {
+      version: 1,
+      source: "sheetsage2",
+      notes: transcript.value.notes,
+      beats: transcript.value.beats,
+      sections: transcript.value.sections,
+    }
+  } catch (error) {
+    deps.logError("vocal transcription failed", error)
+    return null
+  }
+}
+
 export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
   const state = { chain: Promise.resolve(), busy: false }
 
@@ -76,27 +159,9 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
 
     try {
       const reference = await deps.findReferenceBySongId(song.id)
-      let cot: SongCot = "full"
-      let abc: string | null = null
-
-      if (reference !== null) {
-        if (reference.audioPath === null) {
-          await deps.markSongFailed(song.id, missingReferenceDetail)
-          return
-        }
-        await deps.markSongStage(song.id, "transcribe")
-        const transcribed = await deps.runTranscribe({
-          audioPath: reference.audioPath,
-          outputDir: tempDir,
-        })
-        if (!transcribed.ok) {
-          await deps.markSongFailed(song.id, toErrorDetail(transcribed.error.detail))
-          return
-        }
-        await deps.saveReferenceScore(song.id, transcribed.value.scoreAbc)
-        cot = "melody"
-        abc = transcribed.value.scoreAbc
-      }
+      const inputs = await referenceInputs(deps, song, reference, tempDir)
+      if (!inputs.ok) return
+      const { cot, abc } = inputs.value
 
       const generated = await deps.runYue2Generate({
         songId: song.id,
@@ -123,48 +188,15 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
         return
       }
 
-      let calibration: Calibration | null = null
-      let analysis: SongAnalysis | null = null
       await deps.markSongStage(song.id, "sync")
-      try {
-        const aligned = await deps.runLyricAlign({
-          audioPath: generated.value.flacPath,
-          outputDir: tempDir,
-        })
-        if (aligned.ok) {
-          calibration = aligned.value.calibration
-        } else {
-          deps.logError("lyric alignment failed", aligned.error.detail)
-        }
-      } catch (error) {
-        deps.logError("lyric alignment failed", error)
-      }
-
-      try {
-        const transcript = await deps.runVocalTranscript({
-          audioPath: generated.value.flacPath,
-          outputDir: tempDir,
-          durationSeconds: generated.value.durationSeconds,
-        })
-        if (transcript.ok) {
-          analysis = {
-            version: 1,
-            source: "sheetsage2",
-            notes: transcript.value.notes,
-            beats: transcript.value.beats,
-            sections: transcript.value.sections,
-          }
-          try {
-            await deps.saveTranscriptRaw(song.id, transcript.value.transcriptDir)
-          } catch (error) {
-            deps.logError("saving the raw transcript failed", error)
-          }
-        } else {
-          deps.logError("vocal transcription failed", transcript.error.detail)
-        }
-      } catch (error) {
-        deps.logError("vocal transcription failed", error)
-      }
+      const calibration = await alignCalibration(deps, generated.value.flacPath, tempDir)
+      const analysis = await transcriptAnalysis(
+        deps,
+        song.id,
+        generated.value.flacPath,
+        generated.value.durationSeconds,
+        tempDir,
+      )
 
       await deps.completeSong({
         songId: song.id,

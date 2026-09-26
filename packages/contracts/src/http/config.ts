@@ -14,14 +14,19 @@ export const ModelPathsSchema = z.strictObject({
 })
 export type ModelPaths = z.infer<typeof ModelPathsSchema>
 
-/** A partial write to the stored model paths. Missing keys keep their stored value. */
-export const ModelPathOverridesSchema = z.strictObject({
-  yue2: ModelPathSchema.optional(),
-  yue2Vae: ModelPathSchema.optional(),
-  sheetsage2: ModelPathSchema.optional(),
-  sheetsage2Base: ModelPathSchema.optional(),
-  whisper: ModelPathSchema.optional(),
-})
+/**
+ * A partial write to the stored model paths. Missing keys keep their stored
+ * value, and null resets a key to its default folder.
+ */
+export const ModelPathOverridesSchema = ModelPathsSchema.partial().extend(
+  Object.fromEntries(
+    Object.keys(ModelPathsSchema.shape).map((key) => [key, ModelPathSchema.nullish()]),
+  ) as {
+    [K in keyof typeof ModelPathsSchema.shape]: z.ZodOptional<
+      z.ZodNullable<(typeof ModelPathsSchema.shape)[K]>
+    >
+  },
+)
 export type ModelPathOverrides = z.infer<typeof ModelPathOverridesSchema>
 
 export const ConfigSchema = z.strictObject({

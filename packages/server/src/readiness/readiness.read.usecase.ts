@@ -1,12 +1,14 @@
 import { ModelReadiness, Readiness } from "contracts/http/readiness"
 import { ReadCurrentModelPaths } from "../config/config.current"
-import { expectedModelSizes, ModelReadinessKey } from "./readiness.models"
+import { ModelReadinessKey } from "./readiness.models"
 import { CheckFfmpeg, MeasureModelSize, ReadGpuFacts } from "./readiness.ports"
 import { ffmpegCheck, nvidiaCheck } from "./readiness.preflight"
 
 export type ReadReadinessDeps = Readonly<{
   /** Resolved per read, so a saved path takes effect with no restart. */
   readModelPaths: ReadCurrentModelPaths
+  /** The byte total a full download writes, straight from the download pins. */
+  expectedModelSizes: Readonly<Record<ModelReadinessKey, number>>
   measureModelSize: MeasureModelSize
   checkFfmpeg: CheckFfmpeg
   readGpuFacts: ReadGpuFacts
@@ -24,7 +26,7 @@ export const makeReadReadiness = (deps: ReadReadinessDeps) => async (): Promise<
     const path = modelPaths[key]
     const size = await deps.measureModelSize(path)
     return size === null
-      ? { state: "missing", path, size: expectedModelSizes[key] }
+      ? { state: "missing", path, size: deps.expectedModelSizes[key] }
       : { state: "ready", path, size }
   }
 

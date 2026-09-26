@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useEscapeKey } from "@/lib/use-escape-key"
 import { Song, SongStatus } from "contracts/http/songs"
 import { cn } from "@/lib/cn"
 import { prefersReducedMotion } from "./songs.motion"
@@ -42,14 +43,7 @@ export const GeneratingOverlay: React.FC<GeneratingOverlayProps> = ({
 }) => {
   const reducedMotion = prefersReducedMotion()
 
-  React.useEffect(() => {
-    if (!visible) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onDismiss()
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [visible, onDismiss])
+  useEscapeKey(onDismiss, visible)
 
   const reel = React.useMemo(() => (song === null ? null : reelRowsFor(song)), [song])
   const status = song?.status ?? null

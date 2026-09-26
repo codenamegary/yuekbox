@@ -10,21 +10,41 @@ export type ProcessRunner = (
   command: readonly string[],
   cwd: string,
   onStderrLine: (line: string) => void,
-  /** Extra environment for the child, merged over the process environment. */
+  /**
+   * The child environment. When given, it replaces the parent environment
+   * entirely, so a child that must not inherit configuration (uv, for one)
+   * gets exactly what the caller passes. When omitted, the child inherits.
+   */
   env?: Readonly<Record<string, string>>,
 ) => Promise<ProcessOutcome>
+
+/**
+ * The parent environment minus every key starting with one of the denied
+ * prefixes. Use it as the base for a child environment that must not
+ * inherit the parent's configuration for one tool.
+ */
+export const envWithout = (
+  deniedPrefixes: readonly string[],
+  parent: Readonly<Record<string, string | undefined>> = process.env,
+): Readonly<Record<string, string>> =>
+  Object.fromEntries(
+    Object.entries(parent).filter(
+      (entry): entry is [string, string] =>
+        entry[1] !== undefined && !deniedPrefixes.some((prefix) => entry[0].startsWith(prefix)),
+    ),
+  )
 
 export const runProcess: ProcessRunner = async (command, cwd, onStderrLine, env) => {
   const proc = Bun.spawn([...command], {
     cwd,
     stdout: "pipe",
     stderr: "pipe",
-    ...(env === undefined ? {} : { env: { ...process.env, ...env } }),
+    ...(env === undefined ? {} : { env }),
   })
 
   const decoder = new TextDecoder()
-  let tail = ""
-  let pending = ""
+  let tail = "" // structure: allow-let
+  let pending = "" // structure: allow-let
 
   const consumeStderr = (async () => {
     for await (const chunk of proc.stderr) {

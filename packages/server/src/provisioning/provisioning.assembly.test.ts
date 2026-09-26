@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
 import { existsSync } from "node:fs"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { ProcessRunner } from "../shared/process"
 import { assembleProvisioningSlice } from "./provisioning.assembly"
 
@@ -19,8 +19,21 @@ const noNetwork = async (): Promise<Response> => {
   throw new Error("no network in tests")
 }
 
+/**
+ * Seeds the managed uv the same way a successful install leaves it: binary
+ * plus stamp. The uv step then skips without touching the network, which
+ * the `noNetwork` fetch guard asserts.
+ */
+const seedManagedUv = async (home: string): Promise<void> => {
+  const managed = join(home, "tools", "uv-0.9.18", "uv")
+  await mkdir(dirname(managed), { recursive: true })
+  await writeFile(managed, "#!/bin/sh\n", "utf8")
+  await writeFile(join(home, "tools", "uv-0.9.18.json"), "{}\n", "utf8")
+}
+
 test("a stubbed bare-home run reaches ready, and the second run skips the built pieces", async () => {
   await withTempDir(async (home) => {
+    await seedManagedUv(home)
     const firstCommands: string[][] = []
     const firstRun: ProcessRunner = async (command) => {
       firstCommands.push([...command])
@@ -31,7 +44,6 @@ test("a stubbed bare-home run reaches ready, and the second run skips the built 
     }
     const first = assembleProvisioningSlice({
       home,
-      findExecutable: () => "/tools/uv",
       fetchImpl: noNetwork,
       runProcess: firstRun,
     })
@@ -62,7 +74,6 @@ test("a stubbed bare-home run reaches ready, and the second run skips the built 
     }
     const second = assembleProvisioningSlice({
       home,
-      findExecutable: () => "/tools/uv",
       fetchImpl: noNetwork,
       runProcess: secondRun,
     })
@@ -86,9 +97,9 @@ test("a stubbed bare-home run reaches ready, and the second run skips the built 
 
 test("a machine with no NVIDIA driver stops before building any environment", async () => {
   await withTempDir(async (home) => {
+    await seedManagedUv(home)
     const slice = assembleProvisioningSlice({
       home,
-      findExecutable: () => "/tools/uv",
       fetchImpl: noNetwork,
       runProcess: async (command) => {
         if (command[0] === "nvidia-smi") {

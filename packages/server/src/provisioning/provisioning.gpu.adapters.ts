@@ -1,4 +1,5 @@
 import { ProcessOutcome, ProcessRunner } from "../shared/process"
+import { err, ok, Result } from "../shared/result"
 import { GpuFacts } from "./provisioning.models"
 import { ReadGpuFacts } from "./provisioning.ports"
 
@@ -24,6 +25,16 @@ export const parseDriverVersion = (stdout: string): string | null => {
   return /^\d+(\.\d+)*$/.test(first) ? first : null
 }
 
+/** Runs the nvidia-smi query; a spawn failure becomes its message. */
+const probeDriver = async (env: GpuAdapterEnv): Promise<Result<ProcessOutcome, string>> => {
+  try {
+    return ok(await env.runProcess(gpuDriverQuery, env.cwd, () => undefined))
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    return err(message)
+  }
+}
+
 /**
  * Asks nvidia-smi for the driver version. Everything that is not a clean
  * answer (missing binary, nonzero exit, no output) becomes `absent`, so the
@@ -31,21 +42,19 @@ export const parseDriverVersion = (stdout: string): string | null => {
  */
 export const makeReadGpuFacts = (env: GpuAdapterEnv): ReadGpuFacts => {
   return async (): Promise<GpuFacts> => {
-    let outcome: ProcessOutcome
-    try {
-      outcome = await env.runProcess(gpuDriverQuery, env.cwd, () => undefined)
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error)
-      return { kind: "absent", detail: `nvidia-smi could not run: ${message}` }
+    const probed = await probeDriver(env)
+    if (!probed.ok) {
+      return { kind: "absent", detail: `nvidia-smi could not run: ${probed.error}` }
     }
-    if (outcome.exitCode !== 0) {
+    if (probed.value.exitCode !== 0) {
       return {
         kind: "absent",
-        detail: outcome.stderrTail.trim() || `nvidia-smi exited with code ${outcome.exitCode}`,
+        detail:
+          probed.value.stderrTail.trim() || `nvidia-smi exited with code ${probed.value.exitCode}`,
       }
     }
 
-    const driverVersion = parseDriverVersion(outcome.stdout)
+    const driverVersion = parseDriverVersion(probed.value.stdout)
     if (driverVersion === null) {
       return { kind: "absent", detail: "nvidia-smi reported no driver version" }
     }

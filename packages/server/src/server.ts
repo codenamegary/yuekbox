@@ -156,7 +156,7 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
   // the boot-time `/v1/status` checks keep the paths resolved at boot.
   const readGpuFacts = makeReadGpuFacts({ cwd: boot.home, runProcess })
 
-  const { app, songs } = composeServer({
+  const { app, songs, models } = composeServer({
     db: database.db,
     mediaDir: boot.mediaDir,
     config: {
@@ -212,6 +212,11 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
   const close = async (): Promise<void> => {
     serviceState.value = "shutting_down"
     await app.close()
+    // Abort in-flight downloads, then give them a moment to settle their
+    // staged files. They never touch the database, so nothing here may hold
+    // shutdown hostage: the second Ctrl-C below is the escape hatch.
+    models.downloads.stop()
+    await models.downloads.drain()
     database.close()
   }
 
@@ -221,7 +226,16 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
 if (import.meta.main) {
   const running = await startServer({ argv: Bun.argv, env: process.env, osHome: homedir() })
 
+  // A re-entrancy latch mutated only by the signal handlers below.
+  let stopping = false // structure: allow-let
+  const exitCode = { SIGINT: 130, SIGTERM: 143 } as Record<string, number>
+
   const shutdown = async (signal: string): Promise<void> => {
+    if (stopping) {
+      // The first signal started the graceful path; the second means now.
+      process.exit(exitCode[signal] ?? 1)
+    }
+    stopping = true
     console.log(`received ${signal}; shutting down`)
     await running.close()
     process.exit(0)

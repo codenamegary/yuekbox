@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { resolve } from "node:path"
 import { parseCliArgs } from "./config.argv"
 
 test("argv with no flags means no overrides, no provisioning, and the default home", () => {
@@ -101,4 +102,17 @@ test("a flag without a value fails loudly", () => {
 test("an empty value fails loudly", () => {
   expect(() => parseCliArgs(["--home="])).toThrow("--home needs a value")
   expect(() => parseCliArgs(["--whisper", "   "])).toThrow("--whisper needs a value")
+})
+
+test("a relative flag value is anchored to the shell's working directory", () => {
+  const parsed = parseCliArgs(["--yue2-model", "./m", "--home", "yuekbox-home"])
+
+  expect(parsed.models.yue2).toBe(resolve(process.cwd(), "./m"))
+  expect(parsed.home).toBe(resolve(process.cwd(), "yuekbox-home"))
+})
+
+test("an absolute flag value is kept exactly as given", () => {
+  const parsed = parseCliArgs(["--yue2-model", "/mnt/audio/YuE2-3B"])
+
+  expect(parsed.models.yue2).toBe("/mnt/audio/YuE2-3B")
 })

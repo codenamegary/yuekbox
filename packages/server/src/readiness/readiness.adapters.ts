@@ -82,12 +82,14 @@ export const makeCachedProbe = <T>(
   probe: () => Promise<T>,
   options: CacheOptions,
 ): (() => Promise<T>) => {
-  let cached: Readonly<{ value: T; at: number }> | null = null
+  // The Map is a one-slot cell, so the binding itself stays const.
+  const cache = new Map<null, Readonly<{ value: T; at: number }>>()
   return async () => {
     const now = options.now()
-    if (cached !== null && now - cached.at < options.ttlMs) return cached.value
+    const cached = cache.get(null)
+    if (cached !== undefined && now - cached.at < options.ttlMs) return cached.value
     const value = await probe()
-    cached = { value, at: options.now() }
+    cache.set(null, { value, at: options.now() })
     return value
   }
 }

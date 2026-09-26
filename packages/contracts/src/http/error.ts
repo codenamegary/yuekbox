@@ -8,7 +8,7 @@ export const PROBLEM_TYPES = {
   conflict: "https://yuekbox.local/problems/conflict",
   upstreamError: "https://yuekbox.local/problems/upstream-error",
   modelRequired: "https://yuekbox.local/problems/model-required",
-  confirmationRequired: "https://yuekbox.local/problems/download-confirmation-required",
+  confirmationRequired: "https://yuekbox.local/problems/confirmation-required",
   modelPathExternal: "https://yuekbox.local/problems/model-path-external",
 } as const
 
@@ -57,7 +57,7 @@ export const UpstreamProblemSchema = z.strictObject({
 export const ModelRequiredProblemSchema = z.strictObject({
   ...InternalProblemFieldsSchema.shape,
   type: z.literal(PROBLEM_TYPES.modelRequired),
-  models: z.array(MissingModelSchema).min(1),
+  models: z.array(MissingModelSchema).min(1).readonly(),
 })
 
 /**

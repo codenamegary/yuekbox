@@ -1,4 +1,5 @@
 import { MissingModel, modelDownloadKeys } from "./models.models"
+import { expectedModelSizes } from "./models.pins"
 import { ModelsSlice } from "./models.assembly"
 
 const snapshot = (key: (typeof modelDownloadKeys)[number], path: string) =>
@@ -18,6 +19,7 @@ const snapshot = (key: (typeof modelDownloadKeys)[number], path: string) =>
 export const unusedModelsFixture = (): ModelsSlice => {
   const idle = modelDownloadKeys.map((key) => snapshot(key, `/tmp/yuekbox-unused-models/${key}`))
   return {
+    expectedModelSizes,
     downloads: {
       start: async ({ key }) => ({
         ok: true,
@@ -26,6 +28,7 @@ export const unusedModelsFixture = (): ModelsSlice => {
       read: async (key) => idle.find((item) => item.key === key) ?? snapshot(key, ""),
       readAll: async () => Object.freeze(idle),
       drain: async () => {},
+      stop: () => {},
     },
     findMissingGenerationModels: async () => [],
   }

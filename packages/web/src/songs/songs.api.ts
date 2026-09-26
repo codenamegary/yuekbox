@@ -15,12 +15,8 @@ import {
   SongVisualizationResponseSchema,
   songVisualizationPath,
 } from "contracts/http/visualizations"
+import { parseJson } from "@/lib/http"
 import { toProblemError } from "@/lib/problems"
-
-const parseJson = async <T>(response: Response, parse: (value: unknown) => T): Promise<T> => {
-  if (!response.ok) throw await toProblemError(response)
-  return parse(await response.json())
-}
 
 export const fetchSongs = async (): Promise<SongsCollection> => {
   const response = await fetch(`${songsPath}?limit=50`)

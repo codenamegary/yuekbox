@@ -42,32 +42,32 @@ test("measurePathSize sums files recursively", async () => {
 const cacheTtlMs = 60_000
 
 test("a present path is measured once inside the size ttl", async () => {
-  let measured = 0
-  let clock = 1_000
+  const measurements: number[] = []
+  const clock: { ms: number } = { ms: 1_000 }
   const measureModelSize = makeCachedModelSize({
     pathExists: async () => true,
     measurePathSize: async () => {
-      measured += 1
+      measurements.push(42)
       return 42
     },
     ttlMs: cacheTtlMs,
-    now: () => clock,
+    now: () => clock.ms,
   })
 
   expect(await measureModelSize("/models/YuE2-3B")).toBe(42)
-  clock = 60_999
+  clock.ms = 60_999
   expect(await measureModelSize("/models/YuE2-3B")).toBe(42)
-  expect(measured).toBe(1)
-  clock = 61_000
+  expect(measurements).toHaveLength(1)
+  clock.ms = 61_000
   expect(await measureModelSize("/models/YuE2-3B")).toBe(42)
-  expect(measured).toBe(2)
+  expect(measurements).toHaveLength(2)
 })
 
 test("a missing path is checked live on every call and never measured", async () => {
-  let checks = 0
+  const checks: number[] = []
   const measureModelSize = makeCachedModelSize({
     pathExists: async () => {
-      checks += 1
+      checks.push(1)
       return false
     },
     measurePathSize: async () => {
@@ -79,16 +79,16 @@ test("a missing path is checked live on every call and never measured", async ()
 
   expect(await measureModelSize("/models/YuE2-3B")).toBeNull()
   expect(await measureModelSize("/models/YuE2-3B")).toBeNull()
-  expect(checks).toBe(2)
+  expect(checks).toHaveLength(2)
 })
 
 test("a cached size is dropped when the path disappears and re-measured when it returns", async () => {
-  let present = true
-  let measured = 0
+  const presence: { value: boolean } = { value: true }
+  const measurements: number[] = []
   const measureModelSize = makeCachedModelSize({
-    pathExists: async () => present,
+    pathExists: async () => presence.value,
     measurePathSize: async () => {
-      measured += 1
+      measurements.push(42)
       return 42
     },
     ttlMs: cacheTtlMs,
@@ -96,11 +96,11 @@ test("a cached size is dropped when the path disappears and re-measured when it 
   })
 
   expect(await measureModelSize("/models/YuE2-3B")).toBe(42)
-  present = false
+  presence.value = false
   expect(await measureModelSize("/models/YuE2-3B")).toBeNull()
-  present = true
+  presence.value = true
   expect(await measureModelSize("/models/YuE2-3B")).toBe(42)
-  expect(measured).toBe(2)
+  expect(measurements).toHaveLength(2)
 })
 
 test("a path that cannot be measured reports missing instead of throwing", async () => {
@@ -117,20 +117,20 @@ test("a path that cannot be measured reports missing instead of throwing", async
 })
 
 test("a cached probe reuses its value until the ttl", async () => {
-  let calls = 0
-  let clock = 0
+  const calls: number[] = []
+  const clock: { ms: number } = { ms: 0 }
   const probe = makeCachedProbe(
     async () => {
-      calls += 1
-      return calls
+      calls.push(calls.length + 1)
+      return calls.length
     },
-    { ttlMs: 30_000, now: () => clock },
+    { ttlMs: 30_000, now: () => clock.ms },
   )
 
   expect(await probe()).toBe(1)
-  clock = 29_999
+  clock.ms = 29_999
   expect(await probe()).toBe(1)
-  clock = 30_000
+  clock.ms = 30_000
   expect(await probe()).toBe(2)
-  expect(calls).toBe(2)
+  expect(calls).toHaveLength(2)
 })

@@ -76,11 +76,11 @@ type FrameHost = Readonly<{
 
 const installFrameHost = (): FrameHost => {
   const callbacks = new Map<number, FrameRequestCallback>()
-  let handle = 0
+  const issued: { handle: number } = { handle: 0 }
   const raf = (callback: FrameRequestCallback): number => {
-    handle += 1
-    callbacks.set(handle, callback)
-    return handle
+    issued.handle += 1
+    callbacks.set(issued.handle, callback)
+    return issued.handle
   }
   const caf = (id: number): void => {
     callbacks.delete(id)

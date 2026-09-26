@@ -19,6 +19,13 @@ test("paths outside the models folder are refused, including siblings and the ro
   expect(isInsideModelsDir(home, `${home}/models/../data/media`)).toBe(false)
 })
 
+test("the staging tree is not a model, so a path inside it is refused", () => {
+  expect(isInsideModelsDir(home, downloadTempDir(home, "yue2"))).toBe(false)
+  expect(isInsideModelsDir(home, `${home}/models/.downloads/whisper`)).toBe(false)
+  expect(isInsideModelsDir(home, `${home}/models/.downloads`)).toBe(false)
+  expect(isInsideModelsDir(home, `${home}/models/.downloads-extra`)).toBe(true)
+})
+
 test("a download stages under the models folder in a hidden downloads directory", () => {
   expect(downloadTempDir(home, "yue2")).toBe("/home/u/.yuekbox/models/.downloads/yue2")
 })

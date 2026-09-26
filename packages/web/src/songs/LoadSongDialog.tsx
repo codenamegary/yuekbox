@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useEscapeKey } from "@/lib/use-escape-key"
 import { Song } from "contracts/http/songs"
 import { Button } from "@/components/ui/Button"
 
@@ -9,14 +10,7 @@ type LoadSongDialogProps = Readonly<{
 }>
 
 export const LoadSongDialog: React.FC<LoadSongDialogProps> = ({ song, onCancel, onConfirm }) => {
-  React.useEffect(() => {
-    if (song === null) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCancel()
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [song, onCancel])
+  useEscapeKey(onCancel, song !== null)
 
   if (song === null) return null
 

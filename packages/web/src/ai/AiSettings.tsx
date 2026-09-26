@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useEscapeKey } from "@/lib/use-escape-key"
 import {
   AiConfigPatch,
   AiConfig,
@@ -220,13 +221,7 @@ export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
     visuals: useAiModelsQuery("visuals", true, saveCount),
   }
 
-  React.useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [onClose])
+  useEscapeKey(onClose)
 
   const config = configQuery.data
   const presets = presetsQuery.data?.presets ?? []

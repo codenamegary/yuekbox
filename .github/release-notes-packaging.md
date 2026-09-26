@@ -22,10 +22,10 @@ migrations, and the Python helper scripts. It replaces a source checkout and a
 **The binary does not bundle** CUDA, PyTorch, Python, ffmpeg, or model weights.
 Those stay a machine prerequisite and a runtime download:
 
-- an NVIDIA GPU with a driver at or above 525.60.13;
-- `ffmpeg` built with `libmp3lame`;
+- an NVIDIA GPU with a driver at or above 525.60.13
+- `ffmpeg` built with `libmp3lame`
 - `yuekbox --provision` builds the pinned Python runtime under `~/.yuekbox`
-  (network access and a few GB of disk);
+  (network access and a few GB of disk)
 - the five model directories come from the app's model downloads or an
   existing copy named in `~/.yuekbox/config.yaml`.
 

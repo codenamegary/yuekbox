@@ -1,51 +1,50 @@
-import { ModelKey } from "contracts/http/models"
+import { ModelKey, modelKeyOrder } from "contracts/http/models"
 
 /**
  * The five models the user owns. Copy only: the name the row shows, what the
- * model does, and the infinitive the blocked-generation prompt uses. Keys and
- * order match the readiness report.
+ * model does, and the infinitive the blocked-generation prompt uses. The
+ * record covers every key, so lookups never fall back.
+ *
+ * SheetSage2 reads the melody of a reference. MERT-v2-FullSong is the base
+ * model SheetSage2 builds on; it never reads anything by itself.
  */
 export type ModelCatalogEntry = Readonly<{
-  key: ModelKey
   name: string
   job: string
   need: string
 }>
 
-export const modelCatalog: readonly ModelCatalogEntry[] = Object.freeze([
-  {
-    key: "yue2",
+export const modelCatalog: Readonly<Record<ModelKey, ModelCatalogEntry>> = Object.freeze({
+  yue2: {
     name: "YuE2-3B",
     job: "writes the song",
     need: "write the song",
   },
-  {
-    key: "yue2Vae",
+  yue2Vae: {
     name: "YuE2-Vae",
     job: "turns the song into audio",
     need: "turn the song into audio",
   },
-  {
-    key: "sheetsage2",
+  sheetsage2: {
     name: "SheetSage2",
-    job: "finds the beat and sections",
-    need: "find the beat and sections",
+    job: "reads a reference's melody, beat, and sections",
+    need: "read the melody, beat, and sections",
   },
-  {
-    key: "sheetsage2Base",
+  sheetsage2Base: {
     name: "MERT-v2-FullSong",
-    job: "reads the melody of a reference",
+    job: "the base model SheetSage2 builds on",
     need: "make reference covers work",
   },
-  {
-    key: "whisper",
+  whisper: {
     name: "Whisper large-v3-turbo",
     job: "times the lyric lines",
     need: "time the lyric lines",
   },
-])
+})
 
-export const catalogEntryFor = (key: ModelKey): ModelCatalogEntry | undefined =>
-  modelCatalog.find((entry) => entry.key === key)
+/** The rows, in the same report order the readiness report uses. */
+export const modelCatalogOrder: readonly ModelKey[] = modelKeyOrder
 
-export const catalogNameFor = (key: ModelKey): string => catalogEntryFor(key)?.name ?? key
+export const catalogEntryFor = (key: ModelKey): ModelCatalogEntry => modelCatalog[key]
+
+export const catalogNameFor = (key: ModelKey): string => modelCatalog[key].name

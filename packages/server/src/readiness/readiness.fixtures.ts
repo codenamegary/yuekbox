@@ -1,7 +1,7 @@
 import { ModelPaths } from "contracts/http/config"
 import { Readiness } from "contracts/http/readiness"
 import { AssembleReadinessDeps } from "./readiness.assembly"
-import { expectedModelSizes, ReadinessReader } from "./readiness.models"
+import { ReadinessReader } from "./readiness.models"
 
 const unusedModelPaths: ModelPaths = Object.freeze({
   yue2: "/tmp/yuekbox-unused-readiness/YuE2-3B",
@@ -14,23 +14,11 @@ const unusedModelPaths: ModelPaths = Object.freeze({
 /** Routes are mounted but readiness is never asserted; the probe is never called. */
 export const unusedReadinessFixture = (): ReadinessReader => async (): Promise<Readiness> => ({
   models: {
-    yue2: { state: "missing", path: unusedModelPaths.yue2, size: expectedModelSizes.yue2 },
-    yue2Vae: { state: "missing", path: unusedModelPaths.yue2Vae, size: expectedModelSizes.yue2Vae },
-    sheetsage2: {
-      state: "missing",
-      path: unusedModelPaths.sheetsage2,
-      size: expectedModelSizes.sheetsage2,
-    },
-    sheetsage2Base: {
-      state: "missing",
-      path: unusedModelPaths.sheetsage2Base,
-      size: expectedModelSizes.sheetsage2Base,
-    },
-    whisper: {
-      state: "missing",
-      path: unusedModelPaths.whisper,
-      size: expectedModelSizes.whisper,
-    },
+    yue2: { state: "missing", path: unusedModelPaths.yue2, size: 1 },
+    yue2Vae: { state: "missing", path: unusedModelPaths.yue2Vae, size: 1 },
+    sheetsage2: { state: "missing", path: unusedModelPaths.sheetsage2, size: 1 },
+    sheetsage2Base: { state: "missing", path: unusedModelPaths.sheetsage2Base, size: 1 },
+    whisper: { state: "missing", path: unusedModelPaths.whisper, size: 1 },
   },
   system: {
     ffmpeg: { state: "ready" },
@@ -41,6 +29,7 @@ export const unusedReadinessFixture = (): ReadinessReader => async (): Promise<R
 /** A ready machine; compose tests that never assert readiness use this. */
 export const unusedReadinessDepsFixture = (): AssembleReadinessDeps => ({
   readModelPaths: async () => unusedModelPaths,
+  expectedModelSizes: { yue2: 1, yue2Vae: 1, sheetsage2: 1, sheetsage2Base: 1, whisper: 1 },
   checkFfmpeg: async () => true,
   readGpuFacts: async () => ({ kind: "nvidia", driverVersion: "616.56" }),
 })

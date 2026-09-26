@@ -127,19 +127,19 @@ test("--config points at another config file and leaves the layout alone", async
 })
 
 test("loads the config file from the resolved path", async () => {
-  let seenPath = ""
+  const seenPaths: string[] = []
 
   const boot = await resolveBootEnv({
     argv: ["bun", "src/server.ts", "--home", "/srv/yuekbox"],
     env: {},
     osHome: "/home/u",
     loadModelOverrides: async (configFilePath) => {
-      seenPath = configFilePath
+      seenPaths.push(configFilePath)
       return { sheetsage2: "/mnt/SheetSage2" }
     },
   })
 
-  expect(seenPath).toBe("/srv/yuekbox/config.yaml")
+  expect(seenPaths).toEqual(["/srv/yuekbox/config.yaml"])
   expect(boot.modelPaths.sheetsage2).toBe("/mnt/SheetSage2")
   expect(boot.modelPaths.whisper).toBe("/srv/yuekbox/models/whisper-large-v3-turbo")
 })

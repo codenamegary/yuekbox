@@ -44,7 +44,8 @@ export type ComposeDeps = Readonly<{
   referenceMaxBytes: number
   service: ServiceInfo
   dependencies: DependencyStates
-  readiness: AssembleReadinessDeps
+  /** The sizes come from the assembled models slice; the caller omits them. */
+  readiness: Omit<AssembleReadinessDeps, "expectedModelSizes">
   models: AssembleModelsDeps
   now?: () => string
   logError?: (message: string, error: unknown) => void
@@ -98,8 +99,11 @@ export const composeServer = (deps: ComposeDeps): ComposedServer => {
     authorVisualization: ai.authorVisualization,
     logError: deps.logError,
   })
-  const readiness = assembleReadinessSlice(deps.readiness)
   const models = assembleModelsSlice(deps.models)
+  const readiness = assembleReadinessSlice({
+    ...deps.readiness,
+    expectedModelSizes: models.expectedModelSizes,
+  })
   songQueued.request = (songId) => {
     visualizations.requestVisualization(songId).catch((error: unknown) => {
       deps.logError?.("visualization request failed", error)

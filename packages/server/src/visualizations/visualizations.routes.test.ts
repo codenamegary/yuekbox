@@ -43,19 +43,21 @@ const statusFixture: Status = Object.freeze({
 })
 
 const deferred = <T>() => {
-  let resolve!: (value: T) => void
+  const box: { resolve: (value: T) => void } = {
+    resolve: () => {},
+  }
   const promise = new Promise<T>((settle) => {
-    resolve = settle
+    box.resolve = settle
   })
-  return { promise, resolve }
+  return { promise, resolve: box.resolve }
 }
 
 const makeHarness = () => {
   const songsById = new Map<string, Song>([[song.id, song]])
   const files = new Map<string, string>()
   const replies: Array<(reply: AuthorReply) => void> = []
-  let allowed: Result<null, AiNotReadyError> = ok(null)
-  let storedAnalysis: SongAnalysis | null = null
+  const allowed: { value: Result<null, AiNotReadyError> } = { value: ok(null) }
+  const storedAnalysis: { value: SongAnalysis | null } = { value: null }
 
   const visualizations = assembleVisualizationsSlice({
     findSongById: async (songId) => songsById.get(songId) ?? null,
@@ -64,8 +66,8 @@ const makeHarness = () => {
       files.set(songId, fileCode)
       return fileCode.length
     },
-    readAnalysis: async () => storedAnalysis,
-    canAuthorVisualizations: async () => allowed,
+    readAnalysis: async () => storedAnalysis.value,
+    canAuthorVisualizations: async () => allowed.value,
     authorVisualization: () => {
       const run = deferred<AuthorReply>()
       replies.push(run.resolve)
@@ -90,10 +92,10 @@ const makeHarness = () => {
     visualizations,
     files,
     setAnalysis: (value: SongAnalysis | null) => {
-      storedAnalysis = value
+      storedAnalysis.value = value
     },
     allow: (value: Result<null, AiNotReadyError>) => {
-      allowed = value
+      allowed.value = value
     },
     resolveAuthor: (reply: AuthorReply) => {
       replies.at(-1)?.(reply)

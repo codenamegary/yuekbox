@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { join } from "node:path"
 import { err, ok } from "../shared/result"
 import { ProvisionProgress, UvTool, VenvRequest } from "./provisioning.models"
-import { venvPin } from "./provisioning.packages"
+import { pypiIndexUrl, venvFingerprint, venvPin } from "./provisioning.packages"
 import {
   EnsurePython,
   EnsureUv,
@@ -13,7 +13,7 @@ import {
 import { makeProvisionAll } from "./provisioning.provision-all.usecase"
 
 const home = "/home/u/.yuekbox"
-const uvTool: UvTool = { path: "/usr/local/bin/uv", source: "system" }
+const uvTool: UvTool = { path: "/usr/local/bin/uv" }
 const gpuOk: ReadGpuFacts = async () => ({ kind: "nvidia", driverVersion: "616.56" })
 
 type Stubs = Readonly<{
@@ -131,9 +131,12 @@ test("builds exactly one shared venv under <home>/venvs with the manifest pin", 
   expect(request.name).toBe(venvPin.name)
   expect(request.pythonVersion).toBe(venvPin.python)
   expect(request.packages).toEqual(venvPin.packages)
-  expect(request.extraIndexUrl).toBe(venvPin.extraIndexUrl)
+  expect(request.indexUrl).toBe(pypiIndexUrl)
+  expect(request.extraIndexUrl).toBe("https://download.pytorch.org/whl/cu128")
   expect(request.fingerprint.length).toBeGreaterThan(0)
-  expect(request.indexUrl).toBe("https://download.pytorch.org/whl/cu128")
+  expect(request.fingerprint).toBe(
+    venvFingerprint({ ...venvPin, extraIndexUrl: "https://download.pytorch.org/whl/cu128" }),
+  )
   expect(state.scriptDirs).toEqual([join(home, "scripts")])
 })
 
@@ -214,7 +217,7 @@ test("a script failure surfaces as the scripts piece", async () => {
 
 test("completed pieces report skipped on a rerun", async () => {
   const state = harness({
-    ensureUv: async () => ok({ path: "/usr/local/bin/uv", source: "system" }),
+    ensureUv: async () => ok({ path: "/usr/local/bin/uv" }),
     ensurePython: async () => ok({ status: "ready" }),
     ensureVenv: async (_uv, request) => {
       state.venvs.push(request)

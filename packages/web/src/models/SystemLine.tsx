@@ -2,8 +2,12 @@ import * as React from "react"
 import { SystemReadiness } from "contracts/http/readiness"
 import { systemIssues } from "./models.view"
 
+export type SystemLineProps = Readonly<{
+  system: SystemReadiness | undefined
+}>
+
 /** One informational line. Never a config row, never a runtime name. */
-export const SystemLine: React.FC<{ system: SystemReadiness | undefined }> = ({ system }) => {
+export const SystemLine: React.FC<SystemLineProps> = ({ system }) => {
   const issues = systemIssues(system)
   if (system === undefined) return null
 

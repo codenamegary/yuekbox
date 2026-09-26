@@ -88,3 +88,44 @@ test("resolution follows a home that is not the default", () => {
     join(otherHome, "models", "SheetSage2"),
   )
 })
+
+test("a relative config.yaml value is anchored to the home", () => {
+  const resolved = resolveModelPaths({
+    home,
+    file: { yue2: "models/custom/YuE2-3B" },
+    flags: {},
+  })
+
+  expect(resolved.yue2).toBe(join(home, "models/custom/YuE2-3B"))
+})
+
+test("a CLI flag is used exactly as given; the shell anchored it at start", () => {
+  const resolved = resolveModelPaths({
+    home,
+    file: {},
+    flags: { whisper: "whisper-here" },
+  })
+
+  expect(resolved.whisper).toBe("whisper-here")
+})
+
+test("a null override resets a model to its default folder", () => {
+  const resolved = resolveModelPaths({
+    home,
+    file: { yue2: "/mnt/config/YuE2-3B", sheetsage2: null },
+    flags: {},
+  })
+
+  expect(resolved.yue2).toBe("/mnt/config/YuE2-3B")
+  expect(resolved.sheetsage2).toBe(join(home, "models", "SheetSage2"))
+})
+
+test("an absolute override is kept exactly as given", () => {
+  const resolved = resolveModelPaths({
+    home,
+    file: { yue2: "/mnt/audio/YuE2-3B" },
+    flags: {},
+  })
+
+  expect(resolved.yue2).toBe("/mnt/audio/YuE2-3B")
+})

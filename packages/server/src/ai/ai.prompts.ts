@@ -2,18 +2,14 @@ const fence = /^\s*```[a-zA-Z0-9]*\n([\s\S]*?)\n?```\s*$/
 
 /** Strip markdown fences and stray wrapping quotes that models love to add. */
 export const cleanAgentText = (raw: string): string => {
-  let text = raw.trim()
-  const fenced = fence.exec(text)
-  if (fenced !== null && fenced[1] !== undefined) {
-    text = fenced[1].trim()
-  }
-  if (
-    (text.startsWith('"') && text.endsWith('"') && text.length > 1) ||
-    (text.startsWith("'") && text.endsWith("'") && text.length > 1)
-  ) {
-    text = text.slice(1, -1).trim()
-  }
-  return text.trim()
+  const trimmed = raw.trim()
+  const fenced = fence.exec(trimmed)
+  const unfenced = fenced !== null && fenced[1] !== undefined ? fenced[1].trim() : trimmed
+  const quoted =
+    (unfenced.startsWith('"') && unfenced.endsWith('"') && unfenced.length > 1) ||
+    (unfenced.startsWith("'") && unfenced.endsWith("'") && unfenced.length > 1)
+  const unquoted = quoted ? unfenced.slice(1, -1).trim() : unfenced
+  return unquoted.trim()
 }
 
 export const maxStyleWords = 140

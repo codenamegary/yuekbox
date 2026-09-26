@@ -60,6 +60,7 @@ test("a saved model path is live for the next readiness read and generation gate
       readiness: makeReadReadiness({
         readModelPaths,
         measureModelSize,
+        expectedModelSizes: { yue2: 1, yue2Vae: 1, sheetsage2: 1, sheetsage2Base: 1, whisper: 1 },
         checkFfmpeg: async () => true,
         readGpuFacts: async () => ({ kind: "nvidia", driverVersion: "616.56" }),
       }),

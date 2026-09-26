@@ -149,7 +149,7 @@ test("PUT merges with stored keys and a later GET sees them", async () => {
   })
 })
 
-test("PUT writes the user value even when a CLI flag wins on the wire", async () => {
+test("PUT refuses to save a path a CLI flag pins, naming the flag", async () => {
   await withHome(async ({ home, configPath }) => {
     const app = makeApp({ home, configPath, flags: { whisper: "/mnt/flag/whisper" } })
 
@@ -159,10 +159,43 @@ test("PUT writes the user value even when a CLI flag wins on the wire", async ()
       payload: { models: { whisper: "/mnt/user/whisper" } },
     })
 
-    expect(response.json().models.whisper).toBe("/mnt/flag/whisper")
-    expect(await Bun.YAML.parse(await readFile(configPath, "utf8"))).toEqual({
-      models: { whisper: "/mnt/user/whisper" },
+    expect(response.statusCode).toBe(409)
+    expect(response.json().type).toBe(PROBLEM_TYPES.conflict)
+    expect(response.json().detail).toContain("--whisper")
+    expect(existsSync(configPath)).toBe(false)
+  })
+})
+
+test("PUT keeps saving the models a CLI flag does not pin", async () => {
+  await withHome(async ({ home, configPath }) => {
+    const app = makeApp({ home, configPath, flags: { whisper: "/mnt/flag/whisper" } })
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/v1/config",
+      payload: { models: { yue2: "/mnt/user/YuE2-3B" } },
     })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json().models.yue2).toBe("/mnt/user/YuE2-3B")
+    expect(response.json().models.whisper).toBe("/mnt/flag/whisper")
+  })
+})
+
+test("PUT accepts null to reset a stored path to its default", async () => {
+  await withHome(async ({ home, configPath }) => {
+    await Bun.write(configPath, "models:\n  yue2: /mnt/config/YuE2-3B\n")
+    const app = makeApp({ home, configPath })
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/v1/config",
+      payload: { models: { yue2: null } },
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json().models.yue2).toBe(join(home, "models", "YuE2-3B"))
+    expect(await Bun.YAML.parse(await readFile(configPath, "utf8"))).toEqual({ models: {} })
   })
 })
 

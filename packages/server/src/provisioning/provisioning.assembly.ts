@@ -14,7 +14,6 @@ export type ProvisioningSlice = Readonly<{
 export type AssembleProvisioningDeps = Readonly<{
   home: string
   /** Test seams; the process root leaves every one at its real default. */
-  findExecutable?: (name: string) => string | null
   fetchImpl?: FetchLike
   runProcess?: ProcessRunner
   installScripts?: InstallScripts
@@ -31,12 +30,10 @@ export const assembleProvisioningSlice = (deps: AssembleProvisioningDeps): Provi
     deps.fetchImpl === undefined
       ? makeDownloadFile((url) => fetch(url))
       : makeDownloadFile(deps.fetchImpl)
-  const findExecutable = deps.findExecutable ?? ((name: string) => Bun.which(name))
 
   const provisionAll = makeProvisionAll({
     ensureUv: makeEnsureUv({
       home: deps.home,
-      findExecutable,
       downloadFile,
       runProcess: processRunner,
     }),

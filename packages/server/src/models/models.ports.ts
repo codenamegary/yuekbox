@@ -1,10 +1,14 @@
 import { Result } from "../shared/result"
 import { ModelDownloadFailure, ModelTreeFile } from "./models.models"
 
-/** Lists a pinned repository revision's files. The only tree network seam. */
+/**
+ * Lists a pinned repository revision's files. The only tree network seam.
+ * The signal aborts an in-flight listing when the app shuts down.
+ */
 export type ReadModelTree = (
   repo: string,
   revision: string,
+  signal?: AbortSignal,
 ) => Promise<Result<readonly ModelTreeFile[], ModelDownloadFailure>>
 
 export type ModelFileDownloadRequest = Readonly<{
@@ -15,6 +19,8 @@ export type ModelFileDownloadRequest = Readonly<{
   sha256: string | null
   /** Cumulative bytes of this file on disk, called as chunks land. */
   onBytes: (written: number) => void
+  /** Aborted on shutdown, so Ctrl-C never waits on a multi-gigabyte body. */
+  signal?: AbortSignal
 }>
 
 /** Fetches one file, resuming from a partial `.part` when one exists. */

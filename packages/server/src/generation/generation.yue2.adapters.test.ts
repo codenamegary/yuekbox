@@ -134,10 +134,12 @@ test("the model and vae are resolved when the run starts, not at construction", 
       commands.push([...command])
       return { exitCode: 1, stdout: "", stderrTail: "stop here" }
     }
-    let paths: ModelPaths = {
-      ...modelPaths,
-      yue2: "/boot/YuE2-3B",
-      yue2Vae: "/boot/YuE2-Vae",
+    const paths: { value: ModelPaths } = {
+      value: {
+        ...modelPaths,
+        yue2: "/boot/YuE2-3B",
+        yue2Vae: "/boot/YuE2-Vae",
+      },
     }
     const generate = makeRunYue2Generate(
       {
@@ -145,12 +147,16 @@ test("the model and vae are resolved when the run starts, not at construction", 
         scriptPath: import.meta.path,
         gpuBudget: 16,
         cwd: "/tmp",
-        readModelPaths: async () => paths,
+        readModelPaths: async () => paths.value,
       },
       run,
     )
 
-    paths = { ...paths, yue2: "/mnt/audio/YuE2-3B", yue2Vae: "/mnt/audio/YuE2-Vae" }
+    paths.value = {
+      ...paths.value,
+      yue2: "/mnt/audio/YuE2-3B",
+      yue2Vae: "/mnt/audio/YuE2-Vae",
+    }
     const result = await generate({
       songId: "song-1",
       lyrics: "hello",

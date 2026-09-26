@@ -1,5 +1,6 @@
 import { err, ok, Result } from "../shared/result"
 import { ModelDownloadFailure, ModelTreeFile } from "./models.models"
+import { z } from "zod"
 
 export const modelTreeUrl = (repo: string, revision: string): string =>
   `https://huggingface.co/api/models/${repo}/tree/${revision}?recursive=true`
@@ -10,28 +11,24 @@ export const modelFileUrl = (repo: string, revision: string, path: string): stri
 const sha256Pattern = /^[0-9a-f]{64}$/
 
 /**
+ * The Hugging Face tree API answer, one entry per repository item. The tree
+ * is untrusted input even at a pinned revision, so it parses through a
+ * schema and every field validates before the download trusts it.
+ */
+const TreeEntrySchema = z.looseObject({
+  type: z.string(),
+  path: z.string(),
+  size: z.number().int().nonnegative(),
+  lfs: z.looseObject({ oid: z.string().regex(sha256Pattern) }).nullish(),
+})
+
+/**
  * A repository path is only usable when it stays inside the download folder:
- * relative, no `..` segment, no backslash. The upstream tree is untrusted
- * input even at a pinned revision, so anything else fails the whole tree.
+ * relative, no `..` segment, no backslash. Anything else fails the whole tree.
  */
 const isSafeRepoPath = (path: string): boolean => {
   if (path === "" || path.startsWith("/") || path.includes("\\")) return false
   return path.split("/").every((segment) => segment !== "" && segment !== "." && segment !== "..")
-}
-
-const toTreeFile = (entry: Record<string, unknown>): ModelTreeFile | null => {
-  if (entry["type"] !== "file") return null
-  const path = entry["path"]
-  const size = entry["size"]
-  if (typeof path !== "string" || !isSafeRepoPath(path)) return null
-  if (typeof size !== "number" || !Number.isSafeInteger(size) || size < 0) return null
-
-  const lfs = entry["lfs"]
-  if (lfs === undefined || lfs === null) return { path, sizeBytes: size, sha256: null }
-  if (typeof lfs !== "object") return null
-  const oid = (lfs as Record<string, unknown>)["oid"]
-  if (typeof oid !== "string" || !sha256Pattern.test(oid)) return null
-  return { path, sizeBytes: size, sha256: oid }
 }
 
 const invalidTree = (detail: string): Result<readonly ModelTreeFile[], ModelDownloadFailure> =>
@@ -49,15 +46,13 @@ export const parseModelTree = (
 
   const files: ModelTreeFile[] = []
   for (const entry of payload) {
-    if (typeof entry !== "object" || entry === null)
-      return invalidTree("a tree entry is not an object")
-    if ((entry as Record<string, unknown>)["type"] === "directory") continue
-    const file = toTreeFile(entry as Record<string, unknown>)
-    if (file === null) {
-      const path = (entry as Record<string, unknown>)["path"]
-      return invalidTree(`the tree entry for ${typeof path === "string" ? path : "?"} is invalid`)
-    }
-    files.push(Object.freeze(file))
+    const parsed = TreeEntrySchema.safeParse(entry)
+    if (!parsed.success) return invalidTree("a tree entry is not shaped like a repository item")
+    const { type, path, size, lfs } = parsed.data
+    if (type === "directory") continue
+    if (type !== "file") return invalidTree(`the tree entry for ${path} is not a file`)
+    if (!isSafeRepoPath(path)) return invalidTree(`the tree entry for ${path} is invalid`)
+    files.push(Object.freeze({ path, sizeBytes: size, sha256: lfs?.oid ?? null }))
   }
 
   return ok(

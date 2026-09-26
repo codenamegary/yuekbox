@@ -1,6 +1,7 @@
 import { dirname, join } from "node:path"
 import { ModelPaths } from "contracts/http/config"
 import { ReadCurrentModelPaths } from "../config/config.current"
+import { describeError } from "../shared/describe"
 import { err, ok, Result } from "../shared/result"
 import {
   downloadConfirmationThresholdBytes,
@@ -12,6 +13,7 @@ import {
   StartModelDownloadError,
 } from "./models.models"
 import { downloadTempDir, isInsideModelsDir } from "./models.paths"
+import { downloadFailureMessage } from "./models.messages"
 import { modelDownloadPins, ModelDownloadPin, ModelDownloadPins } from "./models.pins"
 import {
   DownloadModelFile,
@@ -50,6 +52,8 @@ export type ModelDownloads = Readonly<{
   read: (key: ModelDownloadKey) => Promise<ModelDownloadSnapshot>
   readAll: () => Promise<readonly ModelDownloadSnapshot[]>
   drain: () => Promise<void>
+  /** Aborts every in-flight job, so shutdown never waits on a stalled fetch. */
+  stop: () => void
 }>
 
 /** In-memory per-process job state; the staged files on disk are the durable part. */
@@ -59,11 +63,6 @@ type Job = {
   currentFile: string | null
   errorDetail?: string
 }
-
-const detailLimit = 2000
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 const presentSnapshot = (
   key: ModelDownloadKey,
@@ -102,6 +101,36 @@ const jobSnapshot = (
     ...(job.errorDetail !== undefined ? { errorDetail: job.errorDetail } : {}),
   })
 
+type StagedPartition = Readonly<{
+  bytesDone: number
+  remaining: readonly ModelTreeFile[]
+}>
+
+/** Whole staged files count toward progress. Anything else is still to fetch, in tree order. */
+const accountForStagedFile = async (
+  partition: StagedPartition,
+  file: ModelTreeFile,
+  tempDir: string,
+  measureFileBytes: MeasureFileBytes,
+): Promise<StagedPartition> => {
+  const staged = await measureFileBytes(join(tempDir, file.path))
+  if (staged === file.sizeBytes) {
+    return { bytesDone: partition.bytesDone + staged, remaining: partition.remaining }
+  }
+  return { bytesDone: partition.bytesDone, remaining: [...partition.remaining, file] }
+}
+
+const partitionStagedFiles = (
+  files: readonly ModelTreeFile[],
+  tempDir: string,
+  measureFileBytes: MeasureFileBytes,
+): Promise<StagedPartition> =>
+  files.reduce(
+    (partition, file) =>
+      partition.then((current) => accountForStagedFile(current, file, tempDir, measureFileBytes)),
+    Promise.resolve<StagedPartition>({ bytesDone: 0, remaining: [] }),
+  )
+
 /**
  * Downloads pinned Hugging Face snapshots into `<home>/models`, on explicit
  * request. Files stage under `<home>/models/.downloads/<key>` and the folder is
@@ -117,6 +146,8 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
   const threshold = deps.confirmationThresholdBytes ?? downloadConfirmationThresholdBytes
   const jobs = new Map<ModelDownloadKey, Job>()
   const tasks = new Map<ModelDownloadKey, Promise<void>>()
+  const starts = new Map<ModelDownloadKey, Promise<unknown>>()
+  const aborts = new Map<ModelDownloadKey, AbortController>()
 
   const snapshotFor = async (
     key: ModelDownloadKey,
@@ -135,6 +166,7 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
     key: ModelDownloadKey,
     pin: ModelDownloadPin,
     target: string,
+    signal: AbortSignal,
   ): Promise<void> => {
     const job = jobs.get(key)
     if (job === undefined) return
@@ -143,11 +175,13 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
     const fail = (failure: ModelDownloadFailure): void => {
       job.state = "failed"
       job.currentFile = null
-      job.errorDetail = failure.detail.slice(0, detailLimit)
-      deps.logError?.(`model download failed (${key})`, failure.detail)
+      // The user sees the plain kind-level line; raw details (repository
+      // URLs, checksums, HTTP codes) stay in the server log only.
+      job.errorDetail = downloadFailureMessage(failure)
+      deps.logError?.(`model download failed (${key}): ${failure.detail}`, failure)
     }
 
-    const treeResult = await deps.readModelTree(pin.repo, pin.revision)
+    const treeResult = await deps.readModelTree(pin.repo, pin.revision, signal)
     if (!treeResult.ok) {
       fail(treeResult.error)
       return
@@ -163,21 +197,16 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
     }
 
     await deps.ensureDirectory(tempDir)
-    let bytesDone = 0
-    const remaining: ModelTreeFile[] = []
-    for (const file of tree) {
-      const staged = await deps.measureFileBytes(join(tempDir, file.path))
-      if (staged === file.sizeBytes) {
-        bytesDone += staged
-        continue
-      }
-      remaining.push(file)
-    }
+    const staged = await partitionStagedFiles(tree, tempDir, deps.measureFileBytes)
     job.state = "downloading"
-    job.bytesDone = bytesDone
+    job.bytesDone = staged.bytesDone
 
-    for (const file of remaining) {
-      const base = bytesDone
+    const downloadRemaining = async (
+      files: readonly ModelTreeFile[],
+      bytesDone: number,
+    ): Promise<boolean> => {
+      const file = files[0]
+      if (file === undefined) return true
       job.currentFile = file.path
       const downloaded = await deps.downloadFile({
         url: modelFileUrl(pin.repo, pin.revision, file.path),
@@ -185,16 +214,21 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
         expectedBytes: file.sizeBytes,
         sha256: file.sha256,
         onBytes: (written) => {
-          job.bytesDone = base + written
+          job.bytesDone = bytesDone + written
         },
+        signal,
       })
       if (!downloaded.ok) {
         fail(downloaded.error)
-        return
+        return false
       }
-      bytesDone += file.sizeBytes
-      job.bytesDone = bytesDone
+      const nextBytes = bytesDone + file.sizeBytes
+      job.bytesDone = nextBytes
+      return downloadRemaining(files.slice(1), nextBytes)
     }
+
+    const finished = await downloadRemaining(staged.remaining, staged.bytesDone)
+    if (!finished) return
     job.currentFile = null
 
     if (await deps.pathExists(target)) {
@@ -215,13 +249,13 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
         jobs.delete(key)
         return
       }
-      fail({ kind: "move_failed", detail: messageOf(error) })
+      fail({ kind: "move_failed", detail: describeError(error) })
       return
     }
     jobs.delete(key)
   }
 
-  const start: ModelDownloads["start"] = async (input) => {
+  const startOnce: ModelDownloads["start"] = async (input) => {
     const key = input.key
     const modelPaths = await deps.readModelPaths()
     const pin = pins[key]
@@ -233,9 +267,12 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
     }
     jobs.delete(key)
 
-    // Claim the model before the first await, so two starts cannot both fetch.
+    // The per-key start chain makes this claim exclusive; no other start
+    // can hold the key while these checks run.
     const job: Job = { state: "preparing", bytesDone: 0, currentFile: null }
     jobs.set(key, job)
+    const abort = new AbortController()
+    aborts.set(key, abort)
 
     if (await deps.pathExists(target)) {
       jobs.delete(key)
@@ -255,22 +292,42 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
       })
     }
 
-    const task = runJob(key, pin, target)
+    const task = runJob(key, pin, target, abort.signal)
       .catch((error: unknown) => {
         const current = jobs.get(key)
         if (current !== undefined) {
           current.state = "failed"
           current.currentFile = null
-          current.errorDetail = messageOf(error).slice(0, detailLimit)
+          current.errorDetail = "the download failed unexpectedly"
         }
         deps.logError?.(`model download failed (${key})`, error)
       })
       .finally(() => {
         tasks.delete(key)
+        aborts.delete(key)
       })
     tasks.set(key, task)
 
     return ok(jobSnapshot(key, target, pin.totalBytes, job))
+  }
+
+  const start: ModelDownloads["start"] = (input) => {
+    // Starts are serialized per model. A start queued behind another waits
+    // for the first to finish validating, so it never reports a job the
+    // first start is about to drop, and its own confirmation check always
+    // runs on fresh state.
+    const previous = starts.get(input.key) ?? Promise.resolve()
+    const next = previous.then(
+      () => startOnce(input),
+      () => startOnce(input),
+    )
+    starts.set(input.key, next)
+    void next
+      .catch(() => undefined)
+      .finally(() => {
+        if (starts.get(input.key) === next) starts.delete(input.key)
+      })
+    return next
   }
 
   return {
@@ -284,6 +341,9 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
     },
     drain: async () => {
       await Promise.allSettled(tasks.values())
+    },
+    stop: () => {
+      for (const abort of aborts.values()) abort.abort()
     },
   }
 }

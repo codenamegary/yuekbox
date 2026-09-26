@@ -34,7 +34,7 @@ const createHarness = () => {
   const watches: string[] = []
   const plays: string[] = []
   const ended: string[] = []
-  let requested = 0
+  const requested: string[] = []
   const controller = createFullAutoController()
   controller.configure({
     onWatch: (songId) => {
@@ -47,11 +47,12 @@ const createHarness = () => {
       ended.push("ended")
     },
     requestRandom: async () => {
-      requested += 1
-      return `song-${requested}`
+      const songId = `song-${requested.length + 1}`
+      requested.push(songId)
+      return songId
     },
   })
-  return { controller, watches, plays, ended, requested: () => requested }
+  return { controller, watches, plays, ended, requested: () => requested.length }
 }
 
 describe("createFullAutoController", () => {

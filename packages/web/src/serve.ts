@@ -1,22 +1,11 @@
 import index from "./index.html"
+import { makeApiProxy } from "contracts/http/proxy"
 
 const apiOrigin = process.env.API_ORIGIN ?? "http://127.0.0.1:8787"
 const hostname = process.env.WEB_HOST ?? "127.0.0.1"
 const port = Number(process.env.WEB_PORT ?? 3000)
 
-const proxyToApi = async (request: Request): Promise<Response> => {
-  const url = new URL(request.url)
-  const target = new URL(`${url.pathname}${url.search}`, apiOrigin)
-  const upstream = await fetch(new Request(target, request))
-  const body = await upstream.arrayBuffer()
-  const headers = new Headers(upstream.headers)
-  headers.delete("content-encoding")
-  return new Response(body, {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    headers,
-  })
-}
+const proxyToApi = makeApiProxy(apiOrigin)
 
 const distRoot = new URL("../dist/", import.meta.url)
 

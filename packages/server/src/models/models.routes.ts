@@ -26,7 +26,7 @@ export type ModelsRoutesOptions = Readonly<{ downloads: ModelDownloads }>
  */
 export const modelsRoutes: FastifyPluginAsync<ModelsRoutesOptions> = async (fastify, options) => {
   fastify.get(modelsDownloadsPath, async (_request, reply) =>
-    reply.send(ModelDownloadsSchema.parse({ items: await options.downloads.readAll() })),
+    reply.send(ModelDownloadsSchema.parse(await options.downloads.readAll())),
   )
 
   fastify.get<{ Params: { key: string } }>(

@@ -1,5 +1,54 @@
 import { describe, expect, test } from "bun:test"
-import { checkStructure } from "./structure"
+import { checkNoLet, checkStructure } from "./structure"
+
+describe("checkNoLet", () => {
+  test("flags a let declaration anywhere in the file", () => {
+    const source = `export const makeThing = (deps: Deps) => {
+  let count = 0
+  return async (input: Input) => {
+    count += 1
+    return deps.run(input, count)
+  }
+}`
+
+    expect(checkNoLet("thing.usecase.ts", source)).toHaveLength(1)
+  })
+
+  test("accepts const bindings, including mutated objects and for-of entries", () => {
+    const source = `export const makeThing = (deps: Deps) => {
+  const seen = new Set<string>()
+  return async (input: Input) => {
+    seen.add(input.id)
+    for (const [index, id] of [...seen].entries()) deps.note(index, id)
+    return deps.run(input)
+  }
+}`
+
+    expect(checkNoLet("thing.usecase.ts", source)).toEqual([])
+  })
+
+  test("a declaration line marked structure: allow-let is the accepted exception", () => {
+    const source = `export const makeCursor = () => {
+  let cursor = 0 // structure: allow-let
+  return (bytes: number) => {
+    cursor += bytes
+    return cursor
+  }
+}`
+
+    expect(checkNoLet("cursor.ts", source)).toEqual([])
+  })
+
+  test("the marker only excuses its own line", () => {
+    const source = `export const makeCursor = () => {
+  let cursor = 0
+  let other = 0 // structure: allow-let
+  return () => cursor + other
+}`
+
+    expect(checkNoLet("cursor.ts", source)).toHaveLength(1)
+  })
+})
 
 describe("checkStructure use case files", () => {
   test("flags a use case file whose factory is not curried", () => {
