@@ -39,6 +39,28 @@ const partBytes = async (path: string): Promise<number> => {
   }
 }
 
+/**
+ * Verifies a complete part in place and gives it its final name. A part that
+ * reaches full size but lost the race with a shutdown never needs a refetch;
+ * wrong content is removed so the next start fetches fresh.
+ */
+const promotePart = async (
+  partPath: string,
+  request: Parameters<DownloadModelFile>[0],
+): Promise<Result<number, ModelDownloadFailure>> => {
+  if (request.sha256 !== null) {
+    const hash = createHash("sha256")
+    for await (const chunk of createReadStream(partPath)) hash.update(chunk)
+    const actual = hash.digest("hex")
+    if (actual !== request.sha256) {
+      await unlink(partPath).catch(() => undefined)
+      return err({ kind: "checksum_mismatch", detail: `expected ${request.sha256}, got ${actual}` })
+    }
+  }
+  await rename(partPath, request.destPath)
+  return ok(request.expectedBytes)
+}
+
 /** The response body is streamed; a multi-gigabyte file never sits in memory. */
 const writeBody = async (
   response: Response,
@@ -69,7 +91,8 @@ const writeBody = async (
   }
 
   if (written !== request.expectedBytes) {
-    await unlink(partPath).catch(() => undefined)
+    // Keep the part: the bytes on disk are a valid prefix, and the next
+    // attempt resumes from them instead of starting the file over.
     return err({
       kind: "download_failed",
       detail: `expected ${request.expectedBytes} bytes, wrote ${written}`,
@@ -93,8 +116,9 @@ const writeBody = async (
  * request when a partial file is already there. Size is always checked and the
  * LFS SHA-256 is checked when the repository provides one; the file only takes
  * its final name after both pass, so a torn download never looks installed.
- * A failed attempt keeps the `.part` so the next start resumes it; content
- * that failed verification is removed instead.
+ * A failed attempt keeps the `.part` so the next start resumes it, a part
+ * that is already whole is verified in place instead of fetched again, and
+ * content that failed verification is removed instead.
  */
 export const makeDownloadModelFile =
   (fetchImpl: FetchLike): DownloadModelFile =>
@@ -103,6 +127,9 @@ export const makeDownloadModelFile =
     try {
       await mkdir(dirname(request.destPath), { recursive: true })
       const existing = await partBytes(partPath)
+      if (existing === request.expectedBytes) {
+        return await promotePart(partPath, request)
+      }
       const resuming = existing > 0 && existing < request.expectedBytes
       if (existing > 0 && !resuming) await unlink(partPath)
 

@@ -131,6 +131,86 @@ test("resumes a partial file with a range request and appends the rest", async (
   })
 })
 
+test("a stream that ends early keeps the partial file for the next attempt", async () => {
+  await withTempDir(async (dir) => {
+    const dest = join(dir, "model.safetensors")
+    await writeFile(`${dest}.part`, "he")
+    let calls = 0
+    const fetchImpl: FetchLike = async (_url, init) => {
+      calls += 1
+      if (calls === 1) {
+        // The server closes the stream cleanly after two more bytes.
+        return new Response("ll", { status: 206 })
+      }
+      if (init?.headers === undefined) throw new Error("the retry must resume")
+      return new Response("o", { status: 206 })
+    }
+
+    const downloadFile = makeDownloadModelFile(fetchImpl)
+    const request = {
+      url: "https://huggingface.co/m-a-p/YuE2-3B/resolve/rev1/model.safetensors",
+      destPath: dest,
+      expectedBytes: 5,
+      sha256: helloSha256,
+      onBytes: () => {},
+    }
+
+    const short = await downloadFile(request)
+
+    expect(short.ok).toBe(false)
+    if (!short.ok) expect(short.error.kind).toBe("download_failed")
+    expect(await readFile(`${dest}.part`, "utf8")).toBe("hell")
+
+    const resumed = await downloadFile(request)
+
+    expect(resumed).toEqual({ ok: true, value: 5 })
+    expect(await readFile(dest, "utf8")).toBe("hello")
+  })
+})
+
+test("a complete but unverified part is checked in place instead of fetched again", async () => {
+  await withTempDir(async (dir) => {
+    const dest = join(dir, "model.safetensors")
+    await writeFile(`${dest}.part`, "hello")
+
+    const result = await makeDownloadModelFile(async () => {
+      throw new Error("a complete part must not be fetched again")
+    })({
+      url: "https://huggingface.co/m-a-p/YuE2-3B/resolve/rev1/model.safetensors",
+      destPath: dest,
+      expectedBytes: 5,
+      sha256: helloSha256,
+      onBytes: () => {},
+    })
+
+    expect(result).toEqual({ ok: true, value: 5 })
+    expect(await readFile(dest, "utf8")).toBe("hello")
+    expect(await Bun.file(`${dest}.part`).exists()).toBe(false)
+  })
+})
+
+test("a complete part with the wrong content is removed and reported", async () => {
+  await withTempDir(async (dir) => {
+    const dest = join(dir, "model.safetensors")
+    await writeFile(`${dest}.part`, "HELLO")
+
+    const result = await makeDownloadModelFile(async () => {
+      throw new Error("a complete part must not be fetched again")
+    })({
+      url: "https://huggingface.co/m-a-p/YuE2-3B/resolve/rev1/model.safetensors",
+      destPath: dest,
+      expectedBytes: 5,
+      sha256: helloSha256,
+      onBytes: () => {},
+    })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.kind).toBe("checksum_mismatch")
+    expect(await Bun.file(`${dest}.part`).exists()).toBe(false)
+    expect(await Bun.file(dest).exists()).toBe(false)
+  })
+})
+
 test("restarts from zero when the server ignores the range request", async () => {
   await withTempDir(async (dir) => {
     const dest = join(dir, "model.safetensors")

@@ -156,7 +156,7 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
   // the boot-time `/v1/status` checks keep the paths resolved at boot.
   const readGpuFacts = makeReadGpuFacts({ cwd: boot.home, runProcess })
 
-  const { app, songs } = composeServer({
+  const { app, songs, models } = composeServer({
     db: database.db,
     mediaDir: boot.mediaDir,
     config: {
@@ -212,6 +212,9 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
   const close = async (): Promise<void> => {
     serviceState.value = "shutting_down"
     await app.close()
+    // Model downloads resolve config paths and write staged files; give any
+    // in-flight job a chance to settle before the database closes under it.
+    await models.downloads.drain()
     database.close()
   }
 
