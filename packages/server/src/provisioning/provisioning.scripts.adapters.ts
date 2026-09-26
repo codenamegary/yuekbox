@@ -1,4 +1,4 @@
-import { copyFile, mkdir } from "node:fs/promises"
+import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { err, ok } from "../shared/result"
@@ -17,8 +17,15 @@ export const scriptManifest = Object.freeze([
   { source: "yue2/generate.py", name: "generate.py" },
 ] as const)
 
-/** `packages/server/tools`, resolved from this module. */
-export const toolsRoot = fileURLToPath(new URL("../../tools/", import.meta.url))
+/**
+ * `packages/server/tools`. In a compiled binary the tools tree is embedded at
+ * `/$bunfs/root/tools` (`--asset=packages/server/tools` in scripts/build-binary.ts)
+ * and `import.meta.dir` is `/$bunfs/root`, so the standalone branch lands on the
+ * embedded copy. `bun run` keeps the real package directory.
+ */
+export const toolsRoot = Bun.isStandaloneExecutable
+  ? join(import.meta.dir, "tools")
+  : fileURLToPath(new URL("../../tools/", import.meta.url))
 
 const describeError = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
@@ -38,7 +45,10 @@ export const makeInstallScripts = (sourceRoot: string): InstallScripts => {
     for (const entry of scriptManifest) {
       const source = join(sourceRoot, entry.source)
       try {
-        await copyFile(source, join(scriptsDir, entry.name))
+        // Bytes rather than copyFile: a compiled binary's sources live under
+        // /$bunfs, where node:fs copyFile cannot read. Bun.file reads embedded
+        // and on-disk sources alike, so there is no mode branch.
+        await Bun.write(join(scriptsDir, entry.name), await Bun.file(source).bytes())
       } catch (error: unknown) {
         return err({
           kind: "install_scripts_failed",

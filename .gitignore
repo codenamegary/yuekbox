@@ -37,6 +37,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 packages/server/data
 .evidence
 
+# compiled single binary
+/yuekbox
+
 # agent worktrees
 .worktrees/
 
