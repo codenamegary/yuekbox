@@ -290,8 +290,9 @@ system:
   nvidia  { state: ready } | { state: missing, message, fix: { linux, wsl2 } }
 ```
 
-`state` follows the resolved path from config, so a `config.yaml` change is
-picked up on the next boot. The system preflight is informational only: a
+`state` follows the resolved path from config, and the resolver reads it per
+request, so a `config.yaml` change or a `PUT /v1/config` save is live on the
+next request. The system preflight is informational only: a
 failure carries a short message and a copy-paste install instruction for Linux
 and WSL2, never a config row. Readiness never reports runtimes, venvs, or our
 scripts; they are yuekbox's business, not the user's.
@@ -518,7 +519,7 @@ The installer port is `InstallScripts`; the adapter
 `<home>/scripts/`: `generate.py`, `transcribe.py`, `abc_tools.py`, `common.py`,
 and `align.py` sit side by side so the sibling imports resolve. It is
 idempotent, overwrites only its own files, and never deletes anything else.
-Provisioning calls it after it builds the environments, so a run that fails
+Provisioning calls it after it builds the environment, so a run that fails
 earlier never leaves entrypoints pointing at an unfinished home.
 
 `generate.py` calls the yue2 library directly instead of forwarding to
@@ -641,7 +642,7 @@ never a checkout path.
 
 5. Worker updates `stage` when stderr progress names a known stage. If parsing fails, leave the stage until done. Status stays `running`.
 6. If the Song has a Reference, transcribe it before generation. Run `<home>/venvs/python/bin/python <home>/scripts/transcribe.py <MEDIA_DIR>/<TITLE>_<SONG_ID>/references/<name>_<ulid>.<ext> --output <tmp>/transcribe --task melody-full --device cuda --model <models.sheetsage2> --base-model <models.sheetsage2Base> [--offline]`, read `score.abc`, write it to `reference_score.abc` in the Song folder, then generate with `cot = melody` and the ABC in the request JSON. A missing Reference file fails the Song before the script spawns; any other failure fails the Song.
-7. On success, read `audio.flac`. Encode MP3. Run the lyric aligner with `<home>/venvs/python/bin/python <home>/scripts/align.py --audio <FLAC> --out <tmp>/lyric-align --calibration-out <tmp>/lyric-align/calibration.json --device <LYRIC_ALIGN_DEVICE>`, read the `calibration.json` it writes, and pass the cues to `CompleteSong`, which writes `calibration.json` in the Song folder. The overlay shows the transcript as sung.
+7. On success, read `audio.flac`. Encode MP3. Run the lyric aligner with `<home>/venvs/python/bin/python <home>/scripts/align.py --audio <FLAC> --out <tmp>/lyric-align --calibration-out <tmp>/lyric-align/calibration.json --whisper-model <models.whisper> --device <LYRIC_ALIGN_DEVICE>`, read the `calibration.json` it writes, and pass the cues to `CompleteSong`, which writes `calibration.json` in the Song folder. The overlay shows the transcript as sung.
 8. Still inside `sync`, run the transcript pass on the rendered FLAC with `<home>/venvs/python/bin/python <home>/scripts/transcribe.py <FLAC> --output <tmp>/transcript --task melody-vocal --device <SHEETSAGE2_DEVICE> --model <models.sheetsage2> --base-model <models.sheetsage2Base> [--offline]`. Parse `melody_vocal.lab`, `beat.lab`, and `structure.lab` into notes, beats, and sections, copy the raw `<tmp>/transcript` tree into `analysis/sheetsage2/`, and pass the derived analysis to `CompleteSong`, which writes `analysis.json`. A failed run, a missing SheetSage2, or a failed copy logs and leaves the Song without an analysis; the Song still completes. `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the Song folder and marks the row `complete` with `durationSeconds` and the truncation flags. Delete the temp dir (FLAC does not stay on disk).
 9. On failure, mark `failed`, store a short `errorDetail`, delete the temp dir.
 9. Claim the next queued Song.
