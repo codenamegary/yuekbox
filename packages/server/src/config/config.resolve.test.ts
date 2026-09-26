@@ -89,15 +89,24 @@ test("resolution follows a home that is not the default", () => {
   )
 })
 
-test("a relative override is anchored to the home, not the server's working directory", () => {
+test("a relative config.yaml value is anchored to the home", () => {
   const resolved = resolveModelPaths({
     home,
     file: { yue2: "models/custom/YuE2-3B" },
-    flags: { whisper: "whisper-here" },
+    flags: {},
   })
 
   expect(resolved.yue2).toBe(join(home, "models/custom/YuE2-3B"))
-  expect(resolved.whisper).toBe(join(home, "whisper-here"))
+})
+
+test("a CLI flag is used exactly as given; the shell anchored it at start", () => {
+  const resolved = resolveModelPaths({
+    home,
+    file: {},
+    flags: { whisper: "whisper-here" },
+  })
+
+  expect(resolved.whisper).toBe("whisper-here")
 })
 
 test("a null override resets a model to its default folder", () => {

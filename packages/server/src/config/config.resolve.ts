@@ -24,11 +24,11 @@ export type ResolveModelPathsInput = Readonly<{
 }>
 
 /**
- * A relative override is anchored to the home, the directory every Python
- * pass runs in. Resolving here keeps the checks, the download target, and
- * the interpreter's own relative lookups on one path instead of letting a
- * relative string mean the server's working directory on one side and the
- * home on the other.
+ * A relative config.yaml value is anchored to the home, the directory every
+ * Python pass runs in. Resolving here keeps the checks, the download target,
+ * and the interpreter's own relative lookups on one path instead of letting
+ * a relative string mean the server's working directory on one side and the
+ * home on the other. CLI flags were already made absolute at parse time.
  */
 const anchor = (home: string, value: string): string =>
   isAbsolute(value) ? value : resolve(home, value)
@@ -37,15 +37,17 @@ const anchor = (home: string, value: string): string =>
  * The one place model paths are resolved. Precedence per model, highest first:
  * CLI flag, config.yaml, `<home>/models/<name>`. Exactly five paths resolve;
  * nothing else in the home is user-configurable. A null override is a reset:
- * it falls through to the default like a missing key.
+ * it falls through to the default like a missing key. Flag values arrive
+ * absolute (the CLI anchored them to the shell); a relative config.yaml value
+ * is anchored to the home, the directory every Python pass runs in.
  */
 export const resolveModelPaths = (input: ResolveModelPathsInput): ModelPaths => {
   const defaults = defaultModelPaths(input.home)
   const pick = (key: (typeof modelKeyOrder)[number]): string => {
-    const override = input.flags[key] ?? input.file[key]
-    return override === null || override === undefined
-      ? defaults[key]
-      : anchor(input.home, override)
+    const flag = input.flags[key]
+    if (flag !== null && flag !== undefined) return flag
+    const file = input.file[key]
+    return file === null || file === undefined ? defaults[key] : anchor(input.home, file)
   }
   return Object.freeze({
     yue2: pick("yue2"),

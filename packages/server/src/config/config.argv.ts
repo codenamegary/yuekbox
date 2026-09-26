@@ -1,3 +1,4 @@
+import { resolve } from "node:path"
 import { ModelPathOverrides } from "contracts/http/config"
 
 export type CliArgs = Readonly<{
@@ -55,6 +56,13 @@ const readFlags = (argv: readonly string[]): Flags => {
   return { flags: { [flag]: value, ...tail.flags }, provision: tail.provision }
 }
 
+/**
+ * A flag's relative value means the folder the shell was in when yuekbox
+ * started, so it is made absolute here, once, at parse time. Only
+ * config.yaml values are anchored to the home instead.
+ */
+const anchorToShell = (value: string): string => resolve(value)
+
 /** Reads the yuekbox flags out of Bun.argv. Bun's argv shape (bun, script, ...) is ignored. */
 export const parseCliArgs = (argv: readonly string[]): CliArgs => {
   const { flags, provision } = readFlags(argv)
@@ -62,12 +70,14 @@ export const parseCliArgs = (argv: readonly string[]): CliArgs => {
   const models: ModelPathOverrides = {}
   for (const [flag, key] of Object.entries(modelFlags)) {
     const value = flags[flag]
-    if (value !== undefined) models[key] = value
+    if (value !== undefined) models[key] = anchorToShell(value)
   }
 
+  const home = flags["--home"]
+  const configPath = flags["--config"]
   return {
-    home: flags["--home"] ?? null,
-    configPath: flags["--config"] ?? null,
+    home: home === undefined ? null : anchorToShell(home),
+    configPath: configPath === undefined ? null : anchorToShell(configPath),
     models,
     provision,
   }
