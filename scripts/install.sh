@@ -10,7 +10,7 @@
 #   YUEKBOX_INSTALL_DIR  where the `yuekbox` executable lands (default: ~/.local/bin)
 #   YUEKBOX_VERSION      release tag to install, `0.3.0` or `v0.3.0`
 #                        (default: the latest release)
-#   YUEKBOX_BASE_URL     download base for the binary and checksum; for tests
+#   YUEKBOX_BASE_URL     download base for the binary and checksum, for tests
 #                        and mirrors only (default: the GitHub release)
 #
 # The executable is a launcher and a web app: it bundles the UI, the API, the
@@ -88,7 +88,7 @@ main() {
   install_dir="${YUEKBOX_INSTALL_DIR:-}"
   if [ -z "$install_dir" ]; then
     if [ -z "${HOME:-}" ]; then
-      fail "HOME is not set; set YUEKBOX_INSTALL_DIR to choose where yuekbox lands."
+      fail "HOME is not set. Set YUEKBOX_INSTALL_DIR to choose where yuekbox lands."
     fi
     install_dir="$HOME/.local/bin"
   fi
@@ -116,7 +116,7 @@ main() {
     elif command -v wget >/dev/null 2>&1; then
       wget -qO "$destination" "$url"
     else
-      fail "neither curl nor wget is installed; install one and rerun."
+      fail "neither curl nor wget is installed. Install one and rerun."
     fi
   }
 
@@ -126,7 +126,7 @@ main() {
     elif command -v shasum >/dev/null 2>&1; then
       shasum -a 256 "$1" | cut -d ' ' -f 1
     else
-      fail "neither sha256sum nor shasum is installed; cannot verify the download."
+      fail "neither sha256sum nor shasum is installed, so the download cannot be verified."
     fi
   }
 

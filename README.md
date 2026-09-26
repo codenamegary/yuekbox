@@ -419,7 +419,7 @@ yuekbox owns `~/.yuekbox` (override with `--home`):
 ```
 
 The scripts are ours (source: `packages/server/tools/`). The script installer
-(`packages/server/src/provisioning/`) copies them into `scripts/` flat and idempotently;
+(`packages/server/src/provisioning/`) copies them into `scripts/` flat and idempotently,
 provisioning builds one shared environment around the runtime pinned in
 `packages/server/src/runtime/runtime.pins.ts` and installs the interpreter under
 `tools/`. The packaged binary embeds the same five files and extracts them into
@@ -451,6 +451,7 @@ Server and runtime overrides (advanced. Everything else under the home is intern
 | Name | Default | Purpose |
 | --- | --- | --- |
 | `HOST` | `127.0.0.1` | Fastify bind address (dev) |
+| `YUEKBOX_PYTHON` | `~/.yuekbox/venvs/python/bin/python` | One shared interpreter for every Python pass |
 | `PORT` | `8787` | Fastify port (dev) |
 | `WEB_HOST` | `127.0.0.1` | SPA listener bind address (dev and binary) |
 | `WEB_PORT` | `3000` | SPA listener port (dev and binary) |
@@ -461,7 +462,7 @@ Server and runtime overrides (advanced. Everything else under the home is intern
 | `YUE2_GPU_BUDGET` | `16` | GPU memory budget in GiB, passed to `generate.py` |
 | `SHEETSAGE2_SCRIPT` | `~/.yuekbox/scripts/transcribe.py` | SheetSage2 entrypoint |
 | `SHEETSAGE2_DEVICE` | `cuda` | Torch device for SheetSage2 |
-| `SHEETSAGE2_OFFLINE` | on | Set `0` to let Hugging Face resolve and download through its cache |
+| `SHEETSAGE2_OFFLINE` | `1` | Set `0` to let Hugging Face resolve and download through its cache |
 | `LYRIC_ALIGN_SCRIPT` | `~/.yuekbox/scripts/align.py` | lyric-align entrypoint |
 | `LYRIC_ALIGN_DEVICE` | `cuda:0` | Torch device for the aligner |
 | `REFERENCE_MAX_BYTES` | `26214400` (25 MiB) | Upload cap for reference audio |

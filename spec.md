@@ -708,6 +708,9 @@ Internal escape hatches, not part of the user surface and not in the UI:
 ```text
 HOST                    default 127.0.0.1
 PORT                    default 8787
+WEB_HOST                default 127.0.0.1; the public listener bind address
+WEB_PORT                default 3000; the public listener port
+API_ORIGIN              default http://127.0.0.1:8787; where the dev web server proxies /v1
 SQLITE_PATH             default <home>/data/yuekbox.sqlite
 MEDIA_DIR               default <home>/data/media
 YUEKBOX_PYTHON          default <home>/venvs/python/bin/python; one for every Python pass
