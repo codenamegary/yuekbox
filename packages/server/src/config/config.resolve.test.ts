@@ -88,3 +88,24 @@ test("resolution follows a home that is not the default", () => {
     join(otherHome, "models", "SheetSage2"),
   )
 })
+
+test("a relative override is anchored to the home, not the server's working directory", () => {
+  const resolved = resolveModelPaths({
+    home,
+    file: { yue2: "models/custom/YuE2-3B" },
+    flags: { whisper: "whisper-here" },
+  })
+
+  expect(resolved.yue2).toBe(join(home, "models/custom/YuE2-3B"))
+  expect(resolved.whisper).toBe(join(home, "whisper-here"))
+})
+
+test("an absolute override is kept exactly as given", () => {
+  const resolved = resolveModelPaths({
+    home,
+    file: { yue2: "/mnt/audio/YuE2-3B" },
+    flags: {},
+  })
+
+  expect(resolved.yue2).toBe("/mnt/audio/YuE2-3B")
+})
