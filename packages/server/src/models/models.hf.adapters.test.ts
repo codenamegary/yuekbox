@@ -42,6 +42,34 @@ test("reads a repository tree from the pinned revision", async () => {
   })
 })
 
+test("forwards the abort signal to the tree and file fetches", async () => {
+  await withTempDir(async (dir) => {
+    const controller = new AbortController()
+    const seen: RequestInit[] = []
+
+    await makeReadModelTree(async (url, init) => {
+      seen.push(init ?? {})
+      return Response.json([])
+    })("m-a-p/YuE2-3B", "rev1", controller.signal)
+
+    const result = await makeDownloadModelFile(async (_url, init) => {
+      seen.push(init ?? {})
+      return new Response("nope", { status: 503 })
+    })({
+      url: "https://huggingface.co/m-a-p/YuE2-3B/resolve/rev1/model.safetensors",
+      destPath: join(dir, "model.safetensors"),
+      expectedBytes: 5,
+      sha256: null,
+      onBytes: () => {},
+      signal: controller.signal,
+    })
+
+    expect(result.ok).toBe(false)
+    expect(seen).toHaveLength(2)
+    expect(seen.every((init) => init.signal === controller.signal)).toBe(true)
+  })
+})
+
 test("an HTTP failure or a network throw is a tree fetch failure", async () => {
   const failing = makeReadModelTree(async () => new Response("nope", { status: 500 }))
   const throwing = makeReadModelTree(async () => {

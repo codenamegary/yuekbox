@@ -184,6 +184,32 @@ test("a second start while a download runs reports the same job and adds no fetc
   await downloads.drain()
 })
 
+test("stop aborts an in-flight download so shutdown never waits on it", async () => {
+  const { deps } = makeDeps({
+    downloadFile: (request) =>
+      new Promise<Result<number, ModelDownloadFailure>>((_, reject) => {
+        const abort = (): void => reject(new Error("This operation was aborted"))
+        // Behave like fetch: reject immediately when already aborted, else on
+        // the signal firing.
+        if (request.signal?.aborted === true) {
+          abort()
+          return
+        }
+        request.signal?.addEventListener("abort", abort)
+      }),
+  })
+  const downloads = makeModelDownloads(deps)
+
+  const started = await downloads.start({ key: "yue2", confirm: true })
+  expect(started.ok).toBe(true)
+
+  downloads.stop()
+  await downloads.drain()
+
+  const snapshot = await downloads.read("yue2")
+  expect(snapshot.state).toBe("failed")
+})
+
 test("a start queued behind a refused start is refused too, never told preparing", async () => {
   const gate = makeDeferred<boolean>()
   const pathExists = async (): Promise<boolean> => gate.promise

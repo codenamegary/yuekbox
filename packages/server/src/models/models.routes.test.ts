@@ -27,6 +27,7 @@ const makeDownloads = (overrides: Partial<ModelDownloads> = {}): ModelDownloads 
   read: async (key: ModelDownloadKey) => ({ ...downloading, key }),
   readAll: async () => Object.freeze([downloading, otherSnapshot]),
   drain: async () => {},
+  stop: () => {},
   ...overrides,
 })
 

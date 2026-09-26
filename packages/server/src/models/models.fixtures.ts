@@ -28,6 +28,7 @@ export const unusedModelsFixture = (): ModelsSlice => {
       read: async (key) => idle.find((item) => item.key === key) ?? snapshot(key, ""),
       readAll: async () => Object.freeze(idle),
       drain: async () => {},
+      stop: () => {},
     },
     findMissingGenerationModels: async () => [],
   }

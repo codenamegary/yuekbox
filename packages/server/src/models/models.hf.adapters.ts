@@ -12,10 +12,10 @@ export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
 
 export const makeReadModelTree =
   (fetchImpl: FetchLike): ReadModelTree =>
-  async (repo, revision) => {
+  async (repo, revision, signal) => {
     const url = modelTreeUrl(repo, revision)
     try {
-      const response = await fetchImpl(url)
+      const response = await fetchImpl(url, signal === undefined ? undefined : { signal })
       if (!response.ok) {
         return err({
           kind: "tree_fetch_failed",
@@ -131,10 +131,14 @@ export const makeDownloadModelFile =
       const resuming = existing > 0 && existing < request.expectedBytes
       if (existing > 0 && !resuming) await unlink(partPath)
 
-      const response = await fetchImpl(
-        request.url,
-        resuming ? { headers: { range: `bytes=${existing}-` } } : undefined,
-      )
+      const init: RequestInit | undefined =
+        request.signal === undefined && !resuming
+          ? undefined
+          : {
+              ...(resuming ? { headers: { range: `bytes=${existing}-` } } : {}),
+              ...(request.signal === undefined ? {} : { signal: request.signal }),
+            }
+      const response = await fetchImpl(request.url, init)
       if (!response.ok) {
         return err({
           kind: "download_failed",

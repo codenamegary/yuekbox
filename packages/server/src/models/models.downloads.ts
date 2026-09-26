@@ -52,6 +52,8 @@ export type ModelDownloads = Readonly<{
   read: (key: ModelDownloadKey) => Promise<ModelDownloadSnapshot>
   readAll: () => Promise<readonly ModelDownloadSnapshot[]>
   drain: () => Promise<void>
+  /** Aborts every in-flight job, so shutdown never waits on a stalled fetch. */
+  stop: () => void
 }>
 
 /** In-memory per-process job state; the staged files on disk are the durable part. */
@@ -115,6 +117,7 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
   const jobs = new Map<ModelDownloadKey, Job>()
   const tasks = new Map<ModelDownloadKey, Promise<void>>()
   const starts = new Map<ModelDownloadKey, Promise<unknown>>()
+  const aborts = new Map<ModelDownloadKey, AbortController>()
 
   const snapshotFor = async (
     key: ModelDownloadKey,
@@ -133,6 +136,7 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
     key: ModelDownloadKey,
     pin: ModelDownloadPin,
     target: string,
+    signal: AbortSignal,
   ): Promise<void> => {
     const job = jobs.get(key)
     if (job === undefined) return
@@ -147,7 +151,7 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
       deps.logError?.(`model download failed (${key}): ${failure.detail}`, failure)
     }
 
-    const treeResult = await deps.readModelTree(pin.repo, pin.revision)
+    const treeResult = await deps.readModelTree(pin.repo, pin.revision, signal)
     if (!treeResult.ok) {
       fail(treeResult.error)
       return
@@ -187,6 +191,7 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
         onBytes: (written) => {
           job.bytesDone = base + written
         },
+        signal,
       })
       if (!downloaded.ok) {
         fail(downloaded.error)
@@ -237,6 +242,8 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
     // can hold the key while these checks run.
     const job: Job = { state: "preparing", bytesDone: 0, currentFile: null }
     jobs.set(key, job)
+    const abort = new AbortController()
+    aborts.set(key, abort)
 
     if (await deps.pathExists(target)) {
       jobs.delete(key)
@@ -256,7 +263,7 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
       })
     }
 
-    const task = runJob(key, pin, target)
+    const task = runJob(key, pin, target, abort.signal)
       .catch((error: unknown) => {
         const current = jobs.get(key)
         if (current !== undefined) {
@@ -268,6 +275,7 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
       })
       .finally(() => {
         tasks.delete(key)
+        aborts.delete(key)
       })
     tasks.set(key, task)
 
@@ -304,6 +312,9 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
     },
     drain: async () => {
       await Promise.allSettled(tasks.values())
+    },
+    stop: () => {
+      for (const abort of aborts.values()) abort.abort()
     },
   }
 }
