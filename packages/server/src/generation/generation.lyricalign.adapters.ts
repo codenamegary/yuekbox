@@ -2,6 +2,7 @@ import { existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { Calibration, CalibrationSchema } from "contracts/http/songs"
+import { ReadCurrentModelPaths } from "../config/config.current"
 import { ProcessRunner, runProcess } from "../shared/process"
 import { err, ok, Result } from "../shared/result"
 import { LyricAlignError, RunLyricAlignOutput } from "./generation.models"
@@ -12,6 +13,16 @@ export type LyricAlignAdapterEnv = Readonly<{
   scriptPath: string
   device: string
   cwd: string
+  /** Resolved at call time, so a path saved before the next run is used. */
+  readModelPaths: ReadCurrentModelPaths
+}>
+
+/** One run's flags, after the model paths are resolved. */
+export type LyricAlignArgsEnv = Readonly<{
+  pythonBin: string
+  scriptPath: string
+  device: string
+  whisperModel: string
 }>
 
 export const checkLyricAlign = (
@@ -28,7 +39,7 @@ const lyricAlignDir = (outputDir: string): string => join(outputDir, "lyric-alig
 const calibrationPath = (outputDir: string): string =>
   join(lyricAlignDir(outputDir), "calibration.json")
 
-export const lyricAlignArgs = (env: LyricAlignAdapterEnv, input: LyricAlignArgsInput): string[] => [
+export const lyricAlignArgs = (env: LyricAlignArgsEnv, input: LyricAlignArgsInput): string[] => [
   env.pythonBin,
   env.scriptPath,
   "--audio",
@@ -37,6 +48,8 @@ export const lyricAlignArgs = (env: LyricAlignAdapterEnv, input: LyricAlignArgsI
   lyricAlignDir(input.outputDir),
   "--calibration-out",
   calibrationPath(input.outputDir),
+  "--whisper-model",
+  env.whisperModel,
   "--device",
   env.device,
 ]
@@ -69,7 +82,21 @@ export const makeRunLyricAlign =
       })
     }
 
-    const outcome = await run(lyricAlignArgs(env, input), env.cwd, () => {})
+    // Resolve the whisper path now: a config save between songs is honored here.
+    const modelPaths = await env.readModelPaths()
+    const outcome = await run(
+      lyricAlignArgs(
+        {
+          pythonBin: env.pythonBin,
+          scriptPath: env.scriptPath,
+          device: env.device,
+          whisperModel: modelPaths.whisper,
+        },
+        input,
+      ),
+      env.cwd,
+      () => {},
+    )
     if (outcome.exitCode !== 0) {
       const detail =
         outcome.stderrTail.trim().slice(-detailLimit) ||

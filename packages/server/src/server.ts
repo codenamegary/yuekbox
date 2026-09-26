@@ -148,6 +148,7 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
     scriptPath: boot.lyricAlignScript,
     device: boot.lyricAlignDevice,
     cwd: boot.home,
+    readModelPaths,
   }
 
   // Readiness, downloads, and the generation adapters resolve the five paths

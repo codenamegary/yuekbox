@@ -13,6 +13,8 @@
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": false,
+    // version.ts imports the root package.json release-please manages.
+    "resolveJsonModule": true,
     "noEmit": true,
 
     // Best practices
