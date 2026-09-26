@@ -58,9 +58,7 @@ export const MissingModelDialog: React.FC<MissingModelDialogProps> = ({ models, 
         >
           {allReady ? "ready to generate" : "generation blocked"}
         </p>
-        <h2 className="mt-2 text-lg font-semibold text-slate-50">
-          {title}
-        </h2>
+        <h2 className="mt-2 text-lg font-semibold text-slate-50">{title}</h2>
         {allReady ? null : (
           <p className="mt-2 text-sm leading-relaxed text-white/60">{blockedDetail(models)}</p>
         )}

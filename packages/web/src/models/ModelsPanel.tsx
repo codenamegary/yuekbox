@@ -19,7 +19,6 @@ export const ModelsPanel: React.FC<ModelsPanelProps> = ({ onClose }) => {
   useEscapeKey(onClose)
   const readiness = useReadinessQuery()
 
-
   return (
     <div
       role="dialog"
