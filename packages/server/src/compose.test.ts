@@ -16,7 +16,6 @@ import { openDatabase } from "./db/client"
 import { modelDownloadKeys } from "./models/models.models"
 import { modelDownloadPins, ModelDownloadPins } from "./models/models.pins"
 import { unusedReadinessDepsFixture } from "./readiness/readiness.fixtures"
-import { expectedModelSizes } from "./readiness/readiness.models"
 import { ok } from "./shared/result"
 import {
   analysisFileName,
@@ -124,7 +123,7 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
     expect(readiness.models.whisper).toEqual({
       state: "missing",
       path: join(configHome, "models", "whisper-large-v3-turbo"),
-      size: expectedModelSizes.whisper,
+      size: modelDownloadPins.whisper.totalBytes,
     })
     expect(readiness.system.ffmpeg.state).toBe("missing")
     expect(readiness.system.nvidia.state).toBe("missing")
@@ -408,7 +407,7 @@ test("an empty home downloads the generator and then creates a Song", async () =
 
     const idle = await app.inject({ method: "GET", url: "/v1/models/downloads" })
     expect(idle.statusCode).toBe(200)
-    expect(ModelDownloadsSchema.parse(idle.json()).items.map((item) => item.state)).toEqual([
+    expect(ModelDownloadsSchema.parse(idle.json()).map((item) => item.state)).toEqual([
       "idle",
       "idle",
       "idle",

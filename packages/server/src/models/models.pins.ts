@@ -70,3 +70,16 @@ export const modelDownloadPins: ModelDownloadPins = Object.freeze({
 })
 
 export type ModelDownloadPins = Readonly<Record<ModelDownloadKey, ModelDownloadPin>>
+
+/**
+ * The byte total a full download writes per model, read straight from the
+ * pins. Readiness reports this for a missing model, so the dialog's estimate
+ * and the download can never drift apart.
+ */
+export const expectedModelSizes: Readonly<Record<ModelDownloadKey, number>> = Object.freeze({
+  yue2: modelDownloadPins.yue2.totalBytes,
+  yue2Vae: modelDownloadPins.yue2Vae.totalBytes,
+  sheetsage2: modelDownloadPins.sheetsage2.totalBytes,
+  sheetsage2Base: modelDownloadPins.sheetsage2Base.totalBytes,
+  whisper: modelDownloadPins.whisper.totalBytes,
+})

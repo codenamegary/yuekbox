@@ -1,13 +1,11 @@
-/** The five downloadable models, in report order; the same keys readiness uses. */
-export const modelDownloadKeys = Object.freeze([
-  "yue2",
-  "yue2Vae",
-  "sheetsage2",
-  "sheetsage2Base",
-  "whisper",
-] as const)
+import { MissingModel, ModelDownloadSnapshot, ModelKey, modelKeyOrder } from "contracts/http/models"
 
-export type ModelDownloadKey = (typeof modelDownloadKeys)[number]
+/** The five downloadable models, in report order; the same keys readiness uses. */
+export const modelDownloadKeys = modelKeyOrder
+
+export type ModelDownloadKey = ModelKey
+
+export type { MissingModel, ModelDownloadSnapshot }
 
 /**
  * A download larger than this asks for an explicit confirmation in the start
@@ -39,17 +37,6 @@ export type ModelDownloadFailure = Readonly<{
 
 export type ModelDownloadJobState = "preparing" | "downloading" | "failed"
 
-/** What the routes serve: one model's state plus enough to draw progress. */
-export type ModelDownloadSnapshot = Readonly<{
-  key: ModelDownloadKey
-  state: "idle" | "preparing" | "downloading" | "failed" | "present"
-  path: string
-  totalBytes: number
-  bytesDone: number
-  currentFile: string | null
-  errorDetail?: string
-}>
-
 /**
  * A download the server would not start. The route maps these to problems:
  * an external path means "choose a folder", a missing confirmation carries
@@ -64,18 +51,10 @@ export type StartModelDownloadError =
       thresholdBytes: number
     }>
 
-/** A model a generation needs that is not on disk. */
-export type MissingModel = Readonly<{
-  key: ModelDownloadKey
-  name: string
-  path: string
-  sizeBytes: number
-  downloadable: boolean
-}>
-
 /**
- * Answers which of the models a generation needs are missing. The route calls
- * this before it creates a Song, so a blocked generation never leaves a row.
+ * Answers which of the models a generation needs are not on disk. The route
+ * calls this before it creates a Song, so a blocked generation never leaves
+ * a row.
  */
 export type FindMissingGenerationModels = (
   input: Readonly<{ hasReference: boolean }>,

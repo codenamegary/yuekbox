@@ -5,7 +5,8 @@ export const modelsDownloadsPath = `${modelsPath}/downloads`
 export const modelDownloadPath = (key: string) => `${modelsPath}/${key}/download`
 
 /** The five user-configurable models, the same keys readiness reports. */
-export const ModelKeySchema = z.enum(["yue2", "yue2Vae", "sheetsage2", "sheetsage2Base", "whisper"])
+export const modelKeyOrder = ["yue2", "yue2Vae", "sheetsage2", "sheetsage2Base", "whisper"] as const
+export const ModelKeySchema = z.enum(modelKeyOrder)
 export type ModelKey = z.infer<typeof ModelKeySchema>
 
 /**
@@ -76,10 +77,9 @@ export const ModelDownloadStartSchema = z.strictObject({
 })
 export type ModelDownloadStart = z.infer<typeof ModelDownloadStartSchema>
 
-export const ModelDownloadsSchema = z.strictObject({
-  items: z.array(ModelDownloadSnapshotSchema),
-})
-export type ModelDownloads = z.infer<typeof ModelDownloadsSchema>
+/** The five download snapshots, in report order. */
+export const ModelDownloadsSchema = z.array(ModelDownloadSnapshotSchema)
+export type ModelDownloads = ModelDownloadSnapshot[]
 
 /**
  * A model a generation needs that is not on disk. `path` is where the app

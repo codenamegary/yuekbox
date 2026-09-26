@@ -43,7 +43,7 @@ test("GET /v1/models/downloads answers the contract list", async () => {
 
   expect(response.statusCode).toBe(200)
   const parsed = ModelDownloadsSchema.parse(response.json())
-  expect(parsed.items.map((item) => item.key)).toEqual(["yue2", "yue2Vae"])
+  expect(parsed.map((item) => item.key)).toEqual(["yue2", "yue2Vae"])
   await app.close()
 })
 

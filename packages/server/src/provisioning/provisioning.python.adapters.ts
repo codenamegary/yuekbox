@@ -4,6 +4,7 @@ import { dirname, join } from "node:path"
 import { envWithout, ProcessOutcome, ProcessRunner } from "../shared/process"
 import { err, ok } from "../shared/result"
 import { homeLayout } from "../shared/home"
+import { z } from "zod"
 import { EnsurePython, EnsureVenv } from "./provisioning.ports"
 
 export type PythonAdapterEnv = Readonly<{
@@ -106,13 +107,14 @@ export const makeEnsurePython = (env: PythonAdapterEnv): EnsurePython => {
   }
 }
 
-type VenvStamp = Readonly<{ fingerprint?: unknown }>
+type VenvStamp = Readonly<{ fingerprint: string }>
+
+const VenvStampSchema = z.looseObject({ fingerprint: z.string() })
 
 const readStamp = async (path: string): Promise<VenvStamp | null> => {
   try {
-    const parsed: unknown = JSON.parse(await readFile(path, "utf8"))
-    if (typeof parsed !== "object" || parsed === null) return null
-    return parsed
+    const parsed = VenvStampSchema.safeParse(JSON.parse(await readFile(path, "utf8")))
+    return parsed.success ? parsed.data : null
   } catch {
     return null
   }

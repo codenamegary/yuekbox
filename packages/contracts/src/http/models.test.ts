@@ -52,10 +52,10 @@ test("a download start defaults to no confirmation and rejects unknown fields", 
   expect(ModelDownloadStartSchema.safeParse({ confirm: "yes" }).success).toBe(false)
 })
 
-test("lists download snapshots", () => {
-  const list = { items: [snapshot] }
+test("lists download snapshots as a bare array", () => {
+  const list = [snapshot]
   expect(ModelDownloadsSchema.parse(list)).toEqual(list)
-  expect(ModelDownloadsSchema.safeParse({ items: [snapshot], page: {} }).success).toBe(false)
+  expect(ModelDownloadsSchema.safeParse({ items: [snapshot] }).success).toBe(false)
 })
 
 test("parses a missing model with its size and expected path", () => {

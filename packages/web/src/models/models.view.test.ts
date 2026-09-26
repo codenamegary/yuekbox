@@ -45,9 +45,7 @@ const snapshot = (overrides: Partial<ModelDownloadSnapshot>): ModelDownloadSnaps
   ...overrides,
 })
 
-const downloads = (...items: readonly ModelDownloadSnapshot[]): ModelDownloads => ({
-  items: [...items],
-})
+const downloads = (...items: readonly ModelDownloadSnapshot[]): ModelDownloads => [...items]
 
 test("the five rows keep the report order and name the models the issue names", () => {
   const rows = modelRowViews(readiness, undefined)

@@ -1,5 +1,5 @@
 import { ReadCurrentModelPaths } from "../config/config.current"
-import { FindMissingGenerationModels } from "./models.models"
+import { FindMissingGenerationModels, ModelDownloadKey } from "./models.models"
 import { makeModelDownloads, ModelDownloads } from "./models.downloads"
 import { makeFindMissingModels } from "./models.find.usecase"
 import {
@@ -11,7 +11,7 @@ import {
 } from "./models.fs.adapters"
 import { FetchLike, makeDownloadModelFile, makeReadModelTree } from "./models.hf.adapters"
 import { modelsRequiredForGeneration } from "./models.needs"
-import { modelDownloadPins, ModelDownloadPins } from "./models.pins"
+import { modelDownloadPins, expectedModelSizes, ModelDownloadPins } from "./models.pins"
 
 export type AssembleModelsDeps = Readonly<{
   home: string
@@ -27,6 +27,8 @@ export type AssembleModelsDeps = Readonly<{
 export type ModelsSlice = Readonly<{
   downloads: ModelDownloads
   findMissingGenerationModels: FindMissingGenerationModels
+  /** The byte total a full download writes, straight from the pins. */
+  expectedModelSizes: Readonly<Record<ModelDownloadKey, number>>
 }>
 
 /**
@@ -65,5 +67,6 @@ export const assembleModelsSlice = (deps: AssembleModelsDeps): ModelsSlice => {
     downloads,
     findMissingGenerationModels: async ({ hasReference }) =>
       findMissingModels({ keys: modelsRequiredForGeneration({ hasReference }) }),
+    expectedModelSizes,
   }
 }

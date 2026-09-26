@@ -1,5 +1,10 @@
 import { PROBLEM_TYPES, ProblemError } from "contracts/http/error"
 import { MissingModel, ModelKey } from "contracts/http/models"
+import {
+  ConfirmationRequiredProblem,
+  ModelPathExternalProblem,
+  ModelRequiredProblem,
+} from "contracts/http/error"
 import { FastifyReply } from "fastify"
 
 export type ProblemBody = Readonly<{
@@ -37,7 +42,7 @@ export const conflictProblem = (detail: string): ProblemBody => ({
 })
 
 /** A generation gate: the named models are missing; the dialog resolves them. */
-export const modelRequiredProblem = (models: readonly MissingModel[]) => ({
+export const modelRequiredProblem = (models: readonly MissingModel[]): ModelRequiredProblem => ({
   type: PROBLEM_TYPES.modelRequired,
   title: "Model Required",
   status: 409,
@@ -51,7 +56,7 @@ export const confirmationRequiredProblem = (
     expectedBytes: number
     thresholdBytes: number
   }>,
-) => ({
+): ConfirmationRequiredProblem => ({
   type: PROBLEM_TYPES.confirmationRequired,
   title: "Confirmation Required",
   status: 409,
@@ -61,7 +66,9 @@ export const confirmationRequiredProblem = (
 })
 
 /** The resolved path is outside `<home>/models`, so the user picks a folder. */
-export const modelPathExternalProblem = (input: Readonly<{ key: ModelKey; path: string }>) => ({
+export const modelPathExternalProblem = (
+  input: Readonly<{ key: ModelKey; path: string }>,
+): ModelPathExternalProblem => ({
   type: PROBLEM_TYPES.modelPathExternal,
   title: "Download Unavailable",
   status: 409,
@@ -70,8 +77,16 @@ export const modelPathExternalProblem = (input: Readonly<{ key: ModelKey; path: 
   path: input.path,
 })
 
-export const sendProblem = (reply: FastifyReply, problem: ProblemBody) =>
-  reply.status(problem.status).type("application/problem+json").send(problem)
+export type ModelProblem =
+  | ModelRequiredProblem
+  | ConfirmationRequiredProblem
+  | ModelPathExternalProblem
+
+export const sendProblem = (reply: FastifyReply, problem: ProblemBody | ModelProblem) =>
+  reply
+    .status(problem.status ?? 500)
+    .type("application/problem+json")
+    .send(problem)
 
 export const issuePointer = (path: readonly PropertyKey[]): string =>
   path.length === 0 ? "/" : `/${path.map((segment) => String(segment)).join("/")}`

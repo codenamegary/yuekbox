@@ -12,18 +12,18 @@ export const downloadPollMs = 1000
 const snapshotFor = (
   downloads: ModelDownloads | undefined,
   key: ModelKey,
-): ModelDownloadSnapshot | undefined => downloads?.items.find((item) => item.key === key)
+): ModelDownloadSnapshot | undefined => downloads?.find((item) => item.key === key)
 
 const isActiveDownload = (snapshot: ModelDownloadSnapshot): boolean =>
   snapshot.state === "preparing" || snapshot.state === "downloading"
 
 /** True while at least one model is still arriving; the poll stops after. */
 export const hasActiveDownload = (downloads: ModelDownloads | undefined): boolean =>
-  downloads !== undefined && downloads.items.some(isActiveDownload)
+  downloads !== undefined && downloads.some(isActiveDownload)
 
 /** The keys currently arriving, in report order. Drives the readiness refresh. */
 export const activeDownloadKeys = (downloads: ModelDownloads | undefined): readonly ModelKey[] =>
-  downloads === undefined ? [] : downloads.items.filter(isActiveDownload).map((item) => item.key)
+  downloads === undefined ? [] : downloads.filter(isActiveDownload).map((item) => item.key)
 
 /**
  * A floored, clamped percent once files are moving; null while the server is
