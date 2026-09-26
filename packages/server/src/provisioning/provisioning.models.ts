@@ -10,26 +10,19 @@ export type InstallScriptsError = Readonly<{
 }>
 
 /** The pieces provisioning installs, in the order it installs them. */
-export type ProvisionStepId =
-  | "uv"
-  | "python"
-  | "gpu"
-  | "yue2"
-  | "sheetsage2"
-  | "lyricalign"
-  | "scripts"
+export type ProvisionStepId = "uv" | "python" | "gpu" | "environment" | "scripts"
 
 /**
  * Plain-English names for each step. They surface in progress output and in
- * failure messages, so they never name implementation details.
+ * failure messages, so they never name implementation details. The one
+ * `environment` step carries the song generator, reference transcription,
+ * and lyric timing, so its label covers all three.
  */
 export const provisionStepLabels: Readonly<Record<ProvisionStepId, string>> = Object.freeze({
   uv: "Setting up yuekbox tools",
   python: "Installing the song engine",
   gpu: "Checking the graphics card",
-  yue2: "Installing the song generator",
-  sheetsage2: "Installing reference transcription",
-  lyricalign: "Installing lyric timing",
+  environment: "Installing the song tools",
   scripts: "Installing helper programs",
 })
 

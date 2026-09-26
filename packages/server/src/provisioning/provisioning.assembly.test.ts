@@ -44,17 +44,12 @@ test("a stubbed bare-home run reaches ready, and the second run skips the built 
       "uv:completed",
       "python:completed",
       "gpu:completed",
-      "yue2:completed",
-      "sheetsage2:completed",
-      "lyricalign:completed",
+      "environment:completed",
       "scripts:completed",
     ])
     expect(firstCommands.filter((command) => command[0] === "nvidia-smi")).toHaveLength(1)
-    for (const name of ["yue2", "sheetsage2", "lyricalign"]) {
-      expect(existsSync(join(home, "venvs", name, ".yuekbox.json"))).toBe(true)
-    }
+    expect(existsSync(join(home, "venvs", "python", ".yuekbox.json"))).toBe(true)
     expect(existsSync(join(home, "tools", "python", ".yuekbox-3.12.3.json"))).toBe(true)
-    expect(existsSync(join(home, "tools", "python", ".yuekbox-3.11.14.json"))).toBe(true)
     expect(existsSync(join(home, "scripts", "generate.py"))).toBe(true)
 
     const secondCommands: string[][] = []
@@ -80,9 +75,7 @@ test("a stubbed bare-home run reaches ready, and the second run skips the built 
       "uv:completed",
       "python:skipped",
       "gpu:completed",
-      "yue2:skipped",
-      "sheetsage2:skipped",
-      "lyricalign:skipped",
+      "environment:skipped",
       "scripts:completed",
     ])
     expect(secondCommands).toEqual([
@@ -111,6 +104,6 @@ test("a machine with no NVIDIA driver stops before building any environment", as
     if (result.ok) return
     expect(result.error.step).toBe("gpu")
     expect(result.error.kind).toBe("gpu_missing")
-    expect(existsSync(join(home, "venvs", "yue2"))).toBe(false)
+    expect(existsSync(join(home, "venvs", "python"))).toBe(false)
   })
 })

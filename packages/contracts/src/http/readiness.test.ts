@@ -82,7 +82,7 @@ test("rejects runtime and venv fields anywhere in the payload", () => {
     models: missingModels,
     system: { ffmpeg: { state: "ready" }, nvidia: { state: "ready" } },
     python: "ready",
-    venv: "/home/u/.yuekbox/venvs/yue2",
+    venv: "/home/u/.yuekbox/venvs/python",
     scripts: "installed",
   })
   expect(result.success).toBe(false)

@@ -29,9 +29,7 @@ const progressEvent = (
     uv: "Setting up yuekbox tools",
     python: "Installing the song engine",
     gpu: "Checking the graphics card",
-    yue2: "Installing the song generator",
-    sheetsage2: "Installing reference transcription",
-    lyricalign: "Installing lyric timing",
+    environment: "Installing the song tools",
     scripts: "Installing helper programs",
   }[step],
   status,
@@ -66,13 +64,13 @@ test("a failure prints the plain-English message and the retry, then exits nonze
   const provisionAll: ProvisionAll = async (input) => {
     input.onProgress?.(progressEvent("uv", "started"))
     input.onProgress?.(progressEvent("uv", "completed"))
-    input.onProgress?.(progressEvent("yue2", "started"))
-    input.onProgress?.(progressEvent("yue2", "failed"))
+    input.onProgress?.(progressEvent("environment", "started"))
+    input.onProgress?.(progressEvent("environment", "failed"))
     return {
       ok: false,
       error: {
-        step: "yue2",
-        label: "Installing the song generator",
+        step: "environment",
+        label: "Installing the song tools",
         kind: "venv_failed",
         detail: "uv pip install exited with code 2: could not find torch==2.10.0",
       },
@@ -83,7 +81,7 @@ test("a failure prints the plain-English message and the retry, then exits nonze
 
   expect(code).toBe(1)
   const output = lines.join("\n")
-  expect(output).toContain("song generator")
+  expect(output).toContain("song tools")
   expect(output.toLowerCase()).toContain("try again")
   expect(output).not.toContain("torch")
   expect(output).not.toContain("exited with code")

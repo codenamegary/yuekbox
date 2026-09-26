@@ -4,15 +4,13 @@ import {
   defaultHome,
   generateScriptPath,
   homeLayout,
-  lyricAlignPythonPath,
   lyricAlignScriptPath,
   mediaDir,
   modelDirectoryNames,
-  sheetsage2PythonPath,
+  pythonPath,
   sheetsage2ScriptPath,
   sqlitePath,
   venvPath,
-  yue2PythonPath,
 } from "./home"
 
 test("layout keeps tools, models, venvs, scripts, and data under the home", () => {
@@ -36,15 +34,13 @@ test("model directory names are the upstream names", () => {
   })
 })
 
-test("venv and script defaults resolve under the home", () => {
+test("the one venv and the script defaults resolve under the home", () => {
   const home = "/home/u/.yuekbox"
 
-  expect(venvPath(home, "yue2")).toBe(join(home, "venvs/yue2"))
-  expect(yue2PythonPath(home)).toBe(join(home, "venvs/yue2/bin/python"))
+  expect(venvPath(home)).toBe(join(home, "venvs/python"))
+  expect(pythonPath(home)).toBe(join(home, "venvs/python/bin/python"))
   expect(generateScriptPath(home)).toBe(join(home, "scripts/generate.py"))
-  expect(sheetsage2PythonPath(home)).toBe(join(home, "venvs/sheetsage2/bin/python"))
   expect(sheetsage2ScriptPath(home)).toBe(join(home, "scripts/transcribe.py"))
-  expect(lyricAlignPythonPath(home)).toBe(join(home, "venvs/lyricalign/bin/python"))
   expect(lyricAlignScriptPath(home)).toBe(join(home, "scripts/align.py"))
 })
 

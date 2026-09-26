@@ -18,19 +18,16 @@ export const uvPin = Object.freeze({
   sha256: "c2def3db178ade63933fa15ffc96e882c196ce53e06173dcee05b36c5f6f68f5",
 })
 
-/** PyPI, the fallback index for everything the CUDA indexes do not host. */
+/** PyPI, the extra index for everything the CUDA wheel index does not host. */
 export const pypiIndexUrl = "https://pypi.org/simple"
 
 /**
- * PyTorch's CUDA wheel indexes. The CUDA tags come from the working local
- * environments: the yue2 environment runs torch 2.10.0+cu128, the sheetsage2
- * and lyric-align environments run torch 2.8.0+cu126. All are CUDA 12.x
- * builds, so one driver floor covers them (see provisioning.gpu.ts).
+ * PyTorch's CUDA 12.8 wheel index. The tested shared environment runs
+ * torch 2.10.0+cu128, and no other CUDA index is needed now that yue2,
+ * SheetSage2, and the lyric aligner share one torch build. All CUDA 12.x
+ * builds run on one driver floor (see provisioning.gpu.ts).
  */
-export const torchWheelIndexes = Object.freeze({
-  cu126: "https://download.pytorch.org/whl/cu126",
-  cu128: "https://download.pytorch.org/whl/cu128",
-})
+export const torchWheelIndexUrl = "https://download.pytorch.org/whl/cu128"
 
 export type VenvPin = Readonly<{
   name: string
@@ -45,65 +42,40 @@ export type VenvPin = Readonly<{
 }>
 
 /**
- * The three environments, pinned from the working local environments on this
- * machine (uv pip freeze, 2026-09-24). The yue2 runtime pins its own transitive
- * stack in pyproject.toml, so only the runtime source and torch appear here.
+ * The one shared environment every Python pass runs in: the yue2 runtime,
+ * the SheetSage2 transcriber (melody-full and melody-vocal), and the lyric
+ * aligner (Demucs plus Whisper). The set is the tested union on the yue2
+ * stack (numpy 2, transformers 4.57.6) recorded from the working local
+ * environment; `yue2-infer` pins its own transitive stack in pyproject.toml,
+ * so it appears here as the direct git reference.
  */
-export const venvPins = Object.freeze({
-  yue2: Object.freeze({
-    name: "yue2",
-    python: "3.12.3",
-    indexUrl: torchWheelIndexes.cu128,
-    extraIndexUrl: pypiIndexUrl,
-    packages: Object.freeze([
-      `yue2-infer @ git+${yue2RuntimePin.repository}@${yue2RuntimePin.commit}`,
-      "torch==2.10.0",
-    ]),
-  }),
-  sheetsage2: Object.freeze({
-    name: "sheetsage2",
-    python: "3.11.14",
-    indexUrl: torchWheelIndexes.cu126,
-    extraIndexUrl: pypiIndexUrl,
-    packages: Object.freeze([
-      "torch==2.8.0",
-      "torchaudio==2.8.0",
-      "transformers==4.45.2",
-      "huggingface-hub==0.36.0",
-      "tokenizers==0.20.3",
-      "safetensors==0.5.3",
-      "numpy==1.24.3",
-      "scipy==1.13.1",
-      "pretty-midi==0.2.10",
-      "mir-eval==0.8.2",
-      "mido==1.3.3",
-      // pretty_midi imports pkg_resources, so the model's requirements pin this.
-      "setuptools==78.1.1",
-    ]),
-  }),
-  lyricalign: Object.freeze({
-    name: "lyricalign",
-    python: "3.12.3",
-    indexUrl: torchWheelIndexes.cu126,
-    extraIndexUrl: pypiIndexUrl,
-    packages: Object.freeze([
-      "torch==2.8.0",
-      "torchaudio==2.8.0",
-      "transformers==4.57.6",
-      "huggingface-hub==0.36.2",
-      "tokenizers==0.22.2",
-      "safetensors==0.8.0",
-      "numpy==2.5.3",
-      "soundfile==0.14.0",
-      "demucs==4.1.0",
-    ]),
-  }),
+export const venvPin: VenvPin = Object.freeze({
+  name: "python",
+  python: "3.12.3",
+  indexUrl: torchWheelIndexUrl,
+  extraIndexUrl: pypiIndexUrl,
+  packages: Object.freeze([
+    `yue2-infer @ git+${yue2RuntimePin.repository}@${yue2RuntimePin.commit}`,
+    "torch==2.10.0",
+    "torchaudio==2.10.0",
+    "transformers==4.57.6",
+    "tokenizers==0.22.2",
+    "huggingface-hub==0.36.2",
+    "safetensors==0.7.0",
+    "numpy==2.2.6",
+    "scipy==1.18.1",
+    "pretty-midi==0.2.10",
+    "mir-eval==0.8.2",
+    "mido==1.3.3",
+    "soundfile==0.13.1",
+    // pretty_midi imports pkg_resources, so the stack pins this.
+    "setuptools==78.1.1",
+    "demucs==4.1.0",
+  ]),
 })
 
-/** Every pinned Python uv installs, deduped, in first-use order. */
-export const managedPythonVersions: readonly string[] = Object.freeze([
-  ...new Set(Object.values(venvPins).map((pin) => pin.python)),
-])
+/** Every pinned Python uv installs. One shared environment needs one. */
+export const managedPythonVersions: readonly string[] = Object.freeze([venvPin.python])
 
 /**
  * The identity of a built environment: python plus the exact dependency set.

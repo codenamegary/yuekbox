@@ -14,9 +14,7 @@ const everyKind: readonly ProvisionFailure[] = [
   failure("gpu", "gpu_missing"),
   failure("gpu", "gpu_driver_too_old"),
   failure("gpu", "gpu_unreadable"),
-  failure("yue2", "venv_failed"),
-  failure("sheetsage2", "venv_failed"),
-  failure("lyricalign", "venv_failed"),
+  failure("environment", "venv_failed"),
   failure("scripts", "scripts_failed"),
 ]
 
@@ -45,7 +43,7 @@ test("the step labels carry no implementation words either", () => {
 
 test("the internal detail never reaches the user message", () => {
   const message = provisionFailureMessage(
-    failure("yue2", "venv_failed", "uv exited 2: could not resolve torch"),
+    failure("environment", "venv_failed", "uv exited 2: could not resolve torch"),
   )
 
   expect(message).not.toContain("uv exited")
@@ -53,11 +51,10 @@ test("the internal detail never reaches the user message", () => {
 })
 
 test("a venv failure names the piece that failed", () => {
-  expect(provisionFailureMessage(failure("yue2", "venv_failed"))).toContain("song generator")
-  expect(provisionFailureMessage(failure("sheetsage2", "venv_failed"))).toContain(
-    "reference transcription",
-  )
-  expect(provisionFailureMessage(failure("lyricalign", "venv_failed"))).toContain("lyric timing")
+  const message = provisionFailureMessage(failure("environment", "venv_failed"))
+
+  expect(message).toContain("song tools")
+  expect(message).not.toMatch(forbidden)
 })
 
 test("an old driver message says what to install, with both versions", () => {

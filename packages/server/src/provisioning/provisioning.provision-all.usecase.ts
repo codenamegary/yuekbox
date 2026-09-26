@@ -1,5 +1,5 @@
 import { homeLayout, venvPath } from "../shared/home"
-import { err, ok, Result } from "../shared/result"
+import { err, ok } from "../shared/result"
 import { evaluateGpu } from "./provisioning.gpu"
 import {
   ProvisionFailure,
@@ -7,9 +7,8 @@ import {
   ProvisionStepOutcome,
   ProvisionStepStatus,
   provisionStepLabels,
-  UvTool,
 } from "./provisioning.models"
-import { managedPythonVersions, venvFingerprint, venvPins } from "./provisioning.packages"
+import { managedPythonVersions, venvFingerprint, venvPin } from "./provisioning.packages"
 import {
   EnsurePython,
   EnsureUv,
@@ -27,14 +26,13 @@ export type ProvisioningDeps = Readonly<{
   installScripts: InstallScripts
 }>
 
-const venvSteps = ["yue2", "sheetsage2", "lyricalign"] as const
-
 /**
  * Every piece the app needs, built in order into the home. Each port skips
  * its own completed work and says so, so a rerun resumes instead of redoing:
- * uv (PATH or the pinned fetch), the managed interpreters, the CUDA check
- * that picks the torch wheels, the three pinned environments, and our
- * installed entrypoints. The first failure stops the run and names its piece.
+ * uv (PATH or the pinned fetch), the managed interpreter, the CUDA check
+ * that picks the torch wheels, the one shared environment every Python pass
+ * runs in, and our installed entrypoints. The first failure stops the run
+ * and names its piece.
  */
 export const makeProvisionAll =
   (deps: ProvisioningDeps): ProvisionAll =>
@@ -76,47 +74,20 @@ export const makeProvisionAll =
     if (!gpu.ok) return err(stop("gpu", gpu.error))
     finish("gpu", "completed")
 
-    const buildVenv = async (
-      step: (typeof venvSteps)[number],
-      uvTool: UvTool,
-      indexUrl: string,
-    ): Promise<Result<ProvisionStepOutcome, ProvisionFailure>> => {
-      const pin = venvPins[step]
-      const built = await deps.ensureVenv(uvTool, {
-        name: pin.name,
-        dir: venvPath(input.home, pin.name),
-        pythonVersion: pin.python,
-        indexUrl,
-        extraIndexUrl: pin.extraIndexUrl,
-        packages: pin.packages,
-        fingerprint: venvFingerprint(pin),
-      })
-      if (!built.ok) {
-        emit(step, "failed")
-        return err({
-          step,
-          label: provisionStepLabels[step],
-          kind: built.error.kind,
-          detail: built.error.detail,
-        })
-      }
-      return ok({
-        step,
-        label: provisionStepLabels[step],
-        status: built.value.status === "installed" ? "completed" : "skipped",
-      })
+    emit("environment", "started")
+    const built = await deps.ensureVenv(uv.value, {
+      name: venvPin.name,
+      dir: venvPath(input.home),
+      pythonVersion: venvPin.python,
+      indexUrl: gpu.value.indexUrl,
+      extraIndexUrl: venvPin.extraIndexUrl,
+      packages: venvPin.packages,
+      fingerprint: venvFingerprint(venvPin),
+    })
+    if (!built.ok) {
+      return err(stop("environment", { kind: built.error.kind, detail: built.error.detail }))
     }
-
-    for (const step of venvSteps) {
-      emit(step, "started")
-      const built = await buildVenv(
-        step,
-        uv.value,
-        step === "yue2" ? gpu.value.indexUrl : venvPins[step].indexUrl,
-      )
-      if (!built.ok) return built
-      finish(built.value.step, built.value.status)
-    }
+    finish("environment", built.value.status === "installed" ? "completed" : "skipped")
 
     emit("scripts", "started")
     const scripts = await deps.installScripts(layout.scripts)
