@@ -87,7 +87,11 @@ ui/
 ├── spec.md
 ├── scripts/
 │   ├── build-binary.ts       # compiles the single yuekbox executable
-│   └── smoke-binary.sh       # compiled-artifact smoke test (CI)
+│   ├── smoke-binary.sh       # compiled-artifact smoke test (CI)
+│   ├── install.sh            # curl | sh installer: detect, download, verify, install
+│   ├── install.test.sh       # installer test over a throwaway HTTP server
+│   ├── release-notes-append.sh # idempotent packaging section for a release body
+│   └── release-notes.test.sh # gh-shim test for the append script
 ├── .oxlintrc.json
 ├── .oxfmtrc.json
 ├── packages/
@@ -951,6 +955,45 @@ needs a local NVIDIA GPU. `scripts/smoke-binary.sh` is the compiled-artifact
 proof: it runs a copy of the binary from an empty directory against a scratch
 home, checks `/`, `/v1/status`, `/v1/config` precedence, runs an extracted
 helper with `--help`, and stops it with SIGTERM. CI runs it on ubuntu-latest.
+
+### Release packaging
+
+Merging the release-please PR tags `vX.Y.Z` and publishes the GitHub release.
+`.github/workflows/release-binaries.yml` runs on `release: published` (and on
+`workflow_dispatch` with a `tag` input) with `contents: write`, and never on
+pull requests. It checks out the tag, runs `bun install --frozen-lockfile`,
+builds `yuekbox-linux-x64`, smoke-tests it, writes
+`yuekbox-linux-x64.sha256`, and uploads the binary, the checksum, and
+`scripts/install.sh` to the release with `gh release upload --clobber`. The
+last step runs `scripts/release-notes-append.sh <tag>`, which appends
+`.github/release-notes-packaging.md` to the release body unless the
+`<!-- yuekbox-packaging -->` marker is already present, so a rerun never
+duplicates the section.
+
+`scripts/install.sh` is the one-line installer:
+
+```sh
+curl -fsSL https://github.com/codenamegary/yuekbox/releases/latest/download/install.sh | sh
+```
+
+It refuses anything but x86_64 Linux (macOS gets a short message; the app needs
+a local NVIDIA GPU), resolves `YUEKBOX_VERSION` (default latest; `0.3.0` and
+`v0.3.0` both work), downloads the binary and its checksum into a temp
+directory, verifies SHA-256, and moves the executable to
+`${YUEKBOX_INSTALL_DIR:-$HOME/.local/bin}`. `YUEKBOX_BASE_URL` overrides the
+download base for tests and mirrors. The release artifact bundles the SPA, the
+API, the SQLite schema, and the Python helpers. It does not bundle CUDA,
+PyTorch, Python, ffmpeg, or model weights: `--provision` builds the runtime
+under the home and the model slice downloads the weights. The release notes
+carry the same statement.
+
+`scripts/install.test.sh` proves the installer without GitHub: a throwaway HTTP
+server serves a fake binary and checksum, and the test drives the happy path, a
+checksum mismatch, a missing asset, platform refusal, and the pinned and latest
+URLs.
+`scripts/release-notes.test.sh` proves the append is a no-op on a rerun with a
+`gh` shim. `docs/releasing.md` is the operator guide: the asset table, the
+rebuild command, the local tests, and the clean-machine install checklist.
 
 ## Web
 

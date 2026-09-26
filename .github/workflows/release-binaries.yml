@@ -1,0 +1,58 @@
+name: Release Binaries
+
+# Builds the prebuilt executable for a published GitHub release. Never runs on
+# pull requests. Manual dispatch rebuilds/re-uploads for an existing tag.
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and upload (for example v0.3.0)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-binaries-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build the linux-x64 binary
+        run: bun run build:binary yuekbox-linux-x64
+
+      - name: Smoke-test the compiled binary
+        run: ./scripts/smoke-binary.sh ./yuekbox-linux-x64
+
+      - name: Write the SHA-256 checksum
+        run: sha256sum yuekbox-linux-x64 > yuekbox-linux-x64.sha256
+
+      - name: Upload the binary, checksum, and installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" yuekbox-linux-x64 yuekbox-linux-x64.sha256 scripts/install.sh --clobber
+
+      - name: Append the packaging note to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/release-notes-append.sh "$TAG"

@@ -67,11 +67,45 @@ queue, a worker, and the real YuE2 CLI. The visuals are just here to make the wa
 
 You need:
 
-- 🐧 Linux or WSL2 with an **NVIDIA GPU** (16 GB VRAM works with the default budget; 24 GB is YuE2's stated recommendation)
-- 🐍 **Python 3.12** for the YuE2 venv
+- 🐧 **Linux x86_64 or WSL2** with an **NVIDIA GPU** (16 GB VRAM works with the default budget; 24 GB is YuE2's stated recommendation). macOS is not supported.
 - 🎧 **ffmpeg** with `libmp3lame`
-- 🥟 **[Bun](https://bun.sh) 1.4+** — builds and runs from source. The compiled `./yuekbox` needs neither Bun nor a checkout.
 - 🧠 **The five model directories** — YuE2-3B, YuE2-Vae, SheetSage2, MERT-v2-FullSong, and Whisper large-v3-turbo. By default yuekbox looks for them under `~/.yuekbox/models/<name>`; `~/.yuekbox/config.yaml` (or a CLI flag) points anywhere else.
+- 🐍 **Python 3.12** only for the manual venv route. `yuekbox --provision` installs its own.
+- 🥟 **[Bun](https://bun.sh) 1.4+** only to run from source. The released binary needs no Bun and no checkout.
+
+### 📥 Install a release (no Bun, no checkout)
+
+Every release attaches the `yuekbox-linux-x64` binary, its `.sha256` checksum,
+and this installer. One line, on Linux or WSL2:
+
+```bash
+curl -fsSL https://github.com/codenamegary/yuekbox/releases/latest/download/install.sh | sh
+```
+
+On WSL2, or if you want to read the script before running it, download it and
+run it:
+
+```bash
+curl -fsSL https://github.com/codenamegary/yuekbox/releases/latest/download/install.sh -o install.sh
+sh install.sh
+```
+
+The installer checks the platform, downloads the binary and its checksum,
+verifies SHA-256, and puts `yuekbox` in `~/.local/bin` (it prints the `PATH`
+line when that directory is not on it). `YUEKBOX_INSTALL_DIR` moves the target
+and `YUEKBOX_VERSION=v0.3.0` pins a release. Then:
+
+```bash
+yuekbox --provision   # one time: builds the Python runtime under ~/.yuekbox
+yuekbox               # starts the app on http://127.0.0.1:3000
+```
+
+The binary bundles the UI, the API, the SQLite schema, and the Python helper
+scripts. It does **not** bundle CUDA, PyTorch, Python, ffmpeg, or the model
+weights. `--provision` builds the Python runtime under `~/.yuekbox`, and the
+models come from the app's downloader or from copies you already have.
+
+### 🧰 Run from source
 
 ```bash
 git clone https://github.com/codenamegary/yuekbox.git ui
@@ -90,8 +124,9 @@ curl -s http://127.0.0.1:3000/v1/status
 
 ### 📦 Single binary (no Bun or source tree at runtime)
 
-Want one file instead of a checkout plus `node_modules`? Build the packaged
-executable — it embeds the SPA, the migrations, and the Python helpers:
+The released `yuekbox-linux-x64` is this executable. CI builds it, smoke-tests
+it, and attaches it to each GitHub release with its `.sha256` checksum. To build
+the same file yourself:
 
 ```bash
 bun run build:binary
@@ -115,7 +150,10 @@ bun run build:binary yuekbox-musl \
 
 linux-x64 is the ship target. macos-arm64 is not supported: yuekbox wants a
 local NVIDIA GPU. `scripts/smoke-binary.sh ./yuekbox` runs the compiled
-acceptance smoke test locally; CI runs it on every PR.
+acceptance smoke test locally; CI runs it on every PR. `sh scripts/install.test.sh`
+exercises the release installer against a local HTTP server, and
+[`docs/releasing.md`](docs/releasing.md) covers the release workflow and the
+clean-machine install test.
 
 Yuekbox keeps everything it manages in `~/.yuekbox` (`--home` moves it): model defaults
 under `models/`, the Python venvs under `venvs/`, our scripts under `scripts/`, and the
@@ -395,6 +433,8 @@ In the packaged binary the API binds an OS-assigned loopback port, so `HOST` and
 | `bun run check` | Lint, typecheck, and tests across all packages |
 | `bun run test` | `bun test` per package |
 | `bun run build:binary` | Compile the single `./yuekbox` executable |
+| `sh scripts/install.test.sh` | Installer test against a throwaway HTTP server |
+| `bash scripts/release-notes.test.sh` | Release-note append test with a `gh` shim |
 | `bun run db:generate <name>` | Drizzle migration from the schema |
 | `bun run format` / `format:check` | oxfmt |
 
