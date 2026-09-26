@@ -1,11 +1,13 @@
 import * as React from "react"
 import { cn } from "@/lib/cn"
 
+export type StateDotProps = Readonly<{
+  state: "ready" | "missing"
+  className?: string
+}>
+
 /** A state dot: lit when the model is on disk, hollow when it is missing. */
-export const StateDot: React.FC<{ state: "ready" | "missing"; className?: string }> = ({
-  state,
-  className,
-}) => (
+export const StateDot: React.FC<StateDotProps> = ({ state, className }) => (
   <span
     aria-hidden
     className={cn(
@@ -18,10 +20,12 @@ export const StateDot: React.FC<{ state: "ready" | "missing"; className?: string
   />
 )
 
-export const DownloadBar: React.FC<{ value: number; className?: string }> = ({
-  value,
-  className,
-}) => (
+export type DownloadBarProps = Readonly<{
+  value: number
+  className?: string
+}>
+
+export const DownloadBar: React.FC<DownloadBarProps> = ({ value, className }) => (
   <div className={cn("h-1 w-full overflow-hidden rounded-full bg-white/10", className)}>
     <div
       className="h-full rounded-full bg-cyan-400 shadow-[0_0_10px_rgba(0,240,255,0.6)] transition-[width] duration-200 motion-reduce:transition-none"
@@ -30,10 +34,17 @@ export const DownloadBar: React.FC<{ value: number; className?: string }> = ({
   </div>
 )
 
+export type ActionButtonProps = React.ComponentProps<"button"> & {
+  tone?: "primary" | "secondary" | "ghost"
+}
+
 /** The row's small action, in the settings panel's mono micro-label voice. */
-export const ActionButton: React.FC<
-  React.ComponentProps<"button"> & { tone?: "primary" | "secondary" | "ghost" }
-> = ({ tone = "secondary", className, type = "button", ...props }) => (
+export const ActionButton: React.FC<ActionButtonProps> = ({
+  tone = "secondary",
+  className,
+  type = "button",
+  ...props
+}) => (
   <button
     type={type}
     className={cn(

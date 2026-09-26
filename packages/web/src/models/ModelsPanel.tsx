@@ -1,10 +1,10 @@
 import * as React from "react"
-import { modelCatalog } from "./models.catalog"
 import { useReadinessQuery } from "./models.queries"
+import { modelCatalogOrder } from "./models.catalog"
 import { ModelRows } from "./ModelRows"
 import { SystemLine } from "./SystemLine"
 
-const allKeys = modelCatalog.map((entry) => entry.key)
+const allKeys = modelCatalogOrder
 
 export type ModelsPanelProps = Readonly<{
   onClose: () => void
