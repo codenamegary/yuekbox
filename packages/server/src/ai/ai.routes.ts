@@ -13,11 +13,15 @@ import {
   WriterScopeSchema,
 } from "contracts/http/ai"
 import { PROBLEM_TYPES, ProblemError } from "contracts/http/error"
+import { FindMissingGenerationModels } from "../models/models.models"
+import { modelRequiredProblem } from "../shared/problems"
 import { toSongResponse } from "../songs/songs.responses"
 import { AiSlice } from "./ai.assembly"
 
 export type AiRoutesOptions = Readonly<{
   ai: AiSlice
+  /** Random Songs generate too, so the same model gate applies. */
+  findMissingGenerationModels: FindMissingGenerationModels
 }>
 
 type ProblemBody = Readonly<{
@@ -140,6 +144,11 @@ export const aiRoutes: FastifyPluginAsync<AiRoutesOptions> = async (fastify, opt
   })
 
   fastify.post(aiRandomSongPath, async (_request, reply) => {
+    const missing = await options.findMissingGenerationModels({ hasReference: false })
+    if (missing.length > 0) {
+      return sendProblem(reply, modelRequiredProblem(missing))
+    }
+
     const result = await ai.randomSong()
     if (!result.ok) {
       const shape = aiErrorShape(result.error.kind)

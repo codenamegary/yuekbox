@@ -9,6 +9,7 @@
     "./http/collection": "./src/http/collection.ts",
     "./http/status": "./src/http/status.ts",
     "./http/readiness": "./src/http/readiness.ts",
+    "./http/models": "./src/http/models.ts",
     "./http/songs": "./src/http/songs.ts",
     "./http/references": "./src/http/references.ts",
     "./http/ai": "./src/http/ai.ts",

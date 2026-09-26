@@ -6,6 +6,8 @@ import { Calibration, SongSchema, SongsCollectionSchema } from "contracts/http/s
 import { unusedAiFixture } from "../ai/ai.fixtures"
 import { buildApp } from "../app"
 import { unusedConfigFixture } from "../config/config.fixtures"
+import { unusedModelsFixture } from "../models/models.fixtures"
+import { ModelsSlice } from "../models/models.assembly"
 import { unusedReadinessFixture } from "../readiness/readiness.fixtures"
 import { err, ok } from "../shared/result"
 import { makeSongsSliceFixture, songFixture } from "./songs.fixtures"
@@ -39,7 +41,11 @@ const statusFixture: Status = Object.freeze({
   startedAt: "2026-09-17T04:00:00.000Z",
 })
 
-const makeApp = (songs: SongsSlice, wake: () => void = () => {}) =>
+const makeApp = (
+  songs: SongsSlice,
+  wake: () => void = () => {},
+  models: ModelsSlice = unusedModelsFixture(),
+) =>
   buildApp({
     songs,
     wake,
@@ -47,6 +53,7 @@ const makeApp = (songs: SongsSlice, wake: () => void = () => {}) =>
     ai: unusedAiFixture(),
     visualizations: unusedVisualizationsFixture(),
     readiness: unusedReadinessFixture(),
+    models,
     config: unusedConfigFixture(),
     status: async () => statusFixture,
   })
@@ -68,6 +75,79 @@ test("create returns a queued song and wakes the worker", async () => {
   expect(SongSchema.parse(response.json()).status).toBe("queued")
   expect(SongSchema.parse(response.json()).title).toBe("hello")
   expect(wakes).toHaveLength(1)
+})
+
+test("create is blocked by a model-required problem when the generator is missing", async () => {
+  const createCalls: number[] = []
+  const wakes: number[] = []
+  const app = makeApp(
+    makeSongsSliceFixture({
+      createSong: async () => {
+        createCalls.push(1)
+        return ok(queuedSong)
+      },
+    }),
+    () => {
+      wakes.push(1)
+    },
+    {
+      ...unusedModelsFixture(),
+      findMissingGenerationModels: async () => [
+        {
+          key: "yue2",
+          name: "YuE2-3B",
+          path: "/home/u/.yuekbox/models/YuE2-3B",
+          sizeBytes: 7_295_775_491,
+          downloadable: true,
+        },
+      ],
+    },
+  )
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/songs",
+    payload: { lyrics: "hello", style: "pop" },
+  })
+
+  expect(response.statusCode).toBe(409)
+  expect(response.headers["content-type"]).toContain("application/problem+json")
+  const problem = ProblemDetailsSchema.parse(response.json())
+  expect(problem.type).toBe(PROBLEM_TYPES.modelRequired)
+  if (problem.type !== PROBLEM_TYPES.modelRequired) return
+  expect(problem.models[0]).toEqual({
+    key: "yue2",
+    name: "YuE2-3B",
+    path: "/home/u/.yuekbox/models/YuE2-3B",
+    sizeBytes: 7_295_775_491,
+    downloadable: true,
+  })
+  expect(createCalls).toHaveLength(0)
+  expect(wakes).toHaveLength(0)
+})
+
+test("the model check asks for the reference models when a reference is attached", async () => {
+  const asked: boolean[] = []
+  const app = makeApp(makeSongsSliceFixture(), () => {}, {
+    ...unusedModelsFixture(),
+    findMissingGenerationModels: async ({ hasReference }) => {
+      asked.push(hasReference)
+      return []
+    },
+  })
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/songs",
+    payload: {
+      lyrics: "hello",
+      style: "pop",
+      referenceId: "01J8K3R4P9ABCDEFGHJKMNPQRT",
+    },
+  })
+
+  expect(response.statusCode).toBe(201)
+  expect(asked).toEqual([true])
 })
 
 test("create rejects empty lyrics before any insert or wake", async () => {

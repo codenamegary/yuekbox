@@ -11,7 +11,7 @@ test("GET /v1/readiness answers the contract payload with fixes on failed checks
       models: {
         yue2: { state: "missing", path: "/models/YuE2-3B", size: 7_295_775_491 },
         yue2Vae: { state: "ready", path: "/models/YuE2-Vae", size: 531_343_726 },
-        sheetsage2: { state: "missing", path: "/models/SheetSage2", size: 231_243_659 },
+        sheetsage2: { state: "missing", path: "/models/SheetSage2", size: 233_240_091 },
         sheetsage2Base: {
           state: "missing",
           path: "/models/MERT-v2-FullSong",
