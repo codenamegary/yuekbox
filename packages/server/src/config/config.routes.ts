@@ -1,6 +1,11 @@
 import { FastifyPluginAsync } from "fastify"
-import { ConfigPatchSchema, configPath, ModelPathOverrides } from "contracts/http/config"
-import { issuePointer, sendProblem, validationProblem } from "../shared/problems"
+import {
+  ConfigPatchSchema,
+  ConfigSchema,
+  configPath,
+  ModelPathOverrides,
+} from "contracts/http/config"
+import { conflictProblem, issuePointer, sendProblem, validationProblem } from "../shared/problems"
 import { makeGetConfig } from "./config.get.usecase"
 import { makeUpdateConfig } from "./config.update.usecase"
 import { makeLoadModelOverrides, makeSaveModelOverrides } from "./config.yaml.adapters"
@@ -30,7 +35,9 @@ export const configRoutes: FastifyPluginAsync<ConfigRoutesOptions> = async (fast
     flags: options.flags,
   })
 
-  fastify.get(configPath, async (_request, reply) => reply.send(await getConfig()))
+  fastify.get(configPath, async (_request, reply) =>
+    reply.send(ConfigSchema.parse(await getConfig())),
+  )
 
   fastify.put(configPath, async (request, reply) => {
     const parsed = ConfigPatchSchema.safeParse(request.body)
@@ -46,6 +53,10 @@ export const configRoutes: FastifyPluginAsync<ConfigRoutesOptions> = async (fast
         ),
       )
     }
-    return reply.send(await updateConfig(parsed.data))
+    const result = await updateConfig(parsed.data)
+    if (!result.ok) {
+      return sendProblem(reply, conflictProblem(result.error.detail))
+    }
+    return reply.send(ConfigSchema.parse(result.value))
   })
 }

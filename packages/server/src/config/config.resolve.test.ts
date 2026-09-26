@@ -100,6 +100,17 @@ test("a relative override is anchored to the home, not the server's working dire
   expect(resolved.whisper).toBe(join(home, "whisper-here"))
 })
 
+test("a null override resets a model to its default folder", () => {
+  const resolved = resolveModelPaths({
+    home,
+    file: { yue2: "/mnt/config/YuE2-3B", sheetsage2: null },
+    flags: {},
+  })
+
+  expect(resolved.yue2).toBe("/mnt/config/YuE2-3B")
+  expect(resolved.sheetsage2).toBe(join(home, "models", "SheetSage2"))
+})
+
 test("an absolute override is kept exactly as given", () => {
   const resolved = resolveModelPaths({
     home,

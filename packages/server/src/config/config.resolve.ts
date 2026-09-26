@@ -1,5 +1,6 @@
 import { isAbsolute, join, resolve } from "node:path"
 import { ModelPathOverrides, ModelPaths } from "contracts/http/config"
+import { modelKeyOrder } from "contracts/http/models"
 import { homeLayout, modelDirectoryNames } from "../shared/home"
 
 /** `<home>/models/<name>` for each of the five user-configurable models. */
@@ -16,7 +17,7 @@ export const defaultModelPaths = (home: string): ModelPaths => {
 
 export type ResolveModelPathsInput = Readonly<{
   home: string
-  /** The model overrides stored in config.yaml. */
+  /** The model overrides stored in config.yaml. Null means "use the default". */
   file: ModelPathOverrides
   /** The model overrides from CLI flags, the highest precedence. */
   flags: ModelPathOverrides
@@ -35,25 +36,22 @@ const anchor = (home: string, value: string): string =>
 /**
  * The one place model paths are resolved. Precedence per model, highest first:
  * CLI flag, config.yaml, `<home>/models/<name>`. Exactly five paths resolve;
- * nothing else in the home is user-configurable.
+ * nothing else in the home is user-configurable. A null override is a reset:
+ * it falls through to the default like a missing key.
  */
 export const resolveModelPaths = (input: ResolveModelPathsInput): ModelPaths => {
   const defaults = defaultModelPaths(input.home)
-  const pick = (flag: string | undefined, file: string | undefined, fallback: string): string =>
-    flag !== undefined
-      ? anchor(input.home, flag)
-      : file !== undefined
-        ? anchor(input.home, file)
-        : fallback
+  const pick = (key: (typeof modelKeyOrder)[number]): string => {
+    const override = input.flags[key] ?? input.file[key]
+    return override === null || override === undefined
+      ? defaults[key]
+      : anchor(input.home, override)
+  }
   return Object.freeze({
-    yue2: pick(input.flags.yue2, input.file.yue2, defaults.yue2),
-    yue2Vae: pick(input.flags.yue2Vae, input.file.yue2Vae, defaults.yue2Vae),
-    sheetsage2: pick(input.flags.sheetsage2, input.file.sheetsage2, defaults.sheetsage2),
-    sheetsage2Base: pick(
-      input.flags.sheetsage2Base,
-      input.file.sheetsage2Base,
-      defaults.sheetsage2Base,
-    ),
-    whisper: pick(input.flags.whisper, input.file.whisper, defaults.whisper),
+    yue2: pick("yue2"),
+    yue2Vae: pick("yue2Vae"),
+    sheetsage2: pick("sheetsage2"),
+    sheetsage2Base: pick("sheetsage2Base"),
+    whisper: pick("whisper"),
   })
 }
