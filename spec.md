@@ -296,10 +296,20 @@ packages/server/src/
 │   ├── generation.ffmpeg.adapters.ts
 │   ├── generation.sheetsage2.adapters.ts
 │   └── generation.lyricalign.adapters.ts
-├── provisioning/             # installs our Python entrypoints into the home
-│   ├── provisioning.models.ts
-│   ├── provisioning.ports.ts
-│   └── provisioning.scripts.adapters.ts
+├── provisioning/             # builds the runtime and our entrypoints into the home
+│   ├── provisioning.models.ts        # steps, failures, ports' shapes
+│   ├── provisioning.ports.ts         # atomic capability ports
+│   ├── provisioning.packages.ts      # uv pin, torch indexes, the three pinned sets
+│   ├── provisioning.gpu.ts           # driver floor and the chosen torch wheel
+│   ├── provisioning.gpu.adapters.ts  # nvidia-smi probe
+│   ├── provisioning.uv.adapters.ts   # find uv, else fetch the pinned release
+│   ├── provisioning.python.adapters.ts # managed interpreters and the three environments
+│   ├── provisioning.download.adapters.ts # the one network seam
+│   ├── provisioning.provision-all.usecase.ts # ordered, resumable step runner
+│   ├── provisioning.messages.ts      # plain-English failure mapper
+│   ├── provisioning.assembly.ts      # real adapters wired for the process root
+│   ├── provisioning.cli.ts           # the `--provision` command
+│   └── provisioning.scripts.adapters.ts # the #50 entrypoint installer
 ├── runtime/
 │   └── runtime.pins.ts       # the one pinned yue2-infer source
 ├── shared/
@@ -347,7 +357,7 @@ One direction only: `media` depends on nothing, `songs` depends on media, `gener
 - `generation` owns the worker loop plus the yue2, ffmpeg, and sheetsage2 adapters. It reaches songs only through the capabilities record.
 - `ai` owns the writer config, prompts, model calls, and validation for style, lyrics, and visuals. It never touches songs directly; compose hands it `createSong` and wires its visual authoring into the visualizations slice.
 - `config` owns the `~/.yuekbox` layout and the five user-configurable model paths. Resolution lives in one module (`config.resolve.ts`), with precedence CLI flag > `config.yaml` > `<home>/models/<name>`. It reads and writes `config.yaml` atomically and serves `GET`/`PUT /v1/config`. Adapters receive resolved paths; none of them read `YUE2_KIT` or work out a model location on their own.
-- `provisioning` installs our Python entrypoints into the home, and later builds the venvs around the pinned runtime. It depends on nothing but `shared`.
+- `provisioning` builds everything the app needs outside Bun: it finds or fetches `uv`, installs the managed interpreters, checks the driver and picks the torch wheels, builds the three pinned environments, and installs our entrypoints. It depends on `shared` and the runtime pin only. `--provision` drives it; the server never provisions behind the user's back.
 - `visualizations` owns the `/v1/songs/:id/visualization` routes, the in-memory per-Song pending/failed state, single-flight rerolls, and the author flow. The file on disk is the durable record; there is no table and no boot recovery.
 - `wake` (`() => void`) starts the worker. `compose.ts` passes it to the songs POST route and the AI slice. `/v1/status` reads queue depth from songs and `isBusy` from the generation worker.
 
@@ -433,7 +443,8 @@ The installer port is `InstallScripts`; the adapter
 `<home>/scripts/`: `generate.py`, `transcribe.py`, `abc_tools.py`, `common.py`,
 and `align.py` sit side by side so the sibling imports resolve. It is
 idempotent, overwrites only its own files, and never deletes anything else.
-Provisioning calls it, then builds the venvs.
+Provisioning calls it after it builds the environments, so a run that fails
+earlier never leaves entrypoints pointing at an unfinished home.
 
 `generate.py` calls the yue2 library directly instead of forwarding to
 `python -m yue2 generate`. It owns our flags and the
@@ -583,8 +594,9 @@ yuekbox owns `~/.yuekbox` (override with `--home`). Everything the app manages l
 ```text
 ~/.yuekbox/
 ├── config.yaml           # the only user-editable file
+├── tools/                # uv and the managed interpreters, fetched by yuekbox
 ├── models/<name>/        # the five model directories
-├── venvs/<name>/         # python venvs: yue2, sheetsage2, lyricalign
+├── venvs/<name>/         # environments: yue2, sheetsage2, lyricalign
 ├── scripts/              # generate.py, transcribe.py, abc_tools.py, common.py, align.py
 └── data/                 # yuekbox.sqlite and per-Song media
 ```
@@ -637,6 +649,69 @@ REFERENCE_MAX_BYTES     default 26214400 (25 MiB)
 
 The yue2 adapter runs `<home>/venvs/yue2/bin/python <home>/scripts/generate.py`. The venv's `yue2-infer` comes from the pin in `runtime.pins.ts`; the app never falls back to a checkout's module or console script.
 
+### Provisioning (`--provision`)
+
+The user never installs or chooses a language runtime, and never sees one's
+name. `--provision` builds everything into the home, prints one plain-English
+line per piece, and exits: `0` when the state is ready, `1` with a retry
+message on the first failure. `server.ts` handles the flag before it opens the
+database or listens, so provisioning never shares the server's life.
+
+Mechanism: `uv`.
+
+- Find `uv` on PATH first. Otherwise fetch the pinned release
+  `0.9.18` (`uv-x86_64-unknown-linux-gnu.tar.gz`) into
+  `<home>/tools/uv-0.9.18/` and verify its SHA-256 before extracting. The
+  version, URL, and checksum live in `provisioning.packages.ts`.
+- Install the managed interpreters into `<home>/tools/python`: `3.12.3` for
+  yue2 and lyric-align, `3.11.14` for sheetsage2 (the local reference
+  environments' versions; numpy 1.24 needs 3.11). uv's downloads cache under
+  `<home>/tools/cache`, and no launchers land in the user's bin directory.
+- Build the three environments under `<home>/venvs/` from exact pinned sets
+  (`uv pip freeze` of the working local environments, 2026-09-24):
+  - `yue2`: `yue2-infer` at the `runtime.pins.ts` commit plus `torch==2.10.0`
+    from PyTorch's CUDA 12.8 wheel index (`download.pytorch.org/whl/cu128`).
+    The local reference environment runs `torch 2.10.0+cu128`; that tag is the
+    evidence for the index.
+  - `sheetsage2`: `torch==2.8.0`/`torchaudio==2.8.0` (cu126),
+    `transformers==4.45.2`, `numpy==1.24.3`.
+  - `lyricalign`: `torch==2.8.0`/`torchaudio==2.8.0` (cu126),
+    `transformers==4.57.6`, `demucs==4.1.0`, `soundfile==0.14.0`.
+- Every other package resolves from PyPI (`pypi.org/simple`).
+
+Driver check. All pinned torch builds are CUDA 12.x, which runs on any 12.x
+driver (NVIDIA minor version compatibility), so the floor is `525.60.13`.
+Provisioning asks `nvidia-smi` for the driver version before the first
+environment. Missing card, missing driver, or an older driver stops the run
+and the user is told to install the NVIDIA driver. A passing check reports the
+cu128 index that the yue2 environment installs against.
+
+Idempotent and resumable. `uv` found on PATH is used as-is; a fetched copy is
+reused. Installed interpreters are stamped under `<home>/tools/python`. Each
+environment carries a `.yuekbox.json` fingerprint of its pins; a matching
+fingerprint is a no-op, a pin bump or an interrupted build clears and rebuilds,
+and a failed install leaves no stamp so the next run retries it. The entrypoint
+installer already overwrites only its own files.
+
+Failures. `provisioning.messages.ts` maps each failure to one plain-English
+paragraph that names the piece and offers the retry. Internal detail stays in
+logs and tests; the words venv, pip, interpreter, package, and Python never
+reach the user.
+
+What later work does instead:
+
+- #52 (binary) calls the same `assembleProvisioningSlice` + `runProvisioningCommand`
+  on `--provision`; it does not shell out to a package manager or duplicate
+  the step order.
+- #53 (readiness) reads the existing presence checks (`checkYue2`,
+  `checkSheetsage2`, `checkLyricAlign`) plus model files. It does not run
+  provisioning implicitly and never reports paths, pins, or interpreter
+  state; a missing runtime is a "run setup" state, and an absent model points
+  at #54.
+- #55 (UI) shows one setup action wired to the same `provisionAll`, renders
+  the step labels and mapped messages verbatim, and adds no paths, pins,
+  version numbers, or runtime names to the form or settings.
+
 Bind localhost by default. This app talks to a local GPU.
 
 ### Tests
@@ -666,11 +741,18 @@ Cover at least:
 - Generate args call `<home>/scripts/generate.py` with the resolved model and vae and no checkout path; `checkYue2` needs the python, script, model, and vae.
 - The script installer copies every tool flat into the scripts dir, reruns over its own files, leaves unrelated files alone, and reports a missing source with its path.
 - The runtime pin names one immutable git commit.
+- The package manifest pins one uv release archive with a SHA-256, the per-venv Python versions, and exact dependency sets; the yue2 set carries the runtime git pin on the cu128 index and the other two carry their cu126 sets.
+- The driver check passes at the CUDA 12 floor, fails an older or unreadable driver with both versions named, and fails a missing card; a passing check reports the cu128 wheel index.
+- `--provision` steps run in order and stop at the first failure: uv, interpreters, driver, yue2, sheetsage2, lyricalign, entrypoints; each step reports `completed` or `skipped`, and a rerun through the same ports changes nothing.
+- Provisioning output and failure messages never contain venv, pip, interpreter, package, or Python; each failure names the piece and offers a retry; the CLI exits `1` on failure and prints the mapped message, never raw error text.
+- The uv provider prefers PATH, reuses the fetched copy on a rerun, fetches the pinned URL with the pinned checksum, and fails cleanly when the download or extraction fails.
+- The interpreter provider installs only missing versions, stamps them, and retries a failed install; the environment provider builds with the pinned indexes and packages, skips on a matching fingerprint, rebuilds on a changed or corrupt one, and leaves no stamp when the package install fails.
+- The download seam verifies SHA-256 before the file lands, and a mismatch or an HTTP failure leaves nothing behind.
+- Boot env: home, tools, venvs, scripts, SQLite, and media default under `~/.yuekbox`; explicit env overrides still win; `--home` moves the layout.
 - Config resolution per model: CLI flag > `config.yaml` > `<home>/models/<name>`, with each of the five keys covered and unrelated keys left alone.
 - Config CLI flags parse `--flag value` and `--flag=value`, the last occurrence wins, and an unknown or value-less flag fails loud.
 - `config.yaml` parses partial overrides, rejects unknown keys and wrong types with a clear error, and an empty or missing file means no overrides.
 - `PUT /v1/config` merges a partial update, writes atomically (no temp file left behind), returns the effective paths, and rejects an unknown key or a non-string path with 400.
-- Boot env: home, venvs, scripts, SQLite, and media default under `~/.yuekbox`; explicit env overrides still win; `--home` moves the layout.
 - No source reads the removed `YUE2_KIT` escape hatch.
 - Deleting a Song removes the row and the folder; a folder failure is logged, not fatal.
 - Creating a Song fires the queued hook after the row and folder exist, and not when validation fails.
@@ -846,6 +928,7 @@ rotates the trip mode only when the finished Song has no ready visualization.
 | Audio requested before complete | 409 conflict |
 | ffmpeg missing at boot | process still starts, `/v1/status.ffmpeg = missing`, generate fails the Song |
 | YuE2 missing | same, `yue2 = missing` |
+| NVIDIA driver missing or too old during `--provision` | Provisioning stops and names what to install; the server still starts, and generate fails the Song |
 | YuE2 OOM or non-zero exit | Song `failed`, detail from stderr tail |
 | Truncation | Song `complete`, `truncated` flags true |
 | Server crash mid-run | On boot, that Song `failed` |

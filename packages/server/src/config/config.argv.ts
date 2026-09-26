@@ -7,6 +7,8 @@ export type CliArgs = Readonly<{
   configPath: string | null
   /** CLI model overrides, the highest precedence. */
   models: ModelPathOverrides
+  /** `--provision`: build the runtime into the home, then exit. */
+  provision: boolean
 }>
 
 const modelFlags: Readonly<Record<string, keyof ModelPathOverrides>> = {
@@ -32,6 +34,7 @@ const readValue = (flag: string, inline: string | null, next: string | undefined
 export const parseCliArgs = (argv: readonly string[]): CliArgs => {
   let home: string | null = null
   let configPath: string | null = null
+  let provision = false
   const models: ModelPathOverrides = {}
   let index = 0
 
@@ -41,6 +44,10 @@ export const parseCliArgs = (argv: readonly string[]): CliArgs => {
 
     if (token === "--") break
     if (!token.startsWith("--")) continue
+    if (token === "--provision") {
+      provision = true
+      continue
+    }
 
     const equals = token.indexOf("=")
     const flag = equals === -1 ? token : token.slice(0, equals)
@@ -60,5 +67,5 @@ export const parseCliArgs = (argv: readonly string[]): CliArgs => {
     throw new Error(`unknown flag: ${flag}`)
   }
 
-  return { home, configPath, models }
+  return { home, configPath, models, provision }
 }
