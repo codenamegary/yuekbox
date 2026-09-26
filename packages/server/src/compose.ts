@@ -12,6 +12,7 @@ import {
   RunYue2Generate,
 } from "./generation/generation.ports"
 import { assembleMediaSlice, MediaSlice } from "./media/media.assembly"
+import { AssembleReadinessDeps, assembleReadinessSlice } from "./readiness/readiness.assembly"
 import { assembleSongsSlice, SongsSlice } from "./songs/songs.assembly"
 import {
   assembleVisualizationsSlice,
@@ -42,6 +43,7 @@ export type ComposeDeps = Readonly<{
   referenceMaxBytes: number
   service: ServiceInfo
   dependencies: DependencyStates
+  readiness: AssembleReadinessDeps
   now?: () => string
   logError?: (message: string, error: unknown) => void
 }>
@@ -93,6 +95,7 @@ export const composeServer = (deps: ComposeDeps): ComposedServer => {
     authorVisualization: ai.authorVisualization,
     logError: deps.logError,
   })
+  const readiness = assembleReadinessSlice(deps.readiness)
   songQueued.request = (songId) => {
     visualizations.requestVisualization(songId).catch((error: unknown) => {
       deps.logError?.("visualization request failed", error)
@@ -117,6 +120,7 @@ export const composeServer = (deps: ComposeDeps): ComposedServer => {
     ai,
     visualizations,
     config: deps.config,
+    readiness: readiness.readReadiness,
     status,
   })
 

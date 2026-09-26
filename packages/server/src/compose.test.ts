@@ -4,11 +4,15 @@ import { mkdtemp, readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { ReferenceSchema } from "contracts/http/references"
+import { ReadinessSchema } from "contracts/http/readiness"
 import { SongSchema } from "contracts/http/songs"
 import { SongVisualizationResponseSchema } from "contracts/http/visualizations"
 import { composeServer } from "./compose"
 import { unusedConfigFixture } from "./config/config.fixtures"
+import { defaultModelPaths } from "./config/config.resolve"
 import { openDatabase } from "./db/client"
+import { unusedReadinessDepsFixture } from "./readiness/readiness.fixtures"
+import { expectedModelSizes } from "./readiness/readiness.models"
 import { ok } from "./shared/result"
 import {
   analysisFileName,
@@ -66,12 +70,32 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
       referenceMaxBytes: 1024 * 1024,
       service: { version: "0.1.0", state: () => "online", startedAt: "2026-09-17T04:00:00.000Z" },
       dependencies: { ffmpeg: "ok", yue2: "ok", sheetsage2: "ok" },
+      readiness: {
+        modelPaths: defaultModelPaths(configHome),
+        checkFfmpeg: async () => false,
+        readGpuFacts: async () => ({ kind: "absent", detail: "no GPU in this test" }),
+      },
       now: () => "2026-09-17T04:00:00.000Z",
     })
 
     const defaults = await app.inject({ method: "GET", url: "/v1/config" })
     expect(defaults.statusCode).toBe(200)
     expect(defaults.json().models.yue2).toBe(join(configHome, "models", "YuE2-3B"))
+
+    const readinessResponse = await app.inject({ method: "GET", url: "/v1/readiness" })
+    expect(readinessResponse.statusCode).toBe(200)
+    const readiness = ReadinessSchema.parse(readinessResponse.json())
+    expect(readiness.models.yue2).toEqual({
+      state: "missing",
+      path: join(configHome, "models", "YuE2-3B"),
+      size: expectedModelSizes.yue2,
+    })
+    expect(readiness.system.ffmpeg.state).toBe("missing")
+    expect(readiness.system.nvidia.state).toBe("missing")
+    if (readiness.system.ffmpeg.state === "missing") {
+      expect(readiness.system.ffmpeg.fix.linux).toContain("ffmpeg")
+      expect(readiness.system.ffmpeg.fix.wsl2).toContain("ffmpeg")
+    }
 
     const savedConfig = await app.inject({
       method: "PUT",
@@ -223,6 +247,7 @@ test("creating a Song authors a visualization and deleting it takes the file alo
       referenceMaxBytes: 1024,
       service: { version: "0.1.0", state: () => "online", startedAt: "2026-09-17T04:00:00.000Z" },
       dependencies: { ffmpeg: "ok", yue2: "ok", sheetsage2: "ok" },
+      readiness: unusedReadinessDepsFixture(),
       now: () => "2026-09-17T04:00:00.000Z",
     })
 

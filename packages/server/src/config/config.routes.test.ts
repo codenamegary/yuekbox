@@ -7,6 +7,7 @@ import { ConfigSchema, ModelPathOverrides } from "contracts/http/config"
 import { PROBLEM_TYPES } from "contracts/http/error"
 import { unusedAiFixture } from "../ai/ai.fixtures"
 import { buildApp } from "../app"
+import { unusedReadinessFixture } from "../readiness/readiness.fixtures"
 import { makeSongsSliceFixture } from "../songs/songs.fixtures"
 import { unusedVisualizationsFixture } from "../visualizations/visualizations.fixtures"
 
@@ -32,6 +33,7 @@ const makeApp = (input: {
     referenceMaxBytes: 1024,
     ai: unusedAiFixture(),
     visualizations: unusedVisualizationsFixture(),
+    readiness: unusedReadinessFixture(),
     status: async () => statusFixture,
     config: {
       home: input.home,

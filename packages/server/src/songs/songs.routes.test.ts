@@ -6,6 +6,7 @@ import { Calibration, SongSchema, SongsCollectionSchema } from "contracts/http/s
 import { unusedAiFixture } from "../ai/ai.fixtures"
 import { buildApp } from "../app"
 import { unusedConfigFixture } from "../config/config.fixtures"
+import { unusedReadinessFixture } from "../readiness/readiness.fixtures"
 import { err, ok } from "../shared/result"
 import { makeSongsSliceFixture, songFixture } from "./songs.fixtures"
 import { SongsSlice } from "./songs.assembly"
@@ -45,6 +46,7 @@ const makeApp = (songs: SongsSlice, wake: () => void = () => {}) =>
     referenceMaxBytes: 1024,
     ai: unusedAiFixture(),
     visualizations: unusedVisualizationsFixture(),
+    readiness: unusedReadinessFixture(),
     config: unusedConfigFixture(),
     status: async () => statusFixture,
   })

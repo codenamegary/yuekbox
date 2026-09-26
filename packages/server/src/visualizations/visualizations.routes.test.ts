@@ -10,6 +10,7 @@ import { unusedAiFixture } from "../ai/ai.fixtures"
 import { AiNotReadyError, VisualizationAuthorError } from "../ai/ai.models"
 import { buildApp } from "../app"
 import { unusedConfigFixture } from "../config/config.fixtures"
+import { unusedReadinessFixture } from "../readiness/readiness.fixtures"
 import { err, ok, Result } from "../shared/result"
 import { makeSongsSliceFixture, songFixture } from "../songs/songs.fixtures"
 import { Song } from "../songs/songs.models"
@@ -78,6 +79,7 @@ const makeHarness = () => {
     ai: unusedAiFixture(),
     visualizations,
     config: unusedConfigFixture(),
+    readiness: unusedReadinessFixture(),
     status: async () => statusFixture,
   })
 

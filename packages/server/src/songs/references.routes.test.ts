@@ -4,6 +4,7 @@ import { ReferenceSchema } from "contracts/http/references"
 import { unusedAiFixture } from "../ai/ai.fixtures"
 import { buildApp } from "../app"
 import { unusedConfigFixture } from "../config/config.fixtures"
+import { unusedReadinessFixture } from "../readiness/readiness.fixtures"
 import { ok } from "../shared/result"
 import { unusedVisualizationsFixture } from "../visualizations/visualizations.fixtures"
 import { makeSongsSliceFixture, referenceFixture, songFixture } from "./songs.fixtures"
@@ -22,6 +23,7 @@ const makeApp = (songs: SongsSlice) =>
     ai: unusedAiFixture(),
     visualizations: unusedVisualizationsFixture(),
     config: unusedConfigFixture(),
+    readiness: unusedReadinessFixture(),
     status: async () => ({
       version: "0.1.0",
       state: "online",

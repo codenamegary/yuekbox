@@ -210,6 +210,7 @@ No `{ data: ... }` wrapper. Song JSON never includes MP3 bytes.
 ./http/error
 ./http/collection
 ./http/status
+./http/readiness
 ./http/songs
 ./http/config
 ```
@@ -257,10 +258,46 @@ version     string
 state       starting | online | shutting_down
 ffmpeg      ok | missing
 yue2        ok | missing
+sheetsage2  ok | missing
 queueDepth  number
 gpuBusy     boolean
 startedAt   iso datetime
 ```
+
+`/v1/status` stays a cheap service and queue poll; the flat `ffmpeg`, `yue2`,
+and `sheetsage2` fields keep working unchanged. Model and machine readiness
+live on their own endpoint so the web's status consumers and polling cadence
+never change.
+
+**GET /v1/readiness**:
+
+```text
+models:
+  yue2, yue2Vae, sheetsage2, sheetsage2Base, whisper:
+    state  ready | missing
+    path   string            # the resolved model path from config
+    size   number            # bytes on disk when present, expected size when missing
+system:
+  ffmpeg  { state: ready } | { state: missing, message, fix: { linux, wsl2 } }
+  nvidia  { state: ready } | { state: missing, message, fix: { linux, wsl2 } }
+```
+
+`state` follows the resolved path from config, so a `config.yaml` change is
+picked up on the next boot. The system preflight is informational only: a
+failure carries a short message and a copy-paste install instruction for Linux
+and WSL2, never a config row. Readiness never reports runtimes, venvs, or our
+scripts; they are yuekbox's business, not the user's.
+
+Readiness is cheap enough to poll. Every request stats the five model paths
+only. A present model's byte size is a recursive directory walk, cached per
+path for 60 s; a missing path is never cached, so a finished download flips it
+to `ready` on the next request. The ffmpeg and nvidia-smi probes each spawn a
+process, cached for 30 s. Expected sizes are the current-revision byte totals
+the Hugging Face model API reports for the five upstream repositories
+(`m-a-p/YuE2-3B`, `m-a-p/YuE2-Vae`, `m-a-p/SheetSage2`,
+`m-a-p/MERT-v2-FullSong`, `openai/whisper-large-v3-turbo`) on 2026-09-24; a
+later change to what a download fetches updates the constants in
+`readiness.models.ts`.
 
 Contracts tests parse fixtures with the schemas. No network.
 
@@ -315,6 +352,15 @@ packages/server/src/
 │   ├── provisioning.assembly.ts      # real adapters wired for the process root
 │   ├── provisioning.cli.ts           # the `--provision` command
 │   └── provisioning.scripts.adapters.ts # the #50 entrypoint installer
+├── readiness/                # model presence and the system preflight
+│   ├── readiness.models.ts
+│   ├── readiness.ports.ts
+│   ├── readiness.preflight.ts     # ffmpeg + driver checks, Linux/WSL2 fixes
+│   ├── readiness.read.usecase.ts
+│   ├── readiness.adapters.ts      # live existence, cached sizes, cached probes
+│   ├── readiness.assembly.ts
+│   ├── readiness.routes.ts
+│   └── readiness.fixtures.ts
 ├── runtime/
 │   └── runtime.pins.ts       # the one pinned yue2-infer source
 ├── shared/
@@ -364,6 +410,7 @@ One direction only: `media` depends on nothing, `songs` depends on media, `gener
 - `config` owns the `~/.yuekbox` layout and the five user-configurable model paths. Resolution lives in one module (`config.resolve.ts`), with precedence CLI flag > `config.yaml` > `<home>/models/<name>`. It reads and writes `config.yaml` atomically and serves `GET`/`PUT /v1/config`. Adapters receive resolved paths; none of them read `YUE2_KIT` or work out a model location on their own.
 - `provisioning` builds everything the app needs outside Bun: it finds or fetches `uv`, installs the managed interpreters, checks the driver and picks the torch wheels, builds the three pinned environments, and installs our entrypoints. It depends on `shared` and the runtime pin only. `--provision` drives it; the server never provisions behind the user's back.
 - `visualizations` owns the `/v1/songs/:id/visualization` routes, the in-memory per-Song pending/failed state, single-flight rerolls, and the author flow. The file on disk is the durable record; there is no table and no boot recovery.
+- `readiness` owns `GET /v1/readiness`: the five model states and the system preflight. It reads the resolved model paths from `config` and reuses `provisioning.gpu.ts`'s driver evaluation instead of restating the CUDA floor; it never provisions and never reports runtimes, venvs, or our scripts.
 - `wake` (`() => void`) starts the worker. `compose.ts` passes it to the songs POST route and the AI slice. `/v1/status` reads queue depth from songs and `isBusy` from the generation worker.
 
 ### Ports
@@ -708,11 +755,11 @@ What later work does instead:
 - #52 (binary) calls the same `assembleProvisioningSlice` + `runProvisioningCommand`
   on `--provision`; it does not shell out to a package manager or duplicate
   the step order.
-- #53 (readiness) reads the existing presence checks (`checkYue2`,
-  `checkSheetsage2`, `checkLyricAlign`) plus model files. It does not run
-  provisioning implicitly and never reports paths, pins, or interpreter
-  state; a missing runtime is a "run setup" state, and an absent model points
-  at #54.
+- #53 (readiness) serves `GET /v1/readiness`: the five model states plus the
+  system preflight (ffmpeg, NVIDIA driver). It reuses #57's GPU evaluation,
+  never provisions, and never reports runtimes, venvs, or our scripts; a
+  missing runtime is not part of the payload at all, and an absent model
+  carries its expected size for #54.
 - #55 (UI) shows one setup action wired to the same `provisionAll`, renders
   the step labels and mapped messages verbatim, and adds no paths, pins,
   version numbers, or runtime names to the form or settings.
@@ -756,6 +803,10 @@ Cover at least:
 - The uv provider prefers PATH, reuses the fetched copy on a rerun, fetches the pinned URL with the pinned checksum, and fails cleanly when the download or extraction fails.
 - The interpreter provider installs only missing versions, stamps them, and retries a failed install; the environment provider builds with the pinned indexes and packages, skips on a matching fingerprint, rebuilds on a changed or corrupt one, and leaves no stamp when the package install fails.
 - The download seam verifies SHA-256 before the file lands, and a mismatch or an HTTP failure leaves nothing behind.
+- Readiness reports ready and missing for each of the five models, with the resolved path, the bytes on disk when present, and the expected size when missing; the expected-size constants match the upstream repository totals.
+- The system preflight names ffmpeg and the NVIDIA driver; a failure carries a short message and a Linux and WSL2 install instruction, and an old driver names both versions. No runtime, venv, or helper-script data appears in the payload.
+- A present model's size is measured once inside the TTL; a missing path is checked live on every read and never measured; a cached size is dropped when the path disappears.
+- The assembled slice and the composed app serve `/v1/readiness`, and the ffmpeg and nvidia-smi probes are reused across reads inside their TTL.
 - Boot env: home, tools, venvs, scripts, SQLite, and media default under `~/.yuekbox`; explicit env overrides still win; `--home` moves the layout.
 - Config resolution per model: CLI flag > `config.yaml` > `<home>/models/<name>`, with each of the five keys covered and unrelated keys left alone.
 - Config CLI flags parse `--flag value` and `--flag=value`, the last occurrence wins, and an unknown or value-less flag fails loud.
