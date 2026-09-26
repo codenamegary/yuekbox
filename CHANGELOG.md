@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.0](https://github.com/codenamegary/yuekbox/compare/v0.2.0...v0.3.0) (2026-09-26)
+
+
+### Features
+
+* **build:** compile web + server into a single yuekbox executable ([#63](https://github.com/codenamegary/yuekbox/issues/63)) ([75f78e1](https://github.com/codenamegary/yuekbox/commit/75f78e1dc2546c949085441bb765b0c7bb261d0a))
+* **ci:** release binaries and a one-line installer ([#67](https://github.com/codenamegary/yuekbox/issues/67)) ([9153e97](https://github.com/codenamegary/yuekbox/commit/9153e97667445013aebdced517ee2dc5014689ec))
+* **contracts,server:** model readiness and system preflight ([#64](https://github.com/codenamegary/yuekbox/issues/64)) ([3f63220](https://github.com/codenamegary/yuekbox/commit/3f63220211e2f08359ca1e07321171f68fe5d7f7))
+* **server,contracts:** download models on request and prompt when one is needed ([#65](https://github.com/codenamegary/yuekbox/issues/65)) ([9039f57](https://github.com/codenamegary/yuekbox/commit/9039f57aceecea9f1bc7ab558421a06fd6601978))
+* **server:** provision Python, venvs, and the pinned runtime under ~/.yuekbox ([#61](https://github.com/codenamegary/yuekbox/issues/61)) ([5264529](https://github.com/codenamegary/yuekbox/commit/5264529d7b04e034d54bfaab2f77c73df79b522c))
+* **server:** resolve model paths from config.yaml and CLI flags ([#59](https://github.com/codenamegary/yuekbox/issues/59)) ([592dcca](https://github.com/codenamegary/yuekbox/commit/592dccaa63a711cd3a6cd07ddf01b9e9ebe68760))
+* **web,server:** model manager settings and live model path changes ([#66](https://github.com/codenamegary/yuekbox/issues/66)) ([7d2b4c3](https://github.com/codenamegary/yuekbox/commit/7d2b4c39fa596574e100bb44bb04155e2c2fcc4d))
+
+
+### Bug Fixes
+
+* **server,web:** address the review findings across the stack ([#73](https://github.com/codenamegary/yuekbox/issues/73)) ([7c7a0b6](https://github.com/codenamegary/yuekbox/commit/7c7a0b6e2292cd1810e6c801e9e7a169808b545d))
+* **server:** use the configured whisper model and report the real version ([#69](https://github.com/codenamegary/yuekbox/issues/69)) ([4987036](https://github.com/codenamegary/yuekbox/commit/498703697140744338626f7fd16ffaeba31ae614))
+
 ## [0.2.0](https://github.com/codenamegary/yuekbox/compare/v0.1.0...v0.2.0) (2026-09-24)
 
 
