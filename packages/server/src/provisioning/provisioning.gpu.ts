@@ -1,22 +1,21 @@
 import { Result } from "../shared/result"
 import { GpuFacts, GpuError, TorchRequirement } from "./provisioning.models"
-import { torchWheelIndexes } from "./provisioning.packages"
+import { torchWheelIndexUrl } from "./provisioning.packages"
 
 /**
  * CUDA 12 binaries run on any 12.x driver, per NVIDIA's minor version
- * compatibility rule. Every pinned torch build is a CUDA 12.x build, so this
- * is the floor that runs all of them:
+ * compatibility rule. The one pinned torch build is a CUDA 12.x build, so
+ * this is the floor that runs it:
  * https://docs.nvidia.com/deploy/cuda-compatibility/
  *
- * The yue2 environment wants the CUDA 12.8 wheels (the local reference
- * environment runs torch 2.10.0+cu128), so the requirement names the cu128
- * index. sheetsage2 and lyric-align sit on cu126 below it, same floor.
+ * The shared environment runs torch 2.10.0+cu128 (the tested local
+ * reference), so the requirement names the cu128 index.
  */
 export const minimumTorchDriverVersion = "525.60.13"
 
 export const torchRequirement: TorchRequirement = Object.freeze({
   cudaFamily: "12.x",
-  indexUrl: torchWheelIndexes.cu128,
+  indexUrl: torchWheelIndexUrl,
   minimumDriverVersion: minimumTorchDriverVersion,
 })
 

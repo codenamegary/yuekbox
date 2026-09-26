@@ -151,7 +151,7 @@ It serves the UI and the API on one port: <http://127.0.0.1:3000> (`WEB_PORT`
 moves it). The first start extracts the Python helpers into
 `~/.yuekbox/scripts`; `--home`, `--config`, `--yue2-model` and the other config
 flags behave exactly as they do in dev. `--provision` is still the full setup
-step (the Python environments and the helper scripts) and installs the same
+step (the Python environment and the helper scripts) and installs the same
 helpers. The binary needs no `node_modules`, no source tree, and no Bun.
 
 Cross-compile with `--target` and a local runtime:
@@ -170,7 +170,7 @@ exercises the release installer against a local HTTP server, and
 clean-machine install test.
 
 Yuekbox keeps everything it manages in `~/.yuekbox` (`--home` moves it): the Python
-runtimes under `tools/`, model defaults under `models/`, the Python environments under
+runtime under `tools/`, model defaults under `models/`, the Python environment under
 `venvs/`, our scripts under `scripts/`, and the SQLite file plus Song media under `data/`.
 The only thing you configure is where the five model files live:
 
@@ -188,9 +188,9 @@ asks about a checkout.
 
 ### 🎼 Reference covers and the extra audio passes
 
-Three optional pipelines ride along with a Song. `--provision` builds their
-environments, and the five model directories come from the models panel (download one,
-or point at a copy you already have).
+Three optional pipelines ride along with a Song, all sharing the one environment
+`--provision` builds. The five model directories come from the models panel (download
+one, or point at a copy you already have).
 
 **Reference covers** need [SheetSage2](https://huggingface.co/m-a-p/SheetSage2) and its
 MERT-v2-FullSong base model. Attach a song file and SheetSage2 transcribes its melody
@@ -411,17 +411,17 @@ yuekbox owns `~/.yuekbox` (override with `--home`):
 ```text
 ~/.yuekbox/
 ├── config.yaml           # the only user-editable file
-├── tools/                # uv and the managed Python interpreters
+├── tools/                # uv and the managed Python interpreter
 ├── models/<name>/        # the five model directories
-├── venvs/<name>/         # Python environments: yue2, sheetsage2, lyricalign
+├── venvs/python/         # the one shared Python environment
 ├── scripts/              # generate.py, transcribe.py, abc_tools.py, common.py, align.py
 └── data/                 # yuekbox.sqlite and per-Song media
 ```
 
 The scripts are ours (source: `packages/server/tools/`). The script installer
 (`packages/server/src/provisioning/`) copies them into `scripts/` flat and idempotently;
-provisioning builds the environments around the runtime pinned in
-`packages/server/src/runtime/runtime.pins.ts` and installs the interpreters under
+provisioning builds one shared environment around the runtime pinned in
+`packages/server/src/runtime/runtime.pins.ts` and installs the interpreter under
 `tools/`. The packaged binary embeds the same five files and extracts them into
 `scripts/` on every start, so a fresh download needs no copy step.
 
@@ -458,13 +458,10 @@ Server and runtime overrides (advanced; everything else under the home is intern
 | `SQLITE_PATH` | `~/.yuekbox/data/yuekbox.sqlite` | SQLite file |
 | `MEDIA_DIR` | `~/.yuekbox/data/media` | Per-Song folders: `generated_<songId>.mp3`, `score.abc`, `calibration.json`, `analysis.json`, `analysis/sheetsage2/`, `reference_score.abc`, `visualization.js`, `references/<name>_<ulid>.<ext>`; uploads land in `temp/` |
 | `FFMPEG_BIN` | `ffmpeg` | Encoder binary |
-| `YUE2_PYTHON` | `~/.yuekbox/venvs/yue2/bin/python` | YuE2 environment interpreter |
 | `YUE2_GPU_BUDGET` | `16` | GPU memory budget in GiB, passed to `generate.py` |
-| `SHEETSAGE2_PYTHON` | `~/.yuekbox/venvs/sheetsage2/bin/python` | SheetSage2 environment interpreter |
 | `SHEETSAGE2_SCRIPT` | `~/.yuekbox/scripts/transcribe.py` | SheetSage2 entrypoint |
 | `SHEETSAGE2_DEVICE` | `cuda` | Torch device for SheetSage2 |
 | `SHEETSAGE2_OFFLINE` | on | Set `0` to let Hugging Face resolve and download through its cache |
-| `LYRIC_ALIGN_PYTHON` | `~/.yuekbox/venvs/lyricalign/bin/python` | lyric-align environment interpreter |
 | `LYRIC_ALIGN_SCRIPT` | `~/.yuekbox/scripts/align.py` | lyric-align entrypoint |
 | `LYRIC_ALIGN_DEVICE` | `cuda:0` | Torch device for the aligner |
 | `REFERENCE_MAX_BYTES` | `26214400` (25 MiB) | Upload cap for reference audio |

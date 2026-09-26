@@ -30,13 +30,21 @@ test("defaults every managed path under ~/.yuekbox", async () => {
   })
   expect(boot.sqlitePath).toBe(join(home, "data", "yuekbox.sqlite"))
   expect(boot.mediaDir).toBe(join(home, "data", "media"))
-  expect(boot.yue2Python).toBe(join(home, "venvs/yue2/bin/python"))
+  expect(boot.python).toBe(join(home, "venvs/python/bin/python"))
   expect(boot.generateScript).toBe(join(home, "scripts/generate.py"))
-  expect(boot.sheetsage2Python).toBe(join(home, "venvs/sheetsage2/bin/python"))
   expect(boot.sheetsage2Script).toBe(join(home, "scripts/transcribe.py"))
-  expect(boot.lyricAlignPython).toBe(join(home, "venvs/lyricalign/bin/python"))
   expect(boot.lyricAlignScript).toBe(join(home, "scripts/align.py"))
   expect(boot.provision).toBe(false)
+})
+
+test("one shared interpreter serves every Python pass", async () => {
+  const boot = await resolveBootEnv(withInput({}))
+  const home = "/home/u/.yuekbox"
+
+  expect(boot.python).toBe(join(home, "venvs/python/bin/python"))
+  expect(Object.keys(boot)).not.toContain("yue2Python")
+  expect(Object.keys(boot)).not.toContain("sheetsage2Python")
+  expect(Object.keys(boot)).not.toContain("lyricAlignPython")
 })
 
 test("--provision reaches the boot env", async () => {
@@ -69,10 +77,8 @@ test("explicit env overrides win over the home defaults", async () => {
         PORT: "9000",
         SQLITE_PATH: "/srv/db/yuekbox.sqlite",
         MEDIA_DIR: "/srv/media",
-        YUE2_PYTHON: "/opt/yue2/bin/python",
-        SHEETSAGE2_PYTHON: "/opt/sheetsage2/bin/python",
+        YUEKBOX_PYTHON: "/opt/yuekbox/bin/python",
         SHEETSAGE2_SCRIPT: "/opt/sheetsage2/transcribe.py",
-        LYRIC_ALIGN_PYTHON: "/opt/lyricalign/bin/python",
         LYRIC_ALIGN_SCRIPT: "/opt/lyricalign/align.py",
         YUE2_GPU_BUDGET: "8",
         FFMPEG_BIN: "/usr/bin/ffmpeg",
@@ -88,10 +94,8 @@ test("explicit env overrides win over the home defaults", async () => {
   expect(boot.port).toBe(9000)
   expect(boot.sqlitePath).toBe("/srv/db/yuekbox.sqlite")
   expect(boot.mediaDir).toBe("/srv/media")
-  expect(boot.yue2Python).toBe("/opt/yue2/bin/python")
-  expect(boot.sheetsage2Python).toBe("/opt/sheetsage2/bin/python")
+  expect(boot.python).toBe("/opt/yuekbox/bin/python")
   expect(boot.sheetsage2Script).toBe("/opt/sheetsage2/transcribe.py")
-  expect(boot.lyricAlignPython).toBe("/opt/lyricalign/bin/python")
   expect(boot.lyricAlignScript).toBe("/opt/lyricalign/align.py")
   expect(boot.gpuBudget).toBe(8)
   expect(boot.ffmpegBin).toBe("/usr/bin/ffmpeg")
@@ -110,7 +114,7 @@ test("--home moves the whole layout and the config file", async () => {
   expect(boot.configFilePath).toBe("/srv/yuekbox/config.yaml")
   expect(boot.modelPaths.yue2).toBe("/srv/yuekbox/models/YuE2-3B")
   expect(boot.sqlitePath).toBe("/srv/yuekbox/data/yuekbox.sqlite")
-  expect(boot.yue2Python).toBe("/srv/yuekbox/venvs/yue2/bin/python")
+  expect(boot.python).toBe("/srv/yuekbox/venvs/python/bin/python")
 })
 
 test("--config points at another config file and leaves the layout alone", async () => {

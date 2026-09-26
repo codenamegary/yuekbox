@@ -24,7 +24,11 @@ export const homeLayout = (home: string): HomeLayout =>
     data: join(home, "data"),
   })
 
-export const venvPath = (home: string, name: string): string => join(homeLayout(home).venvs, name)
+/** The one shared environment every Python pass runs in. */
+export const venvPath = (home: string): string => join(homeLayout(home).venvs, "python")
+
+/** The shared environment's interpreter, the one every adapter runs. */
+export const pythonPath = (home: string): string => join(venvPath(home), "bin", "python")
 
 export const defaultHome = (osHome: string): string => join(osHome, ".yuekbox")
 
@@ -37,21 +41,12 @@ export const modelDirectoryNames = Object.freeze({
   whisper: "whisper-large-v3-turbo",
 })
 
-export const yue2PythonPath = (home: string): string =>
-  join(homeLayout(home).venvs, "yue2", "bin", "python")
-
 /** Our generate entrypoint, installed by the script installer. */
 export const generateScriptPath = (home: string): string =>
   join(homeLayout(home).scripts, "generate.py")
 
-export const sheetsage2PythonPath = (home: string): string =>
-  join(homeLayout(home).venvs, "sheetsage2", "bin", "python")
-
 export const sheetsage2ScriptPath = (home: string): string =>
   join(homeLayout(home).scripts, "transcribe.py")
-
-export const lyricAlignPythonPath = (home: string): string =>
-  join(homeLayout(home).venvs, "lyricalign", "bin", "python")
 
 export const lyricAlignScriptPath = (home: string): string =>
   join(homeLayout(home).scripts, "align.py")

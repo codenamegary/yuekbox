@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { join } from "node:path"
 import { err, ok } from "../shared/result"
 import { ProvisionProgress, UvTool, VenvRequest } from "./provisioning.models"
-import { venvPins } from "./provisioning.packages"
+import { venvPin } from "./provisioning.packages"
 import {
   EnsurePython,
   EnsureUv,
@@ -60,7 +60,7 @@ const harness = (stubs: Stubs = {}): Harness => {
     ensureVenv:
       stubs.ensureVenv ??
       (async (_uv, request) => {
-        calls.push(request.name)
+        calls.push("environment")
         venvs.push(request)
         return ok({ status: "installed" })
       }),
@@ -86,23 +86,13 @@ test("runs every piece in order and reports one completed step each", async () =
 
   expect(result.ok).toBe(true)
   if (!result.ok) return
-  expect(state.calls).toEqual([
-    "uv",
-    "python",
-    "gpu",
-    "yue2",
-    "sheetsage2",
-    "lyricalign",
-    "scripts",
-  ])
+  expect(state.calls).toEqual(["uv", "python", "gpu", "environment", "scripts"])
   expect(result.value.home).toBe(home)
   expect(result.value.steps.map((step) => step.step)).toEqual([
     "uv",
     "python",
     "gpu",
-    "yue2",
-    "sheetsage2",
-    "lyricalign",
+    "environment",
     "scripts",
   ])
   expect(result.value.steps.every((step) => step.status === "completed")).toBe(true)
@@ -120,12 +110,8 @@ test("emits a started event before each piece and a final status after it", asyn
     "python:completed",
     "gpu:started",
     "gpu:completed",
-    "yue2:started",
-    "yue2:completed",
-    "sheetsage2:started",
-    "sheetsage2:completed",
-    "lyricalign:started",
-    "lyricalign:completed",
+    "environment:started",
+    "environment:completed",
     "scripts:started",
     "scripts:completed",
   ])
@@ -133,26 +119,21 @@ test("emits a started event before each piece and a final status after it", asyn
   expect(state.progress[1]?.label).toBe("Setting up yuekbox tools")
 })
 
-test("builds one venv per piece under <home>/venvs with the manifest pins", async () => {
+test("builds exactly one shared venv under <home>/venvs with the manifest pin", async () => {
   const state = harness()
 
   await run(state)
 
-  expect(state.venvs.map((request) => request.dir)).toEqual([
-    join(home, "venvs/yue2"),
-    join(home, "venvs/sheetsage2"),
-    join(home, "venvs/lyricalign"),
-  ])
-  for (const request of state.venvs) {
-    const pin = venvPins[request.name as keyof typeof venvPins]
-    if (pin === undefined) throw new Error(`missing pin for ${request.name}`)
-    expect(request.pythonVersion).toBe(pin.python)
-    expect(request.packages).toEqual(pin.packages)
-    expect(request.extraIndexUrl).toBe(pin.extraIndexUrl)
-    expect(request.fingerprint.length).toBeGreaterThan(0)
-  }
-  expect(state.venvs[0]?.indexUrl).toBe("https://download.pytorch.org/whl/cu128")
-  expect(state.venvs[1]?.indexUrl).toBe("https://download.pytorch.org/whl/cu126")
+  expect(state.venvs).toHaveLength(1)
+  const request = state.venvs[0]
+  if (request === undefined) throw new Error("no venv request")
+  expect(request.dir).toBe(join(home, "venvs/python"))
+  expect(request.name).toBe(venvPin.name)
+  expect(request.pythonVersion).toBe(venvPin.python)
+  expect(request.packages).toEqual(venvPin.packages)
+  expect(request.extraIndexUrl).toBe(venvPin.extraIndexUrl)
+  expect(request.fingerprint.length).toBeGreaterThan(0)
+  expect(request.indexUrl).toBe("https://download.pytorch.org/whl/cu128")
   expect(state.scriptDirs).toEqual([join(home, "scripts")])
 })
 
@@ -195,12 +176,9 @@ test("a graphics failure stops the run before any venv is built", async () => {
   expect(state.calls).toEqual(["uv", "python"])
 })
 
-test("a venv failure names its own piece and stops the later pieces", async () => {
+test("a venv failure names the shared environment and stops the later pieces", async () => {
   const state = harness({
-    ensureVenv: async (_uv, request) =>
-      request.name === "sheetsage2"
-        ? err({ kind: "venv_failed", detail: "uv exited 2" })
-        : ok({ status: "installed" }),
+    ensureVenv: async () => err({ kind: "venv_failed", detail: "uv exited 2" }),
   })
 
   const result = await run(state)
@@ -208,14 +186,14 @@ test("a venv failure names its own piece and stops the later pieces", async () =
   expect(result.ok).toBe(false)
   if (result.ok) return
   expect(result.error).toEqual({
-    step: "sheetsage2",
-    label: "Installing reference transcription",
+    step: "environment",
+    label: "Installing the song tools",
     kind: "venv_failed",
     detail: "uv exited 2",
   })
   expect(state.progress.at(-1)).toEqual({
-    step: "sheetsage2",
-    label: "Installing reference transcription",
+    step: "environment",
+    label: "Installing the song tools",
     status: "failed",
   })
 })
@@ -252,12 +230,10 @@ test("completed pieces report skipped on a rerun", async () => {
     "uv:completed",
     "python:skipped",
     "gpu:completed",
-    "yue2:skipped",
-    "sheetsage2:skipped",
-    "lyricalign:skipped",
+    "environment:skipped",
     "scripts:completed",
   ])
-  expect(state.progress.filter((event) => event.status === "skipped")).toHaveLength(4)
+  expect(state.progress.filter((event) => event.status === "skipped")).toHaveLength(2)
 })
 
 test("the return type carries the same steps as the progress stream", async () => {

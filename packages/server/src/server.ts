@@ -93,17 +93,17 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
 
   const ffmpegState = await checkFfmpeg(boot.ffmpegBin)
   const yue2State = checkYue2({
-    pythonBin: boot.yue2Python,
+    pythonBin: boot.python,
     scriptPath: boot.generateScript,
     model: boot.modelPaths.yue2,
     vae: boot.modelPaths.yue2Vae,
   })
   const sheetsage2State = checkSheetsage2({
-    pythonBin: boot.sheetsage2Python,
+    pythonBin: boot.python,
     scriptPath: boot.sheetsage2Script,
   })
   const lyricAlignState = checkLyricAlign({
-    pythonBin: boot.lyricAlignPython,
+    pythonBin: boot.python,
     scriptPath: boot.lyricAlignScript,
   })
   if (ffmpegState === "missing") {
@@ -113,12 +113,12 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
   }
   if (yue2State === "missing") {
     console.warn(
-      `yue2 not found (python=${boot.yue2Python}, script=${boot.generateScript}, model=${boot.modelPaths.yue2}, vae=${boot.modelPaths.yue2Vae}); generates will fail`,
+      `yue2 not found (python=${boot.python}, script=${boot.generateScript}, model=${boot.modelPaths.yue2}, vae=${boot.modelPaths.yue2Vae}); generates will fail`,
     )
   }
   if (sheetsage2State === "missing") {
     console.warn(
-      `sheetsage2 not found (python=${boot.sheetsage2Python}, script=${boot.sheetsage2Script}, model=${boot.modelPaths.sheetsage2}); reference covers will fail`,
+      `sheetsage2 not found (python=${boot.python}, script=${boot.sheetsage2Script}, model=${boot.modelPaths.sheetsage2}); reference covers will fail`,
     )
   } else if (!existsSync(boot.modelPaths.sheetsage2)) {
     console.warn(
@@ -127,7 +127,7 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
   }
   if (lyricAlignState === "missing") {
     console.warn(
-      `lyric-align not found (python=${boot.lyricAlignPython}, script=${boot.lyricAlignScript}); songs will complete without lyric cues`,
+      `lyric-align not found (python=${boot.python}, script=${boot.lyricAlignScript}); songs will complete without lyric cues`,
     )
   }
 
@@ -135,7 +135,7 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
   const serviceState: { value: ServiceState } = { value: "starting" }
 
   const sheetsage2Env: Sheetsage2AdapterEnv = {
-    pythonBin: boot.sheetsage2Python,
+    pythonBin: boot.python,
     scriptPath: boot.sheetsage2Script,
     device: boot.sheetsage2Device,
     offline: boot.sheetsage2Offline,
@@ -144,7 +144,7 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
   }
 
   const lyricAlignEnv: LyricAlignAdapterEnv = {
-    pythonBin: boot.lyricAlignPython,
+    pythonBin: boot.python,
     scriptPath: boot.lyricAlignScript,
     device: boot.lyricAlignDevice,
     cwd: boot.home,
@@ -165,7 +165,7 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
       flags: boot.flags,
     },
     runYue2Generate: makeRunYue2Generate({
-      pythonBin: boot.yue2Python,
+      pythonBin: boot.python,
       scriptPath: boot.generateScript,
       gpuBudget: boot.gpuBudget,
       cwd: boot.home,

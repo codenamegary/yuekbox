@@ -3,13 +3,11 @@ import { ModelPathOverrides, ModelPaths } from "contracts/http/config"
 import {
   defaultHome,
   generateScriptPath,
-  lyricAlignPythonPath,
   lyricAlignScriptPath,
   mediaDir,
-  sheetsage2PythonPath,
+  pythonPath,
   sheetsage2ScriptPath,
   sqlitePath,
-  yue2PythonPath,
 } from "../shared/home"
 import { parseCliArgs } from "./config.argv"
 import { resolveModelPaths } from "./config.resolve"
@@ -25,15 +23,14 @@ export type BootEnv = Readonly<{
   port: number
   sqlitePath: string
   mediaDir: string
-  yue2Python: string
+  /** The one shared interpreter every Python pass runs. */
+  python: string
   generateScript: string
   gpuBudget: number
   ffmpegBin: string
-  sheetsage2Python: string
   sheetsage2Script: string
   sheetsage2Device: string
   sheetsage2Offline: boolean
-  lyricAlignPython: string
   lyricAlignScript: string
   lyricAlignDevice: string
   referenceMaxBytes: number
@@ -75,15 +72,13 @@ export const resolveBootEnv = async (input: BootEnvInput): Promise<BootEnv> => {
     port: Number(env.PORT ?? 8787),
     sqlitePath: env.SQLITE_PATH ?? sqlitePath(home),
     mediaDir: env.MEDIA_DIR ?? mediaDir(home),
-    yue2Python: env.YUE2_PYTHON ?? yue2PythonPath(home),
+    python: env.YUEKBOX_PYTHON ?? pythonPath(home),
     generateScript: generateScriptPath(home),
     gpuBudget: Number(env.YUE2_GPU_BUDGET ?? 16),
     ffmpegBin: env.FFMPEG_BIN ?? "ffmpeg",
-    sheetsage2Python: env.SHEETSAGE2_PYTHON ?? sheetsage2PythonPath(home),
     sheetsage2Script: env.SHEETSAGE2_SCRIPT ?? sheetsage2ScriptPath(home),
     sheetsage2Device: env.SHEETSAGE2_DEVICE ?? "cuda",
     sheetsage2Offline: env.SHEETSAGE2_OFFLINE !== "0",
-    lyricAlignPython: env.LYRIC_ALIGN_PYTHON ?? lyricAlignPythonPath(home),
     lyricAlignScript: env.LYRIC_ALIGN_SCRIPT ?? lyricAlignScriptPath(home),
     lyricAlignDevice: env.LYRIC_ALIGN_DEVICE ?? "cuda:0",
     referenceMaxBytes: Number(env.REFERENCE_MAX_BYTES ?? 26214400),

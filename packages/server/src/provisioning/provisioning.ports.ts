@@ -22,7 +22,7 @@ import {
  * Copies yuekbox's Python tools into `<home>/scripts/`, flattened so the
  * scripts can import each other as siblings. Idempotent: a rerun overwrites
  * our own files and nothing else. Provisioning calls this before it builds
- * the venvs that run them.
+ * the environment that runs them.
  */
 export type InstallScripts = (
   scriptsDir: string,
