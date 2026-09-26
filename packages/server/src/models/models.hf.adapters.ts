@@ -2,15 +2,13 @@ import { createHash } from "node:crypto"
 import { createReadStream } from "node:fs"
 import { mkdir, open, rename, stat, unlink } from "node:fs/promises"
 import { dirname } from "node:path"
+import { describeError } from "../shared/describe"
 import { err, ok, Result } from "../shared/result"
 import { ModelDownloadFailure } from "./models.models"
 import { DownloadModelFile, ReadModelTree } from "./models.ports"
 import { modelTreeUrl, parseModelTree } from "./models.tree"
 
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
-
-const describeError = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 export const makeReadModelTree =
   (fetchImpl: FetchLike): ReadModelTree =>

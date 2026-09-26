@@ -1,6 +1,7 @@
 import { dirname, join } from "node:path"
 import { ModelPaths } from "contracts/http/config"
 import { ReadCurrentModelPaths } from "../config/config.current"
+import { describeError } from "../shared/describe"
 import { err, ok, Result } from "../shared/result"
 import {
   downloadConfirmationThresholdBytes,
@@ -60,9 +61,6 @@ type Job = {
   currentFile: string | null
   errorDetail?: string
 }
-
-const moveFailureDetail = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 const presentSnapshot = (
   key: ModelDownloadKey,
@@ -217,7 +215,7 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
         jobs.delete(key)
         return
       }
-      fail({ kind: "move_failed", detail: moveFailureDetail(error) })
+      fail({ kind: "move_failed", detail: describeError(error) })
       return
     }
     jobs.delete(key)

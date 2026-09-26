@@ -12,6 +12,7 @@ import { homedir } from "node:os"
 // Build-time SPA: the compiler bundles the HTML entry and every asset it
 // references (Tailwind CSS included) into the executable.
 import index from "../../web/src/index.html"
+import { makeApiProxy } from "contracts/http/proxy"
 import { BootEnv } from "./config/config.boot"
 import { makeInstallScripts, toolsRoot } from "./provisioning/provisioning.scripts.adapters"
 import { startServer } from "./server"
@@ -43,23 +44,9 @@ const api = await startServer({
   ensureScripts,
 })
 
-// One proxy hop to the API, mirroring packages/web/src/serve.ts so streaming
-// and error responses behave the same in dev and in the binary. The server's
-// type libs (no DOM) reject the `new Request(target, request)` form web uses,
-// but fetch accepts the original Request as init and behaves identically.
-const proxyToApi = async (request: Request): Promise<Response> => {
-  const url = new URL(request.url)
-  const target = new URL(`${url.pathname}${url.search}`, `http://${api.host}:${api.port}`)
-  const upstream = await fetch(target, request)
-  const body = await upstream.arrayBuffer()
-  const headers = new Headers(upstream.headers)
-  headers.delete("content-encoding")
-  return new Response(body, {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    headers,
-  })
-}
+// One proxy hop to the API, shared with packages/web/src/serve.ts so
+// streaming and error responses behave the same in dev and in the binary.
+const proxyToApi = makeApiProxy(`http://${api.host}:${api.port}`)
 
 const web = Bun.serve({
   hostname: webHost,

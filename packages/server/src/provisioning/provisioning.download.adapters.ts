@@ -1,13 +1,11 @@
 import { createHash } from "node:crypto"
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
+import { describeError } from "../shared/describe"
 import { err, ok } from "../shared/result"
 import { DownloadFile } from "./provisioning.ports"
 
 export type FetchLike = (url: string) => Promise<Response>
-
-const describeError = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 /**
  * The one network seam. Fetches a pinned artifact to `<dest>.part`, checks

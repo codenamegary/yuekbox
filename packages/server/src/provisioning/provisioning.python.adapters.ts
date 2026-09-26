@@ -2,6 +2,7 @@ import { existsSync } from "node:fs"
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { envWithout, ProcessOutcome, ProcessRunner } from "../shared/process"
+import { describeError } from "../shared/describe"
 import { err, ok } from "../shared/result"
 import { homeLayout } from "../shared/home"
 import { z } from "zod"
@@ -42,9 +43,6 @@ export const pythonStampPath = (home: string, version: string): string =>
 /** `<venv>/.yuekbox.json`, the build stamp carrying the pin fingerprint. */
 export const venvStampPath = (dir: string): string => join(dir, ".yuekbox.json")
 
-const describe = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
-
 const describeExit = (outcome: { exitCode: number; stderrTail: string }, what: string): string =>
   outcome.stderrTail.trim() || `${what} exited with code ${outcome.exitCode}`
 
@@ -66,7 +64,7 @@ export const makeEnsurePython = (env: PythonAdapterEnv): EnsurePython => {
       } catch (error: unknown) {
         return err({
           kind: "python_unavailable",
-          detail: `could not create ${installDir}: ${describe(error)}`,
+          detail: `could not create ${installDir}: ${describeError(error)}`,
         })
       }
 
@@ -79,7 +77,10 @@ export const makeEnsurePython = (env: PythonAdapterEnv): EnsurePython => {
           uvEnv(env.home),
         )
       } catch (error: unknown) {
-        return err({ kind: "python_unavailable", detail: `could not run uv: ${describe(error)}` })
+        return err({
+          kind: "python_unavailable",
+          detail: `could not run uv: ${describeError(error)}`,
+        })
       }
       if (outcome.exitCode !== 0) {
         return err({
@@ -97,7 +98,7 @@ export const makeEnsurePython = (env: PythonAdapterEnv): EnsurePython => {
       } catch (error: unknown) {
         return err({
           kind: "python_unavailable",
-          detail: `could not stamp ${version}: ${describe(error)}`,
+          detail: `could not stamp ${version}: ${describeError(error)}`,
         })
       }
       installedAny = true
@@ -143,7 +144,7 @@ export const makeEnsureVenv = (env: PythonAdapterEnv): EnsureVenv => {
     } catch (error: unknown) {
       return err({
         kind: "venv_failed",
-        detail: `could not clear ${request.dir}: ${describe(error)}`,
+        detail: `could not clear ${request.dir}: ${describeError(error)}`,
       })
     }
 
@@ -156,7 +157,7 @@ export const makeEnsureVenv = (env: PythonAdapterEnv): EnsureVenv => {
         uvEnv(env.home),
       )
     } catch (error: unknown) {
-      return err({ kind: "venv_failed", detail: `could not run uv: ${describe(error)}` })
+      return err({ kind: "venv_failed", detail: `could not run uv: ${describeError(error)}` })
     }
     if (venv.exitCode !== 0) {
       return err({
@@ -185,7 +186,7 @@ export const makeEnsureVenv = (env: PythonAdapterEnv): EnsureVenv => {
         uvEnv(env.home),
       )
     } catch (error: unknown) {
-      return err({ kind: "venv_failed", detail: `could not run uv: ${describe(error)}` })
+      return err({ kind: "venv_failed", detail: `could not run uv: ${describeError(error)}` })
     }
     if (install.exitCode !== 0) {
       return err({
@@ -212,7 +213,7 @@ export const makeEnsureVenv = (env: PythonAdapterEnv): EnsureVenv => {
     } catch (error: unknown) {
       return err({
         kind: "venv_failed",
-        detail: `could not stamp ${request.dir}: ${describe(error)}`,
+        detail: `could not stamp ${request.dir}: ${describeError(error)}`,
       })
     }
 

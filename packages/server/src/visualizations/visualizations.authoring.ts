@@ -1,3 +1,4 @@
+import { describeError } from "../shared/describe"
 import { Song } from "../songs/songs.models"
 import { visualizationErrorDetail } from "./visualizations.models"
 import { AuthorVisualization, ReadAnalysis, WriteVisualizationCode } from "./visualizations.ports"
@@ -15,9 +16,6 @@ export type VisualizationAuthoring = Readonly<{
   start: (song: Song) => void
   drain: () => Promise<void>
 }>
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 /**
  * Per-Song authoring state for the life of the process: which runs are in
@@ -47,12 +45,14 @@ export const makeVisualizationAuthoring = (
       } catch (error: unknown) {
         failures.set(
           song.id,
-          visualizationErrorDetail(`could not write the visualization file: ${messageOf(error)}`),
+          visualizationErrorDetail(
+            `could not write the visualization file: ${describeError(error)}`,
+          ),
         )
         deps.logError?.("visualization file write failed", error)
       }
     } catch (error: unknown) {
-      failures.set(song.id, visualizationErrorDetail(messageOf(error)))
+      failures.set(song.id, visualizationErrorDetail(describeError(error)))
       deps.logError?.("visualization authoring failed", error)
     }
   }

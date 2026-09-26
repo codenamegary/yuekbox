@@ -2,6 +2,7 @@ import { existsSync } from "node:fs"
 import { mkdir, rename, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { ProcessOutcome, ProcessRunner } from "../shared/process"
+import { describeError } from "../shared/describe"
 import { err, ok } from "../shared/result"
 import { homeLayout } from "../shared/home"
 import { uvPin } from "./provisioning.packages"
@@ -66,7 +67,7 @@ export const makeEnsureUv = (env: EnsureUvEnv): EnsureUv => {
     } catch (error: unknown) {
       return err({
         kind: "uv_unavailable",
-        detail: `could not create ${tools}: ${describe(error)}`,
+        detail: `could not create ${tools}: ${describeError(error)}`,
       })
     }
 
@@ -80,7 +81,7 @@ export const makeEnsureUv = (env: EnsureUvEnv): EnsureUv => {
     } catch (error: unknown) {
       return err({
         kind: "uv_unavailable",
-        detail: `could not extract the archive: ${describe(error)}`,
+        detail: `could not extract the archive: ${describeError(error)}`,
       })
     }
     if (outcome.exitCode !== 0) {
@@ -103,13 +104,10 @@ export const makeEnsureUv = (env: EnsureUvEnv): EnsureUv => {
     } catch (error: unknown) {
       return err({
         kind: "uv_unavailable",
-        detail: `could not install uv into ${installDir}: ${describe(error)}`,
+        detail: `could not install uv into ${installDir}: ${describeError(error)}`,
       })
     }
 
     return ok({ path: managed })
   }
 }
-
-const describe = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)

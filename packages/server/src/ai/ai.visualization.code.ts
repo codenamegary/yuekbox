@@ -1,7 +1,5 @@
+import { describeError } from "../shared/describe"
 import { cleanAgentText } from "./ai.prompts"
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 const fencedAnywhere = /```[a-zA-Z0-9]*\n([\s\S]*?)```/
 
@@ -210,7 +208,7 @@ export const smokeVisualization = (code: string): VisualizationSmokeResult => {
   try {
     factory = makeFactory(code)
   } catch (error) {
-    return { ok: false, detail: `the code did not compile: ${messageOf(error)}` }
+    return { ok: false, detail: `the code did not compile: ${describeError(error)}` }
   }
   if (typeof factory !== "function") {
     return { ok: false, detail: "the reply was not a function" }
@@ -257,6 +255,6 @@ export const smokeVisualization = (code: string): VisualizationSmokeResult => {
     instance.dispose()
     return { ok: true }
   } catch (error) {
-    return { ok: false, detail: `the visualization threw while drawing: ${messageOf(error)}` }
+    return { ok: false, detail: `the visualization threw while drawing: ${describeError(error)}` }
   }
 }
