@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs"
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
-import { ProcessOutcome, ProcessRunner } from "../shared/process"
+import { envWithout, ProcessOutcome, ProcessRunner } from "../shared/process"
 import { err, ok } from "../shared/result"
 import { homeLayout } from "../shared/home"
 import { EnsurePython, EnsureVenv } from "./provisioning.ports"
@@ -18,12 +18,16 @@ export const managedPythonDir = (home: string): string => join(homeLayout(home).
 export const uvCacheDir = (home: string): string => join(homeLayout(home).tools, "cache")
 
 /**
- * Everything uv gets from us: interpreters under the home, downloads cached
- * under the home, and nothing in the user's own directories.
+ * Everything uv gets from us: the parent environment minus the user's own
+ * uv configuration (every `UV_*` variable, and their uv.toml too through
+ * `UV_NO_CONFIG`), interpreters under the home, and downloads cached under
+ * the home. Nothing in the user's setup can redirect the install.
  */
 const uvEnv = (home: string): Readonly<Record<string, string>> => ({
+  ...envWithout(["UV_"]),
   UV_PYTHON_INSTALL_DIR: managedPythonDir(home),
   UV_CACHE_DIR: uvCacheDir(home),
+  UV_NO_CONFIG: "1",
 })
 
 /**
@@ -83,11 +87,18 @@ export const makeEnsurePython = (env: PythonAdapterEnv): EnsurePython => {
         })
       }
 
-      await writeFile(
-        pythonStampPath(env.home, version),
-        `${JSON.stringify({ version }, null, 2)}\n`,
-        "utf8",
-      )
+      try {
+        await writeFile(
+          pythonStampPath(env.home, version),
+          `${JSON.stringify({ version }, null, 2)}\n`,
+          "utf8",
+        )
+      } catch (error: unknown) {
+        return err({
+          kind: "python_unavailable",
+          detail: `could not stamp ${version}: ${describe(error)}`,
+        })
+      }
       installedAny = true
     }
 

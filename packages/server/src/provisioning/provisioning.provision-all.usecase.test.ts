@@ -13,7 +13,7 @@ import {
 import { makeProvisionAll } from "./provisioning.provision-all.usecase"
 
 const home = "/home/u/.yuekbox"
-const uvTool: UvTool = { path: "/usr/local/bin/uv", source: "system" }
+const uvTool: UvTool = { path: "/usr/local/bin/uv" }
 const gpuOk: ReadGpuFacts = async () => ({ kind: "nvidia", driverVersion: "616.56" })
 
 type Stubs = Readonly<{
@@ -217,7 +217,7 @@ test("a script failure surfaces as the scripts piece", async () => {
 
 test("completed pieces report skipped on a rerun", async () => {
   const state = harness({
-    ensureUv: async () => ok({ path: "/usr/local/bin/uv", source: "system" }),
+    ensureUv: async () => ok({ path: "/usr/local/bin/uv" }),
     ensurePython: async () => ok({ status: "ready" }),
     ensureVenv: async (_uv, request) => {
       state.venvs.push(request)

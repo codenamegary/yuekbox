@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs"
-import { mkdir } from "node:fs/promises"
+import { mkdir, rename, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { ProcessOutcome, ProcessRunner } from "../shared/process"
 import { err, ok } from "../shared/result"
@@ -9,8 +9,6 @@ import { DownloadFile, EnsureUv } from "./provisioning.ports"
 
 export type EnsureUvEnv = Readonly<{
   home: string
-  /** Injectable so tests never touch the real PATH. */
-  findExecutable: (name: string) => string | null
   downloadFile: DownloadFile
   runProcess: ProcessRunner
 }>
@@ -23,23 +21,35 @@ export const managedUvPath = (home: string): string =>
 export const uvArchivePath = (home: string): string =>
   join(homeLayout(home).tools, `uv-${uvPin.version}.tar.gz`)
 
+/** `<home>/tools/uv-<version>.json`, written only after a verified install. */
+export const uvStampPath = (home: string): string =>
+  join(homeLayout(home).tools, `uv-${uvPin.version}.json`)
+
+/** Where an archive extracts before it is moved into place. */
+export const uvStagingPath = (home: string): string =>
+  join(homeLayout(home).tools, `uv-${uvPin.version}.staging`)
+
 /**
- * Finds the uv a machine already has, else fetches the pinned release into
- * `<home>/tools/`. The second run sees the extracted binary and returns it
- * without a download, so an interrupted first run resumes at the fetch.
+ * Fetches the pinned uv release into `<home>/tools/`. A uv found on PATH is
+ * deliberately ignored: an unknown uv version fails in slow, confusing ways
+ * (an old one rejects `--no-bin` with a message that reads like a network
+ * problem), and the pinned one costs one download per machine. The extract
+ * lands in a staging directory and is renamed into place only once the
+ * binary is present, so an interrupted run never leaves a half-extracted
+ * copy that looks installed. The stamp is the last thing written, and a
+ * rerun without it starts over.
  */
 export const makeEnsureUv = (env: EnsureUvEnv): EnsureUv => {
   return async () => {
-    const onPath = env.findExecutable("uv")
-    if (onPath !== null) {
-      return ok({ path: onPath, source: "system" })
-    }
-
     const managed = managedUvPath(env.home)
-    if (existsSync(managed)) {
-      return ok({ path: managed, source: "managed" })
+    const stamp = uvStampPath(env.home)
+    if (existsSync(managed) && existsSync(stamp)) {
+      return ok({ path: managed })
     }
 
+    const tools = homeLayout(env.home).tools
+    const installDir = join(tools, `uv-${uvPin.version}`)
+    const staging = uvStagingPath(env.home)
     const archive = uvArchivePath(env.home)
     const downloaded = await env.downloadFile({
       url: uvPin.archiveUrl,
@@ -50,20 +60,20 @@ export const makeEnsureUv = (env: EnsureUvEnv): EnsureUv => {
       return err({ kind: "uv_unavailable", detail: downloaded.error.detail })
     }
 
-    const installDir = join(homeLayout(env.home).tools, `uv-${uvPin.version}`)
     try {
-      await mkdir(installDir, { recursive: true })
+      await mkdir(tools, { recursive: true })
+      await rm(staging, { recursive: true, force: true })
     } catch (error: unknown) {
       return err({
         kind: "uv_unavailable",
-        detail: `could not create ${installDir}: ${describe(error)}`,
+        detail: `could not create ${tools}: ${describe(error)}`,
       })
     }
 
     let outcome: ProcessOutcome
     try {
       outcome = await env.runProcess(
-        ["tar", "-xzf", archive, "--strip-components=1", "-C", installDir],
+        ["tar", "-xzf", archive, "--strip-components=1", "-C", staging],
         env.home,
         () => undefined,
       )
@@ -74,17 +84,30 @@ export const makeEnsureUv = (env: EnsureUvEnv): EnsureUv => {
       })
     }
     if (outcome.exitCode !== 0) {
+      await rm(staging, { recursive: true, force: true }).catch(() => undefined)
       const detail = outcome.stderrTail.trim() || `tar exited with code ${outcome.exitCode}`
       return err({ kind: "uv_unavailable", detail })
     }
-    if (!existsSync(managed)) {
+    if (!existsSync(join(staging, "uv"))) {
+      await rm(staging, { recursive: true, force: true }).catch(() => undefined)
       return err({
         kind: "uv_unavailable",
         detail: `the archive did not contain a uv binary under uv-${uvPin.version}`,
       })
     }
 
-    return ok({ path: managed, source: "managed" })
+    try {
+      await rm(installDir, { recursive: true, force: true })
+      await rename(staging, installDir)
+      await writeFile(stamp, `${JSON.stringify({ version: uvPin.version }, null, 2)}\n`, "utf8")
+    } catch (error: unknown) {
+      return err({
+        kind: "uv_unavailable",
+        detail: `could not install uv into ${installDir}: ${describe(error)}`,
+      })
+    }
+
+    return ok({ path: managed })
   }
 }
 
