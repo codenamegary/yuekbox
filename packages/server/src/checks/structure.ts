@@ -91,7 +91,7 @@ const checkPortsFile = (fileName: string, source: string): readonly StructureVio
   return violations
 }
 
-/** The line marker that excuses one let binding, on the declaration's own line. */
+/** The line marker that excuses one let binding, on the declaration's line or the line above it. */
 const allowLetMarker = "structure: allow-let"
 
 /** Every node in the parsed program, depth first. */
@@ -125,8 +125,17 @@ export const checkNoLet = (fileName: string, source: string): readonly Structure
   walkNodes(parseSync(fileName, source).program, (node) => {
     if (node.type !== "VariableDeclaration" || node.kind !== "let") return
     const line = lineOf(source, node.start)
-    if ((lines[line - 1] ?? "").includes(allowLetMarker)) return
-    violations.push({ rule: "no-let", file: fileName, message: `${noLetMessage} (line ${line})` })
+    // The marker sits on the declaration or directly above it: oxfmt is free
+    // to wrap a long declaration, and a trailing comment may land elsewhere.
+    const marked =
+      (lines[line - 1] ?? "").includes(allowLetMarker) ||
+      (lines[line - 2] ?? "").includes(allowLetMarker)
+    if (marked) return
+    violations.push({
+      rule: "no-let",
+      file: fileName,
+      message: `${noLetMessage} (line ${line})`,
+    })
   })
   return violations
 }

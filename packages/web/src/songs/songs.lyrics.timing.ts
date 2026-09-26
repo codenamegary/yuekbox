@@ -106,7 +106,8 @@ const parseMultiplier = (text: string): number => {
 const parseVoiceTokens = (body: string): readonly VoiceToken[] => {
   const tokens: VoiceToken[] = []
   const text = body.replace(/"[^"]*"/g, "").replace(/%.*$/, "")
-  let index = 0 // structure: allow-let
+  // structure: allow-let
+  let index = 0
 
   while (index < text.length) {
     const char = text[index] ?? ""
@@ -127,7 +128,8 @@ const parseVoiceTokens = (body: string): readonly VoiceToken[] => {
     index += 1
     while (index < text.length && /[,']/.test(text[index] ?? "")) index += 1
 
-    let multiplierText = "" // structure: allow-let
+    // structure: allow-let
+    let multiplierText = ""
     while (index < text.length && /[\d/]/.test(text[index] ?? "")) {
       multiplierText += text[index]
       index += 1
@@ -161,7 +163,8 @@ export const parseYue2VocalTimeline = (scoreAbc: string): VocalTimeline | null =
   const voices = new Map<string, VoiceToken[]>()
   const vocalIds = new Set<string>()
   const declaredVoices: string[] = []
-  let currentVoice: string | null = null // structure: allow-let
+  // structure: allow-let
+  let currentVoice: string | null = null
 
   for (const line of lines) {
     const voiceHeader = /^V:\s*(\S+)\s*(.*)$/.exec(line)
@@ -185,10 +188,12 @@ export const parseYue2VocalTimeline = (scoreAbc: string): VocalTimeline | null =
   if (vocalIds.size === 0) return null
 
   const events: { startSeconds: number; endSeconds: number }[] = []
-  let songDuration = 0 // structure: allow-let
+  // structure: allow-let
+  let songDuration = 0
 
   for (const [voiceId, tokens] of voices) {
-    let time = 0 // structure: allow-let
+    // structure: allow-let
+    let time = 0
     for (const token of tokens) {
       if (token.kind === "note") {
         const duration = token.duration * secondsPerUnit
@@ -250,7 +255,8 @@ const markdownHeader = /^#{1,6}\s+(.+?)\s*#*\s*$/
 /** Lines keep the `[Tag]` or `### Tag` that was active when they appeared, or null. */
 const parseLyricLines = (lyrics: string): readonly WeightedLine[] => {
   const lines: WeightedLine[] = []
-  let section: string | null = null // structure: allow-let
+  // structure: allow-let
+  let section: string | null = null
   for (const token of lyrics.split(/(\[[^\]]*\])/)) {
     const tag = tagToken.exec(token)
     if (tag !== null) {
@@ -296,14 +302,15 @@ const allocateToSpans = (
   const byRemainder = quotas
     .map((quota, index) => ({ index, remainder: quota - Math.floor(quota) }))
     .sort((left, right) => right.remainder - left.remainder || left.index - right.index)
+  // structure: allow-let
   for (let extra = 0; extra < leftover; extra += 1) {
-    // structure: allow-let
     const target = byRemainder[extra]
     if (target !== undefined) counts[target.index] = (counts[target.index] ?? 0) + 1
   }
 
   const cues: LyricCue[] = []
-  let lineIndex = 0 // structure: allow-let
+  // structure: allow-let
+  let lineIndex = 0
   spans.forEach((span, spanIndex) => {
     const count = counts[spanIndex] ?? 0
     if (count <= 0) return
@@ -313,7 +320,8 @@ const allocateToSpans = (
 
     const spanDuration = span.endSeconds - span.startSeconds
     const groupWeight = group.reduce((total, line) => total + line.weight, 0)
-    let cursor = span.startSeconds // structure: allow-let
+    // structure: allow-let
+    let cursor = span.startSeconds
     for (const line of group) {
       const end = Math.min(span.endSeconds, cursor + (spanDuration * line.weight) / groupWeight)
       if (end - cursor > minimumCueSeconds) {
@@ -335,7 +343,8 @@ const allocateToWindow = (
   if (totalWeight <= 0 || windowDuration <= 0) return []
 
   const cues: LyricCue[] = []
-  let cursor = window.startSeconds // structure: allow-let
+  // structure: allow-let
+  let cursor = window.startSeconds
   for (const line of lines) {
     const end = Math.min(window.endSeconds, cursor + (windowDuration * line.weight) / totalWeight)
     if (end - cursor > minimumCueSeconds) {
@@ -373,7 +382,8 @@ const fromCues = (
 ): readonly LyricCue[] => {
   const sections = cueSections(lines)
   const result: LyricCue[] = []
-  let previousEnd = 0 // structure: allow-let
+  // structure: allow-let
+  let previousEnd = 0
   for (const cue of cues) {
     const text = cue.text.trim()
     if (text === "") continue
@@ -425,9 +435,10 @@ export const buildLyricCues = (input: LyricCueInput): readonly LyricCue[] => {
 }
 
 export const cueIndexAt = (cues: readonly LyricCue[], seconds: number): number | null => {
-  let found: number | null = null // structure: allow-let
+  // structure: allow-let
+  let found: number | null = null
+  // structure: allow-let
   for (let index = 0; index < cues.length; index += 1) {
-    // structure: allow-let
     const cue = cues[index]
     if (cue === undefined) continue
     if (cue.startSeconds <= seconds) {
