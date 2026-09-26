@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { ModelPaths } from "contracts/http/config"
 import { ProcessRunner } from "../shared/process"
 import {
   makeRunTranscribe,
@@ -10,24 +11,44 @@ import {
   parseAnalysisNotes,
   parseAnalysisSections,
   Sheetsage2AdapterEnv,
+  Sheetsage2ArgsEnv,
   transcribeArgs,
   vocalTranscribeArgs,
 } from "./generation.sheetsage2.adapters"
 
-const env: Sheetsage2AdapterEnv = {
+const modelPaths: ModelPaths = Object.freeze({
+  yue2: "/kit/models/YuE2-3B",
+  yue2Vae: "/kit/models/YuE2-Vae",
+  sheetsage2: "/kit/models/SheetSage2",
+  sheetsage2Base: "/kit/models/MERT-v2-FullSong",
+  whisper: "/kit/models/whisper-large-v3-turbo",
+})
+
+const argsEnv: Sheetsage2ArgsEnv = {
   pythonBin: process.execPath,
   scriptPath: import.meta.path,
   model: "/kit/models/SheetSage2",
   baseModel: "/kit/models/MERT-v2-FullSong",
   device: "cuda",
   offline: true,
+}
+
+const env: Sheetsage2AdapterEnv = {
+  pythonBin: process.execPath,
+  scriptPath: import.meta.path,
+  device: "cuda",
+  offline: true,
   cwd: "/kit",
+  readModelPaths: async () => modelPaths,
 }
 
 test("transcribe args select melody-full and pass the local model chain", () => {
-  const args = transcribeArgs(env, { audioPath: "/tmp/ref/demo.mp3", outputDir: "/tmp/ref/out" })
+  const args = transcribeArgs(argsEnv, {
+    audioPath: "/tmp/ref/demo.mp3",
+    outputDir: "/tmp/ref/out",
+  })
 
-  expect(args.slice(0, 3)).toEqual([env.pythonBin, env.scriptPath, "/tmp/ref/demo.mp3"])
+  expect(args.slice(0, 3)).toEqual([argsEnv.pythonBin, argsEnv.scriptPath, "/tmp/ref/demo.mp3"])
   expect(args).toContain("melody-full")
   expect(args).toContain("/tmp/ref/out")
   expect(args.at(-1)).toBe("--offline")
@@ -36,7 +57,7 @@ test("transcribe args select melody-full and pass the local model chain", () => 
 
 test("transcribe args omit optional flags when unset", () => {
   const args = transcribeArgs(
-    { ...env, baseModel: null, offline: false },
+    { ...argsEnv, baseModel: null, offline: false },
     { audioPath: "/tmp/ref.wav", outputDir: "/tmp/out" },
   )
 
@@ -45,9 +66,9 @@ test("transcribe args omit optional flags when unset", () => {
 })
 
 test("vocal transcript args select melody-vocal", () => {
-  const args = vocalTranscribeArgs(env, { audioPath: "/tmp/gen.flac", outputDir: "/tmp/out" })
+  const args = vocalTranscribeArgs(argsEnv, { audioPath: "/tmp/gen.flac", outputDir: "/tmp/out" })
 
-  expect(args.slice(0, 3)).toEqual([env.pythonBin, env.scriptPath, "/tmp/gen.flac"])
+  expect(args.slice(0, 3)).toEqual([argsEnv.pythonBin, argsEnv.scriptPath, "/tmp/gen.flac"])
   expect(args).toContain("melody-vocal")
   expect(args).toContain("/tmp/out")
 })
@@ -243,6 +264,42 @@ test("the script receives the stored path without a temp copy", async () => {
     expect(commands).toHaveLength(1)
     expect(commands[0]?.[2]).toBe(audioPath)
     expect((await readdir(outputRoot)).toSorted()).toEqual(["demo.mp3", "transcribe"])
+  })
+})
+
+test("the transcript models are resolved when the run starts, not at construction", async () => {
+  await withStoredAudio(async (audioPath, outputRoot) => {
+    let paths: ModelPaths = {
+      ...modelPaths,
+      sheetsage2: "/kit/boot/SheetSage2",
+      sheetsage2Base: "/kit/boot/MERT-v2-FullSong",
+    }
+    const commands: string[][] = []
+    const runner = makeFakeRunner(async (outputDir) => {
+      await mkdir(outputDir, { recursive: true })
+      await writeFile(join(outputDir, "score.abc"), "X:1\nK:C\nC D E|", "utf8")
+      return 0
+    })
+    const capturingRunner: ProcessRunner = async (command, cwd, onOutput) => {
+      commands.push([...command])
+      return runner(command, cwd, onOutput)
+    }
+    const runTranscribe = makeRunTranscribe(
+      { ...env, readModelPaths: async () => paths },
+      capturingRunner,
+    )
+
+    paths = {
+      ...paths,
+      sheetsage2: "/mnt/audio/SheetSage2",
+      sheetsage2Base: "/mnt/audio/MERT-v2-FullSong",
+    }
+    const result = await runTranscribe({ audioPath, outputDir: outputRoot })
+
+    expect(result.ok).toBe(true)
+    const command = commands[0] ?? []
+    expect(command[command.indexOf("--model") + 1]).toBe("/mnt/audio/SheetSage2")
+    expect(command[command.indexOf("--base-model") + 1]).toBe("/mnt/audio/MERT-v2-FullSong")
   })
 })
 

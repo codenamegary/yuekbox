@@ -19,7 +19,7 @@ const readyDeps = {
 
 test("reports every model missing with its resolved path and expected size", async () => {
   const readReadiness = makeReadReadiness({
-    modelPaths,
+    readModelPaths: async () => modelPaths,
     measureModelSize: async () => null,
     ...readyDeps,
   })
@@ -48,7 +48,7 @@ test("reports every model ready with the bytes on disk", async () => {
     [modelPaths.whisper, 55],
   ])
   const readReadiness = makeReadReadiness({
-    modelPaths,
+    readModelPaths: async () => modelPaths,
     measureModelSize: async (path) => bytesByPath.get(path) ?? null,
     ...readyDeps,
   })
@@ -76,7 +76,7 @@ test("expected sizes come from the upstream repositories read on 2026-09-24", ()
 
 test("a missing ffmpeg comes with the Linux and WSL2 fix instruction", async () => {
   const readReadiness = makeReadReadiness({
-    modelPaths,
+    readModelPaths: async () => modelPaths,
     measureModelSize: async () => null,
     ...readyDeps,
     checkFfmpeg: async () => false,
@@ -100,7 +100,7 @@ const missingGpuFacts: readonly GpuFacts[] = [
 test("a failed driver check comes with the Linux and WSL2 fix instruction", async () => {
   for (const facts of missingGpuFacts) {
     const readReadiness = makeReadReadiness({
-      modelPaths,
+      readModelPaths: async () => modelPaths,
       measureModelSize: async () => null,
       ...readyDeps,
       readGpuFacts: async () => facts,
@@ -118,7 +118,7 @@ test("a failed driver check comes with the Linux and WSL2 fix instruction", asyn
 
 test("an old driver message names both versions", async () => {
   const readReadiness = makeReadReadiness({
-    modelPaths,
+    readModelPaths: async () => modelPaths,
     measureModelSize: async () => null,
     ...readyDeps,
     readGpuFacts: async () => ({ kind: "nvidia", driverVersion: "470.10" }),
@@ -134,7 +134,7 @@ test("an old driver message names both versions", async () => {
 
 test("never reports a runtime, venv, or helper script", async () => {
   const readReadiness = makeReadReadiness({
-    modelPaths,
+    readModelPaths: async () => modelPaths,
     measureModelSize: async () => null,
     ...readyDeps,
     checkFfmpeg: async () => false,

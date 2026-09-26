@@ -1,6 +1,17 @@
 import { expect, test } from "bun:test"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { checkYue2, generateArgs, parseYue2Line, Yue2AdapterEnv } from "./generation.yue2.adapters"
+import { ModelPaths } from "contracts/http/config"
+import { ProcessRunner } from "../shared/process"
+import {
+  checkYue2,
+  generateArgs,
+  makeRunYue2Generate,
+  parseYue2Line,
+  Yue2ArgsEnv,
+  Yue2CheckEnv,
+} from "./generation.yue2.adapters"
 
 test("parses a numeric synthesizing line", () => {
   expect(
@@ -48,13 +59,20 @@ test("summary and unrelated lines are ignored", () => {
   expect(parseYue2Line("")).toBeNull()
 })
 
-const env: Yue2AdapterEnv = {
+const modelPaths: ModelPaths = Object.freeze({
+  yue2: "/models/YuE2-3B",
+  yue2Vae: "/models/YuE2-Vae",
+  sheetsage2: "/models/SheetSage2",
+  sheetsage2Base: "/models/MERT-v2-FullSong",
+  whisper: "/models/whisper-large-v3-turbo",
+})
+
+const env: Yue2ArgsEnv = {
   pythonBin: process.execPath,
   scriptPath: import.meta.path,
-  model: "/models/YuE2-3B",
-  vae: "/models/YuE2-Vae",
+  model: modelPaths.yue2,
+  vae: modelPaths.yue2Vae,
   gpuBudget: 16,
-  cwd: "/tmp",
 }
 
 test("generate args call our script with the resolved model and vae, not a kit", () => {
@@ -94,7 +112,7 @@ test("generate args call our script with the resolved model and vae, not a kit",
 })
 
 test("checkYue2 needs the python, the script, the model, and the vae", () => {
-  const ready = {
+  const ready: Yue2CheckEnv = {
     pythonBin: process.execPath,
     scriptPath: import.meta.path,
     model: import.meta.path,
@@ -106,4 +124,50 @@ test("checkYue2 needs the python, the script, the model, and the vae", () => {
   expect(checkYue2({ ...ready, pythonBin: "/nope" })).toBe("missing")
   expect(checkYue2({ ...ready, model: "/nope" })).toBe("missing")
   expect(checkYue2({ ...ready, vae: "/nope" })).toBe("missing")
+})
+
+test("the model and vae are resolved when the run starts, not at construction", async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), "yuekbox-yue2-args-test-"))
+  try {
+    const commands: string[][] = []
+    const run: ProcessRunner = async (command) => {
+      commands.push([...command])
+      return { exitCode: 1, stdout: "", stderrTail: "stop here" }
+    }
+    let paths: ModelPaths = {
+      ...modelPaths,
+      yue2: "/boot/YuE2-3B",
+      yue2Vae: "/boot/YuE2-Vae",
+    }
+    const generate = makeRunYue2Generate(
+      {
+        pythonBin: process.execPath,
+        scriptPath: import.meta.path,
+        gpuBudget: 16,
+        cwd: "/tmp",
+        readModelPaths: async () => paths,
+      },
+      run,
+    )
+
+    paths = { ...paths, yue2: "/mnt/audio/YuE2-3B", yue2Vae: "/mnt/audio/YuE2-Vae" }
+    const result = await generate({
+      songId: "song-1",
+      lyrics: "hello",
+      style: "pop",
+      seed: 7,
+      cot: "full",
+      abc: null,
+      outputDir,
+      onStage: () => {},
+      onProgress: () => {},
+    })
+
+    expect(result.ok).toBe(false)
+    const command = commands[0] ?? []
+    expect(command[command.indexOf("--model") + 1]).toBe("/mnt/audio/YuE2-3B")
+    expect(command[command.indexOf("--vae") + 1]).toBe("/mnt/audio/YuE2-Vae")
+  } finally {
+    await rm(outputDir, { recursive: true, force: true })
+  }
 })

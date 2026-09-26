@@ -1,11 +1,13 @@
 import * as React from "react"
 import { EnhanceScope } from "contracts/http/ai"
+import { MissingModel } from "contracts/http/models"
 import { Reference } from "contracts/http/references"
 import { Song, SongStage } from "contracts/http/songs"
 import { cn } from "@/lib/cn"
 import { Button } from "@/components/ui/Button"
 import { Label } from "@/components/ui/Label"
 import { Textarea } from "@/components/ui/Textarea"
+import { blockedModelsFromError } from "@/models/models.problems"
 import { useCreateSongMutation, useUploadReferenceMutation } from "./songs.mutations"
 import { stageLabels, stageOrderFor, stageProgressPercent } from "./songs.stages"
 
@@ -21,6 +23,7 @@ type SongFormProps = Readonly<{
   onStyleChange: (value: string) => void
   onLyricsChange: (value: string) => void
   onCreated: (song: Song) => void
+  onBlocked: (models: readonly MissingModel[]) => void
   onEnhance: (kind: EnhanceScope) => void
   onRandom: () => void
   onToggleFullAuto: () => void
@@ -80,11 +83,12 @@ export const SongForm: React.FC<SongFormProps> = ({
   onStyleChange,
   onLyricsChange,
   onCreated,
+  onBlocked,
   onEnhance,
   onRandom,
   onToggleFullAuto,
 }) => {
-  const createSong = useCreateSongMutation()
+  const createSong = useCreateSongMutation(onBlocked)
   const uploadReference = useUploadReferenceMutation()
   const fileInputRef = React.useRef<HTMLInputElement | null>(null)
   const [reference, setReference] = React.useState<Reference | null>(null)
@@ -334,7 +338,7 @@ export const SongForm: React.FC<SongFormProps> = ({
       </div>
 
       {enhanceError !== null ? <p className="text-xs text-rose-300/90">{enhanceError}</p> : null}
-      {createSong.error !== null ? (
+      {createSong.error !== null && blockedModelsFromError(createSong.error) === null ? (
         <p className="text-xs text-rose-300/90">{createSong.error.message}</p>
       ) : null}
     </div>

@@ -1,6 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { AiConfigPatch, EnhanceScope } from "contracts/http/ai"
+import { MissingModel } from "contracts/http/models"
 import { Song } from "contracts/http/songs"
+import { blockedModelsFromError } from "@/models/models.problems"
 import { queryKeys } from "@/queryKeys"
 import { createRandomSong, enhanceText, EnhanceRequest, saveAiConfig } from "./ai.api"
 
@@ -25,7 +27,10 @@ export const useEnhanceMutation = (onDone: (kind: EnhanceScope, text: string) =>
   })
 }
 
-export const useRandomSongMutation = (onCreated: (song: Song) => void) => {
+export const useRandomSongMutation = (
+  onCreated: (song: Song) => void,
+  onBlocked: (models: readonly MissingModel[]) => void,
+) => {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: createRandomSong,
@@ -35,6 +40,10 @@ export const useRandomSongMutation = (onCreated: (song: Song) => void) => {
         queryClient.invalidateQueries({ queryKey: queryKeys.status() }),
       ])
       onCreated(song)
+    },
+    onError: (error) => {
+      const missing = blockedModelsFromError(error)
+      if (missing !== null) onBlocked(missing)
     },
   })
 }

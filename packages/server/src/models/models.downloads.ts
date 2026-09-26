@@ -1,5 +1,6 @@
 import { dirname, join } from "node:path"
 import { ModelPaths } from "contracts/http/config"
+import { ReadCurrentModelPaths } from "../config/config.current"
 import { err, ok, Result } from "../shared/result"
 import {
   downloadConfirmationThresholdBytes,
@@ -25,7 +26,8 @@ import { modelFileUrl } from "./models.tree"
 
 export type ModelDownloadsDeps = Readonly<{
   home: string
-  modelPaths: ModelPaths
+  /** Resolved per request, so a path saved before the next attempt is honored. */
+  readModelPaths: ReadCurrentModelPaths
   /** Test seam; the process root leaves it at the pinned manifest. */
   pins?: ModelDownloadPins
   /** Test seam; the process root leaves it at the shipped threshold. */
@@ -116,9 +118,12 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
   const jobs = new Map<ModelDownloadKey, Job>()
   const tasks = new Map<ModelDownloadKey, Promise<void>>()
 
-  const snapshotFor = async (key: ModelDownloadKey): Promise<ModelDownloadSnapshot> => {
+  const snapshotFor = async (
+    key: ModelDownloadKey,
+    modelPaths: ModelPaths,
+  ): Promise<ModelDownloadSnapshot> => {
     const pin = pins[key]
-    const path = deps.modelPaths[key]
+    const path = modelPaths[key]
     if (await deps.pathExists(path)) return presentSnapshot(key, path, pin.totalBytes)
     const job = jobs.get(key)
     return job === undefined
@@ -218,8 +223,9 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
 
   const start: ModelDownloads["start"] = async (input) => {
     const key = input.key
+    const modelPaths = await deps.readModelPaths()
     const pin = pins[key]
-    const target = deps.modelPaths[key]
+    const target = modelPaths[key]
 
     const existing = jobs.get(key)
     if (existing !== undefined && existing.state !== "failed") {
@@ -269,8 +275,13 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
 
   return {
     start,
-    read: snapshotFor,
-    readAll: async () => Object.freeze(await Promise.all(modelDownloadKeys.map(snapshotFor))),
+    read: async (key) => snapshotFor(key, await deps.readModelPaths()),
+    readAll: async () => {
+      const modelPaths = await deps.readModelPaths()
+      return Object.freeze(
+        await Promise.all(modelDownloadKeys.map((key) => snapshotFor(key, modelPaths))),
+      )
+    },
     drain: async () => {
       await Promise.allSettled(tasks.values())
     },

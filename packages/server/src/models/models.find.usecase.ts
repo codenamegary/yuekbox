@@ -1,4 +1,4 @@
-import { ModelPaths } from "contracts/http/config"
+import { ReadCurrentModelPaths } from "../config/config.current"
 import { MissingModel, ModelDownloadKey } from "./models.models"
 import { isInsideModelsDir } from "./models.paths"
 import { ModelDownloadPins } from "./models.pins"
@@ -6,7 +6,8 @@ import { PathExists } from "./models.ports"
 
 export type FindMissingModelsDeps = Readonly<{
   home: string
-  modelPaths: ModelPaths
+  /** Resolved per call, so a saved path is honored on the next attempt. */
+  readModelPaths: ReadCurrentModelPaths
   pins: ModelDownloadPins
   pathExists: PathExists
 }>
@@ -23,10 +24,11 @@ export type FindMissingModels = (
 export const makeFindMissingModels =
   (deps: FindMissingModelsDeps): FindMissingModels =>
   async (input) => {
+    const modelPaths = await deps.readModelPaths()
     const found = await Promise.all(
       input.keys.map(async (key): Promise<MissingModel | null> => {
         const pin = deps.pins[key]
-        const path = deps.modelPaths[key]
+        const path = modelPaths[key]
         if (await deps.pathExists(path)) return null
         return Object.freeze({
           key,

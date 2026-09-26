@@ -52,7 +52,7 @@ const makeDeps = (overrides: Overrides = {}) => {
   const calls = overrides.calls ?? makeCalls()
   const deps: Deps = {
     home,
-    modelPaths,
+    readModelPaths: async () => modelPaths,
     pins: smallPins,
     readModelTree: async () => {
       calls.tree += 1
@@ -108,7 +108,7 @@ test("a download under the threshold starts without a confirmation", async () =>
 
 test("a resolved path outside the models folder is refused and never fetched", async () => {
   const { deps, calls } = makeDeps({
-    modelPaths: { ...modelPaths, yue2: "/mnt/audio/YuE2-3B" },
+    readModelPaths: async () => ({ ...modelPaths, yue2: "/mnt/audio/YuE2-3B" }),
   })
   const downloads = makeModelDownloads(deps)
 

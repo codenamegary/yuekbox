@@ -40,7 +40,7 @@ export const unusedReadinessFixture = (): ReadinessReader => async (): Promise<R
 
 /** A ready machine; compose tests that never assert readiness use this. */
 export const unusedReadinessDepsFixture = (): AssembleReadinessDeps => ({
-  modelPaths: unusedModelPaths,
+  readModelPaths: async () => unusedModelPaths,
   checkFfmpeg: async () => true,
   readGpuFacts: async () => ({ kind: "nvidia", driverVersion: "616.56" }),
 })

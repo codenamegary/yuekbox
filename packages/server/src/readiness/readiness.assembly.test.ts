@@ -14,7 +14,7 @@ test("assembled readiness reuses the cached system probes across reads", async (
   let ffmpegCalls = 0
   let gpuCalls = 0
   const slice = assembleReadinessSlice({
-    modelPaths,
+    readModelPaths: async () => modelPaths,
     checkFfmpeg: async () => {
       ffmpegCalls += 1
       return true

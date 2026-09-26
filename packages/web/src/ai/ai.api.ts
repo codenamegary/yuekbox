@@ -18,24 +18,10 @@ import {
   WriterScope,
 } from "contracts/http/ai"
 import { Song, SongSchema } from "contracts/http/songs"
-import { ProblemDetailsSchema } from "contracts/http/error"
-
-const toErrorMessage = async (response: Response): Promise<string> => {
-  try {
-    const problem = ProblemDetailsSchema.safeParse(await response.json())
-    if (problem.success) {
-      return problem.data.detail ?? problem.data.title
-    }
-  } catch {
-    // fall through to a generic message
-  }
-  return `Request failed with status ${response.status}`
-}
+import { toProblemError } from "@/lib/problems"
 
 const parseJson = async <T>(response: Response, parse: (value: unknown) => T): Promise<T> => {
-  if (!response.ok) {
-    throw new Error(await toErrorMessage(response))
-  }
+  if (!response.ok) throw await toProblemError(response)
   return parse(await response.json())
 }
 

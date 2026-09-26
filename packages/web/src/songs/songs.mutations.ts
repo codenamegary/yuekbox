@@ -1,9 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { MissingModel } from "contracts/http/models"
 import { CreateSongBody } from "contracts/http/songs"
 import { queryKeys } from "@/queryKeys"
+import { blockedModelsFromError } from "@/models/models.problems"
 import { createSong, deleteSong, requestSongVisualization, uploadReference } from "./songs.api"
 
-export const useCreateSongMutation = () => {
+export const useCreateSongMutation = (onBlocked: (models: readonly MissingModel[]) => void) => {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (body: CreateSongBody) => createSong(body),
@@ -12,6 +14,10 @@ export const useCreateSongMutation = () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.songs() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.status() }),
       ])
+    },
+    onError: (error) => {
+      const missing = blockedModelsFromError(error)
+      if (missing !== null) onBlocked(missing)
     },
   })
 }

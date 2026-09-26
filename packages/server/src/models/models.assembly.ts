@@ -1,4 +1,4 @@
-import { ModelPaths } from "contracts/http/config"
+import { ReadCurrentModelPaths } from "../config/config.current"
 import { FindMissingGenerationModels } from "./models.models"
 import { makeModelDownloads, ModelDownloads } from "./models.downloads"
 import { makeFindMissingModels } from "./models.find.usecase"
@@ -15,8 +15,8 @@ import { modelDownloadPins, ModelDownloadPins } from "./models.pins"
 
 export type AssembleModelsDeps = Readonly<{
   home: string
-  /** The five resolved model paths from #49's resolution. */
-  modelPaths: ModelPaths
+  /** Resolved per request, so `PUT /v1/config` takes effect with no restart. */
+  readModelPaths: ReadCurrentModelPaths
   /** Test seam; the process root leaves it at the fetch global. */
   fetchImpl?: FetchLike
   /** Test seam; the process root leaves it at the pinned manifest. */
@@ -32,8 +32,8 @@ export type ModelsSlice = Readonly<{
 /**
  * Wires the models slice: network adapters for the pinned Hugging Face
  * snapshot, filesystem adapters for staging and the atomic move, and the
- * generation need mapping. The process root supplies the home and the
- * resolved paths; nothing here reads config on its own.
+ * generation need mapping. The process root supplies the home and the live
+ * model-path resolver; nothing here reads config on its own.
  */
 export const assembleModelsSlice = (deps: AssembleModelsDeps): ModelsSlice => {
   const fetchImpl = deps.fetchImpl ?? ((url, init) => fetch(url, init))
@@ -42,7 +42,7 @@ export const assembleModelsSlice = (deps: AssembleModelsDeps): ModelsSlice => {
 
   const downloads = makeModelDownloads({
     home: deps.home,
-    modelPaths: deps.modelPaths,
+    readModelPaths: deps.readModelPaths,
     pins,
     readModelTree: makeReadModelTree(fetchImpl),
     downloadFile: makeDownloadModelFile(fetchImpl),
@@ -56,7 +56,7 @@ export const assembleModelsSlice = (deps: AssembleModelsDeps): ModelsSlice => {
 
   const findMissingModels = makeFindMissingModels({
     home: deps.home,
-    modelPaths: deps.modelPaths,
+    readModelPaths: deps.readModelPaths,
     pins,
     pathExists,
   })
