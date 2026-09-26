@@ -79,14 +79,16 @@ test("a malformed config file fails with its path", async () => {
     const configPath = join(dir, "config.yaml")
     await writeFile(configPath, "models:\n  yue1: /mnt/x\n", "utf8")
 
-    let detail = ""
-    try {
-      await makeLoadModelOverrides(configPath)()
-    } catch (error: unknown) {
-      detail = error instanceof Error ? error.message : String(error)
+    const failureDetail = async (): Promise<string> => {
+      try {
+        await makeLoadModelOverrides(configPath)()
+        return ""
+      } catch (error: unknown) {
+        return error instanceof Error ? error.message : String(error)
+      }
     }
 
-    expect(detail).toContain(configPath)
+    expect(await failureDetail()).toContain(configPath)
   })
 })
 

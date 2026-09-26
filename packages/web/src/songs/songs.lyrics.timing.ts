@@ -103,48 +103,70 @@ const parseMultiplier = (text: string): number => {
   return Number.isFinite(value) && value > 0 ? value : 1
 }
 
-const parseVoiceTokens = (body: string): readonly VoiceToken[] => {
-  const tokens: VoiceToken[] = []
-  const text = body.replace(/"[^"]*"/g, "").replace(/%.*$/, "")
-  let index = 0
+const voiceTokenPattern = /([A-Ga-gzZx])[,']*([\d/]*)/g
 
-  while (index < text.length) {
-    const char = text[index] ?? ""
-    if (char === "|" || char === " " || char === "\t") {
-      index += 1
-      continue
-    }
-    if ("!()[]<>-_^=".includes(char)) {
-      index += 1
-      continue
-    }
-    if (!/[A-Ga-gzZx]/.test(char)) {
-      index += 1
-      continue
-    }
-
-    const symbol = char
-    index += 1
-    while (index < text.length && /[,']/.test(text[index] ?? "")) index += 1
-
-    let multiplierText = ""
-    while (index < text.length && /[\d/]/.test(text[index] ?? "")) {
-      multiplierText += text[index]
-      index += 1
-    }
-    const multiplier = parseMultiplier(multiplierText)
-
-    if (symbol === "Z") {
-      tokens.push({ kind: "measureRest", measures: multiplier })
-    } else if (symbol === "z" || symbol === "x") {
-      tokens.push({ kind: "rest", duration: multiplier })
-    } else {
-      tokens.push({ kind: "note", duration: multiplier })
-    }
-  }
-
-  return tokens
+const toVoiceToken = (symbol: string, multiplier: number): VoiceToken => {
+  if (symbol === "Z") return { kind: "measureRest", measures: multiplier }
+  if (symbol === "z" || symbol === "x") return { kind: "rest", duration: multiplier }
+  return { kind: "note", duration: multiplier }
 }
+
+/** Each note or rest letter, its octave marks, then its length multiplier. Everything else is skipped. */
+const parseVoiceTokens = (body: string): readonly VoiceToken[] =>
+  Array.from(
+    body
+      .replace(/"[^"]*"/g, "")
+      .replace(/%.*$/, "")
+      .matchAll(voiceTokenPattern),
+    ([, symbol = "", multiplier = ""]) => toVoiceToken(symbol, parseMultiplier(multiplier)),
+  )
+
+const voiceHeaderPattern = /^V:\s*(\S+)\s*(.*)$/
+const vocalNamePattern = /(?:name|snm)="Vocal/i
+
+const isVoiceBody = (line: string): boolean =>
+  line !== "" && !line.startsWith("%") && !/^[A-Za-z]:/.test(line)
+
+type VoiceBlock = Readonly<{
+  id: string
+  vocal: boolean
+  body: readonly string[]
+}>
+
+/** A `V:` header and the body lines up to the next one. Lines before the first header belong to no voice. */
+const voiceBlocks = (lines: readonly string[]): readonly VoiceBlock[] => {
+  const headers = lines.flatMap((line, index) => {
+    const header = voiceHeaderPattern.exec(line)
+    return header === null
+      ? []
+      : [{ index, id: header[1] ?? "", vocal: vocalNamePattern.test(header[2] ?? "") }]
+  })
+  return headers.map((header, position) => ({
+    id: header.id,
+    vocal: header.vocal,
+    body: lines.slice(header.index + 1, headers[position + 1]?.index).filter(isVoiceBody),
+  }))
+}
+
+type TimedToken = Readonly<{
+  token: VoiceToken
+  startSeconds: number
+  endSeconds: number
+}>
+
+const mergeBreathGaps = (events: readonly VocalSpan[]): readonly VocalSpan[] =>
+  events.reduce<readonly VocalSpan[]>((spans, event) => {
+    const current = spans.at(-1)
+    return current !== undefined && event.startSeconds - current.endSeconds <= breathGapSeconds
+      ? [
+          ...spans.slice(0, -1),
+          {
+            startSeconds: current.startSeconds,
+            endSeconds: Math.max(current.endSeconds, event.endSeconds),
+          },
+        ]
+      : [...spans, { startSeconds: event.startSeconds, endSeconds: event.endSeconds }]
+  }, [])
 
 export const parseYue2VocalTimeline = (scoreAbc: string): VocalTimeline | null => {
   if (scoreAbc.trim().length === 0) return null
@@ -158,62 +180,46 @@ export const parseYue2VocalTimeline = (scoreAbc: string): VocalTimeline | null =
   const secondsPerUnit = 60 / tempo / unitsPerQuarter
   const measureUnits = meter.beats * (4 / meter.divisor) * unitsPerQuarter
 
-  const voices = new Map<string, VoiceToken[]>()
-  const vocalIds = new Set<string>()
-  const declaredVoices: string[] = []
-  let currentVoice: string | null = null
-
-  for (const line of lines) {
-    const voiceHeader = /^V:\s*(\S+)\s*(.*)$/.exec(line)
-    if (voiceHeader !== null) {
-      currentVoice = voiceHeader[1] ?? null
-      if (currentVoice !== null) {
-        if (!voices.has(currentVoice)) {
-          voices.set(currentVoice, [])
-          declaredVoices.push(currentVoice)
-        }
-        if (/(?:name|snm)="Vocal/i.test(voiceHeader[2] ?? "")) vocalIds.add(currentVoice)
-      }
-      continue
-    }
-    if (currentVoice === null) continue
-    if (line === "" || line.startsWith("%") || /^[A-Za-z]:/.test(line)) continue
-    voices.get(currentVoice)?.push(...parseVoiceTokens(line))
-  }
-
-  if (vocalIds.size === 0 && voices.has("Vocal")) vocalIds.add("Vocal")
+  const blocks = voiceBlocks(lines)
+  const voiceIds = [...new Set(blocks.map((block) => block.id))]
+  const taggedVocalIds = new Set(blocks.filter((block) => block.vocal).map((block) => block.id))
+  const vocalIds =
+    taggedVocalIds.size === 0 && voiceIds.includes("Vocal") ? new Set(["Vocal"]) : taggedVocalIds
   if (vocalIds.size === 0) return null
 
-  const events: { startSeconds: number; endSeconds: number }[] = []
-  let songDuration = 0
+  const tokenSeconds = (token: VoiceToken): number =>
+    token.kind === "measureRest"
+      ? token.measures * measureUnits * secondsPerUnit
+      : token.duration * secondsPerUnit
 
-  for (const [voiceId, tokens] of voices) {
-    let time = 0
-    for (const token of tokens) {
-      if (token.kind === "note") {
-        const duration = token.duration * secondsPerUnit
-        if (vocalIds.has(voiceId)) events.push({ startSeconds: time, endSeconds: time + duration })
-        time += duration
-      } else if (token.kind === "rest") {
-        time += token.duration * secondsPerUnit
-      } else {
-        time += token.measures * measureUnits * secondsPerUnit
-      }
-    }
-    songDuration = Math.max(songDuration, time)
-  }
+  const timeTokens = (tokens: readonly VoiceToken[]): readonly TimedToken[] =>
+    tokens.reduce<readonly TimedToken[]>((timed, token) => {
+      const startSeconds = timed.at(-1)?.endSeconds ?? 0
+      return [...timed, { token, startSeconds, endSeconds: startSeconds + tokenSeconds(token) }]
+    }, [])
 
-  const spans: { startSeconds: number; endSeconds: number }[] = []
-  for (const event of events) {
-    const current = spans.at(-1)
-    if (current !== undefined && event.startSeconds - current.endSeconds <= breathGapSeconds) {
-      current.endSeconds = Math.max(current.endSeconds, event.endSeconds)
-    } else {
-      spans.push({ startSeconds: event.startSeconds, endSeconds: event.endSeconds })
-    }
-  }
+  const voices = voiceIds.map((id) => ({
+    id,
+    timed: timeTokens(
+      blocks
+        .filter((block) => block.id === id)
+        .flatMap((block) => block.body.flatMap(parseVoiceTokens)),
+    ),
+  }))
 
-  return { spans, durationSeconds: songDuration }
+  const events = voices
+    .filter((voice) => vocalIds.has(voice.id))
+    .flatMap((voice) =>
+      voice.timed
+        .filter((timed) => timed.token.kind === "note")
+        .map(({ startSeconds, endSeconds }) => ({ startSeconds, endSeconds })),
+    )
+  const songDuration = voices.reduce(
+    (longest, voice) => Math.max(longest, voice.timed.at(-1)?.endSeconds ?? 0),
+    0,
+  )
+
+  return { spans: mergeBreathGaps(events), durationSeconds: songDuration }
 }
 
 const maxLineWords = 12
@@ -247,36 +253,85 @@ const splitSegments = (text: string): readonly string[] =>
 
 const markdownHeader = /^#{1,6}\s+(.+?)\s*#*\s*$/
 
-/** Lines keep the `[Tag]` or `### Tag` that was active when they appeared, or null. */
-const parseLyricLines = (lyrics: string): readonly WeightedLine[] => {
-  const lines: WeightedLine[] = []
-  let section: string | null = null
-  for (const token of lyrics.split(/(\[[^\]]*\])/)) {
-    const tag = tagToken.exec(token)
-    if (tag !== null) {
-      const name = (tag[1] ?? "").trim()
-      section = name === "" ? null : name
-      continue
-    }
-    for (const rawLine of token.split("\n")) {
-      const header = markdownHeader.exec(rawLine.trim())
-      if (header !== null) {
-        const name = (header[1] ?? "").trim()
-        section = name === "" ? null : name
-        continue
-      }
-      for (const text of splitSegments(rawLine)) {
-        lines.push({
-          text,
-          section,
-          weight: Math.max(1, text.split(/\s+/).length),
-          syllables: countSyllables(text),
-        })
-      }
-    }
-  }
-  return lines
+type LyricItem =
+  | Readonly<{ kind: "section"; name: string | null }>
+  | Readonly<{ kind: "text"; text: string }>
+
+const sectionItem = (rawName: string | undefined): LyricItem => {
+  const name = (rawName ?? "").trim()
+  return { kind: "section", name: name === "" ? null : name }
 }
+
+/** Section changes and lyric lines, in the order they appear. */
+const lyricItems = (lyrics: string): readonly LyricItem[] =>
+  lyrics.split(/(\[[^\]]*\])/).flatMap((token): readonly LyricItem[] => {
+    const tag = tagToken.exec(token)
+    if (tag !== null) return [sectionItem(tag[1])]
+    return token.split("\n").flatMap((rawLine): readonly LyricItem[] => {
+      const header = markdownHeader.exec(rawLine.trim())
+      if (header !== null) return [sectionItem(header[1])]
+      return splitSegments(rawLine).map((text) => ({ kind: "text", text }))
+    })
+  })
+
+type LyricScan = Readonly<{
+  section: string | null
+  lines: readonly WeightedLine[]
+}>
+
+/** Lines keep the `[Tag]` or `### Tag` that was active when they appeared, or null. */
+const parseLyricLines = (lyrics: string): readonly WeightedLine[] =>
+  lyricItems(lyrics).reduce<LyricScan>(
+    (scan, item) =>
+      item.kind === "section"
+        ? { ...scan, section: item.name }
+        : {
+            ...scan,
+            lines: [
+              ...scan.lines,
+              {
+                text: item.text,
+                section: scan.section,
+                weight: Math.max(1, item.text.split(/\s+/).length),
+                syllables: countSyllables(item.text),
+              },
+            ],
+          },
+    { section: null, lines: [] },
+  ).lines
+
+type CueLayout = Readonly<{
+  cursor: number
+  cues: readonly LyricCue[]
+}>
+
+/** Lays lines end to end across the window, each taking its share of `totalWeight`. */
+const layOutCues = (
+  lines: readonly WeightedLine[],
+  window: VocalSpan,
+  totalWeight: number,
+): readonly LyricCue[] => {
+  const windowDuration = window.endSeconds - window.startSeconds
+  return lines.reduce<CueLayout>(
+    ({ cursor, cues }, line) => {
+      const end = Math.min(window.endSeconds, cursor + (windowDuration * line.weight) / totalWeight)
+      return {
+        cursor: end,
+        cues:
+          end - cursor > minimumCueSeconds
+            ? [
+                ...cues,
+                { text: line.text, section: line.section, startSeconds: cursor, endSeconds: end },
+              ]
+            : cues,
+      }
+    },
+    { cursor: window.startSeconds, cues: [] },
+  ).cues
+}
+
+const totalLineWeight = (lines: readonly WeightedLine[]): number =>
+  lines.reduce((total, line) => total + line.weight, 0)
 
 const allocateToSpans = (
   lines: readonly WeightedLine[],
@@ -291,58 +346,35 @@ const allocateToSpans = (
   const quotas = spans.map(
     (span) => (lines.length * (span.endSeconds - span.startSeconds)) / totalSinging,
   )
-  const counts = quotas.map((quota) => Math.floor(quota))
-  const leftover = lines.length - counts.reduce((total, count) => total + count, 0)
-  const byRemainder = quotas
-    .map((quota, index) => ({ index, remainder: quota - Math.floor(quota) }))
-    .sort((left, right) => right.remainder - left.remainder || left.index - right.index)
-  for (let extra = 0; extra < leftover; extra += 1) {
-    const target = byRemainder[extra]
-    if (target !== undefined) counts[target.index] = (counts[target.index] ?? 0) + 1
-  }
+  const floors = quotas.map((quota) => Math.floor(quota))
+  const leftover = lines.length - floors.reduce((total, count) => total + count, 0)
+  const roundedUp = new Set(
+    quotas
+      .map((quota, index) => ({ index, remainder: quota - Math.floor(quota) }))
+      .sort((left, right) => right.remainder - left.remainder || left.index - right.index)
+      .slice(0, Math.max(0, leftover))
+      .map(({ index }) => index),
+  )
+  const counts = floors.map((floor, index) => floor + (roundedUp.has(index) ? 1 : 0))
+  const offsets = counts.reduce<readonly number[]>(
+    (starts, count) => [...starts, (starts.at(-1) ?? 0) + count],
+    [0],
+  )
 
-  const cues: LyricCue[] = []
-  let lineIndex = 0
-  spans.forEach((span, spanIndex) => {
-    const count = counts[spanIndex] ?? 0
-    if (count <= 0) return
-    const group = lines.slice(lineIndex, lineIndex + count)
-    lineIndex += group.length
-    if (group.length === 0) return
-
-    const spanDuration = span.endSeconds - span.startSeconds
-    const groupWeight = group.reduce((total, line) => total + line.weight, 0)
-    let cursor = span.startSeconds
-    for (const line of group) {
-      const end = Math.min(span.endSeconds, cursor + (spanDuration * line.weight) / groupWeight)
-      if (end - cursor > minimumCueSeconds) {
-        cues.push({ text: line.text, section: line.section, startSeconds: cursor, endSeconds: end })
-      }
-      cursor = end
-    }
+  return spans.flatMap((span, spanIndex) => {
+    const start = offsets[spanIndex] ?? 0
+    const group = lines.slice(start, start + (counts[spanIndex] ?? 0))
+    return group.length === 0 ? [] : layOutCues(group, span, totalLineWeight(group))
   })
-
-  return cues
 }
 
 const allocateToWindow = (
   lines: readonly WeightedLine[],
   window: VocalSpan,
 ): readonly LyricCue[] => {
-  const totalWeight = lines.reduce((total, line) => total + line.weight, 0)
-  const windowDuration = window.endSeconds - window.startSeconds
-  if (totalWeight <= 0 || windowDuration <= 0) return []
-
-  const cues: LyricCue[] = []
-  let cursor = window.startSeconds
-  for (const line of lines) {
-    const end = Math.min(window.endSeconds, cursor + (windowDuration * line.weight) / totalWeight)
-    if (end - cursor > minimumCueSeconds) {
-      cues.push({ text: line.text, section: line.section, startSeconds: cursor, endSeconds: end })
-    }
-    cursor = end
-  }
-  return cues
+  const totalWeight = totalLineWeight(lines)
+  if (totalWeight <= 0 || window.endSeconds - window.startSeconds <= 0) return []
+  return layOutCues(lines, window, totalWeight)
 }
 
 const normalizeCueText = (text: string): string =>
@@ -371,22 +403,21 @@ const fromCues = (
   lines: readonly WeightedLine[],
 ): readonly LyricCue[] => {
   const sections = cueSections(lines)
-  const result: LyricCue[] = []
-  let previousEnd = 0
-  for (const cue of cues) {
+  return cues.reduce<readonly LyricCue[]>((result, cue) => {
     const text = cue.text.trim()
-    if (text === "") continue
-    const start = Math.max(cue.startSeconds, previousEnd)
+    if (text === "") return result
+    const start = Math.max(cue.startSeconds, result.at(-1)?.endSeconds ?? 0)
     const end = Math.max(cue.endSeconds, start + minimumCueSeconds)
-    result.push({
-      text,
-      section: sections.get(normalizeCueText(text)) ?? null,
-      startSeconds: start,
-      endSeconds: end,
-    })
-    previousEnd = end
-  }
-  return result
+    return [
+      ...result,
+      {
+        text,
+        section: sections.get(normalizeCueText(text)) ?? null,
+        startSeconds: start,
+        endSeconds: end,
+      },
+    ]
+  }, [])
 }
 
 export const buildLyricCues = (input: LyricCueInput): readonly LyricCue[] => {
@@ -423,18 +454,11 @@ export const buildLyricCues = (input: LyricCueInput): readonly LyricCue[] => {
   })
 }
 
+/** The last cue in the leading run that has started by `seconds`, or null. */
 export const cueIndexAt = (cues: readonly LyricCue[], seconds: number): number | null => {
-  let found: number | null = null
-  for (let index = 0; index < cues.length; index += 1) {
-    const cue = cues[index]
-    if (cue === undefined) continue
-    if (cue.startSeconds <= seconds) {
-      found = index
-    } else {
-      break
-    }
-  }
-  return found
+  const firstUnstarted = cues.findIndex((cue) => !(cue.startSeconds <= seconds))
+  const started = firstUnstarted === -1 ? cues.length : firstUnstarted
+  return started === 0 ? null : started - 1
 }
 
 export const lyricEnvelope = (progress: number, fadeInFraction: number): number => {

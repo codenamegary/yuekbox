@@ -34,37 +34,61 @@ const readFlagValue = (flag: string, inline: string | null, next: string | undef
   return next
 }
 
-const parseArgs = (argv: readonly string[]): BuildArgs => {
-  let outfile = path.join(repoRoot, "yuekbox")
-  let target: Bun.Build.CompileTarget | null = null
-  let executablePath: string | null = null
-  let index = 0
+/**
+ * The compile targets yuekbox supports. yuekbox needs a local NVIDIA GPU, so
+ * the ship targets are Linux; the case arms are checked against
+ * Bun.Build.CompileTarget, so a typo never typechecks.
+ */
+const parseTarget = (value: string): Bun.Build.CompileTarget => {
+  switch (value) {
+    case "bun-linux-x64":
+    case "bun-linux-x64-musl":
+    case "bun-linux-arm64":
+    case "bun-linux-arm64-musl":
+      return value
+    default:
+      throw new Error(`unsupported --target ${value}: yuekbox ships for Linux and WSL2 only`)
+  }
+}
 
-  while (index < argv.length) {
-    const token = argv[index] ?? ""
-    index += 1
+type ParsedArgs = Readonly<{
+  outfile: string | null
+  target: Bun.Build.CompileTarget | null
+  executablePath: string | null
+}>
 
-    if (!token.startsWith("--")) {
-      outfile = path.resolve(token)
-      continue
-    }
+const readArgs = (argv: readonly string[]): ParsedArgs => {
+  const [token, ...rest] = argv
+  if (token === undefined) return { outfile: null, target: null, executablePath: null }
 
-    const equals = token.indexOf("=")
-    const flag = equals === -1 ? token : token.slice(0, equals)
-    const inline = equals === -1 ? null : token.slice(equals + 1)
+  if (!token.startsWith("--")) {
+    const tail = readArgs(rest)
+    // The last positional outfile wins, so the tail's choice takes priority.
+    return { ...tail, outfile: tail.outfile ?? path.resolve(token) }
+  }
 
-    if (flag === "--target" || flag === "--executable") {
-      const value = readFlagValue(flag, inline, argv[index])
-      if (inline === null) index += 1
-      if (flag === "--target") target = value as Bun.Build.CompileTarget
-      else executablePath = value
-      continue
-    }
-
+  const equals = token.indexOf("=")
+  const flag = equals === -1 ? token : token.slice(0, equals)
+  const inline = equals === -1 ? null : token.slice(equals + 1)
+  if (flag !== "--target" && flag !== "--executable") {
     throw new Error(`unknown flag: ${flag}\n${usage}`)
   }
 
-  return { outfile, target, executablePath }
+  const value = readFlagValue(flag, inline, rest[0])
+  const tail = readArgs(inline === null ? rest.slice(1) : rest)
+  // Later flags win, so the tail spreads over the value read here.
+  return flag === "--target"
+    ? { ...tail, target: parseTarget(value) }
+    : { ...tail, executablePath: value }
+}
+
+const parseArgs = (argv: readonly string[]): BuildArgs => {
+  const parsed = readArgs(argv)
+  return {
+    outfile: parsed.outfile ?? path.join(repoRoot, "yuekbox"),
+    target: parsed.target,
+    executablePath: parsed.executablePath,
+  }
 }
 
 const build = async (): Promise<void> => {

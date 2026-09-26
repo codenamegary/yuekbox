@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { ModelPaths } from "contracts/http/config"
 import { GpuFacts } from "../provisioning/provisioning.models"
-import { expectedModelSizes, modelReadinessKeys } from "./readiness.models"
+import { modelReadinessKeys } from "./readiness.models"
 import { makeReadReadiness } from "./readiness.read.usecase"
 
 const modelPaths: ModelPaths = Object.freeze({
@@ -12,7 +12,16 @@ const modelPaths: ModelPaths = Object.freeze({
   whisper: "/models/whisper-large-v3-turbo",
 })
 
+const expectedModelSizes = {
+  yue2: 7_295_775_491,
+  yue2Vae: 531_343_726,
+  sheetsage2: 233_240_091,
+  sheetsage2Base: 2_530_365_136,
+  whisper: 1_622_466_054,
+}
+
 const readyDeps = {
+  expectedModelSizes,
   checkFfmpeg: async () => true,
   readGpuFacts: async (): Promise<GpuFacts> => ({ kind: "nvidia", driverVersion: "616.56" }),
 }
@@ -62,16 +71,6 @@ test("reports every model ready with the bytes on disk", async () => {
       size: bytesByPath.get(modelPaths[key]) ?? 0,
     })
   }
-})
-
-test("expected sizes come from the upstream repositories read on 2026-09-24", () => {
-  expect(expectedModelSizes).toEqual({
-    yue2: 7_295_775_491,
-    yue2Vae: 531_343_726,
-    sheetsage2: 233_240_091,
-    sheetsage2Base: 2_530_365_136,
-    whisper: 1_622_466_054,
-  })
 })
 
 test("a missing ffmpeg comes with the Linux and WSL2 fix instruction", async () => {

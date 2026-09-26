@@ -37,12 +37,11 @@ type Overrides = Partial<Deps> & Readonly<{ calls?: Calls }>
 
 const smallTree: readonly ModelTreeFile[] = [treeFile("a.bin", 2), treeFile("b.bin", 3)]
 
-const makeDeferred = () => {
-  const box: { resolve: (value: Result<readonly ModelTreeFile[], ModelDownloadFailure>) => void } =
-    {
-      resolve: () => {},
-    }
-  const promise = new Promise<Result<readonly ModelTreeFile[], ModelDownloadFailure>>((resolve) => {
+const makeDeferred = <T>() => {
+  const box: { resolve: (value: T) => void } = {
+    resolve: () => {},
+  }
+  const promise = new Promise<T>((resolve) => {
     box.resolve = resolve
   })
   return { promise, resolve: box.resolve }
@@ -136,13 +135,13 @@ test("a present model is a no-op even without a confirmation", async () => {
 
 test("a confirmed start downloads every file and moves the staged folder into place", async () => {
   const { deps, calls } = makeDeps()
-  let present = false
+  const stage: { present: boolean } = { present: false }
   const downloads = makeModelDownloads({
     ...deps,
-    pathExists: async (path) => path === modelPaths.yue2 && present,
+    pathExists: async (path) => path === modelPaths.yue2 && stage.present,
     moveDirectory: async (from, to) => {
       calls.moves.push(Object.freeze([from, to]))
-      present = true
+      stage.present = true
     },
   })
 
@@ -165,7 +164,7 @@ test("a confirmed start downloads every file and moves the staged folder into pl
 })
 
 test("a second start while a download runs reports the same job and adds no fetch", async () => {
-  const deferred = makeDeferred()
+  const deferred = makeDeferred<Result<readonly ModelTreeFile[], ModelDownloadFailure>>()
   const { deps, calls } = makeDeps({
     readModelTree: async () => {
       calls.tree += 1
@@ -182,6 +181,75 @@ test("a second start while a download runs reports the same job and adds no fetc
   expect(second.value.state).toBe("preparing")
   expect(calls.tree).toBe(1)
   deferred.resolve(ok(smallTree))
+  await downloads.drain()
+})
+
+test("stop aborts an in-flight download so shutdown never waits on it", async () => {
+  const { deps } = makeDeps({
+    downloadFile: (request) =>
+      new Promise<Result<number, ModelDownloadFailure>>((_, reject) => {
+        const abort = (): void => reject(new Error("This operation was aborted"))
+        // Behave like fetch: reject immediately when already aborted, else on
+        // the signal firing.
+        if (request.signal?.aborted === true) {
+          abort()
+          return
+        }
+        request.signal?.addEventListener("abort", abort)
+      }),
+  })
+  const downloads = makeModelDownloads(deps)
+
+  const started = await downloads.start({ key: "yue2", confirm: true })
+  expect(started.ok).toBe(true)
+
+  downloads.stop()
+  await downloads.drain()
+
+  const snapshot = await downloads.read("yue2")
+  expect(snapshot.state).toBe("failed")
+})
+
+test("a start queued behind a refused start is refused too, never told preparing", async () => {
+  const gate = makeDeferred<boolean>()
+  const pathExists = async (): Promise<boolean> => gate.promise
+  const { deps } = makeDeps({ pathExists })
+  const downloads = makeModelDownloads(deps)
+
+  const first = downloads.start({ key: "yue2", confirm: false })
+  const second = downloads.start({ key: "yue2", confirm: false })
+  gate.resolve(false)
+
+  const firstResult = await first
+  const secondResult = await second
+
+  expect(firstResult).toEqual({
+    ok: false,
+    error: { kind: "confirmation_required", key: "yue2", expectedBytes: 5, thresholdBytes: 4 },
+  })
+  expect(secondResult).toEqual({
+    ok: false,
+    error: { kind: "confirmation_required", key: "yue2", expectedBytes: 5, thresholdBytes: 4 },
+  })
+})
+
+test("a start queued behind a confirmed start joins the live job", async () => {
+  const gate = makeDeferred<boolean>()
+  const pathExists = async (): Promise<boolean> => gate.promise
+  const { deps } = makeDeps({ pathExists })
+  const downloads = makeModelDownloads(deps)
+
+  const first = downloads.start({ key: "yue2", confirm: true })
+  const second = downloads.start({ key: "yue2", confirm: false })
+  gate.resolve(false)
+
+  const firstResult = await first
+  const secondResult = await second
+
+  expect(firstResult.ok).toBe(true)
+  expect(secondResult.ok).toBe(true)
+  if (!secondResult.ok) return
+  expect(["preparing", "downloading"]).toContain(secondResult.value.state)
   await downloads.drain()
 })
 
@@ -213,7 +281,7 @@ test("a failed job remembers why and a new start retries it", async () => {
 
   const failed = await downloads.read("yue2")
   expect(failed.state).toBe("failed")
-  expect(failed.errorDetail).toContain("503")
+  expect(failed.errorDetail).toBe("could not reach the model repository")
 
   const retried = await downloads.start({ key: "yue2", confirm: true })
   expect(retried.ok).toBe(true)
@@ -232,7 +300,32 @@ test("a pinned revision whose tree total does not match the pin fails loudly", a
 
   const snapshot = await downloads.read("yue2")
   expect(snapshot.state).toBe("failed")
-  expect(snapshot.errorDetail).toContain("6")
+  expect(snapshot.errorDetail).toBe(
+    "the repository no longer matches the pinned release of this model",
+  )
+})
+
+test("a failure keeps the raw detail out of the snapshot the UI serves", async () => {
+  const logged: string[] = []
+  const { deps } = makeDeps({
+    readModelTree: async () => ({
+      ok: false,
+      error: {
+        kind: "tree_fetch_failed",
+        detail: "GET https://huggingface.co/api/models/x/tree/r failed with HTTP 503",
+      },
+    }),
+    logError: (message) => logged.push(message),
+  })
+  const downloads = makeModelDownloads(deps)
+
+  await downloads.start({ key: "yue2", confirm: true })
+  await downloads.drain()
+
+  const snapshot = await downloads.read("yue2")
+  expect(snapshot.errorDetail).toBe("could not reach the model repository")
+  expect(snapshot.errorDetail).not.toContain("huggingface")
+  expect(logged.join("\n")).toContain("huggingface.co")
 })
 
 test("reads all five models in report order and reports idle when nothing happened", async () => {

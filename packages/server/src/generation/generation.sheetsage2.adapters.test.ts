@@ -269,10 +269,12 @@ test("the script receives the stored path without a temp copy", async () => {
 
 test("the transcript models are resolved when the run starts, not at construction", async () => {
   await withStoredAudio(async (audioPath, outputRoot) => {
-    let paths: ModelPaths = {
-      ...modelPaths,
-      sheetsage2: "/kit/boot/SheetSage2",
-      sheetsage2Base: "/kit/boot/MERT-v2-FullSong",
+    const paths: { value: ModelPaths } = {
+      value: {
+        ...modelPaths,
+        sheetsage2: "/kit/boot/SheetSage2",
+        sheetsage2Base: "/kit/boot/MERT-v2-FullSong",
+      },
     }
     const commands: string[][] = []
     const runner = makeFakeRunner(async (outputDir) => {
@@ -285,12 +287,12 @@ test("the transcript models are resolved when the run starts, not at constructio
       return runner(command, cwd, onOutput)
     }
     const runTranscribe = makeRunTranscribe(
-      { ...env, readModelPaths: async () => paths },
+      { ...env, readModelPaths: async () => paths.value },
       capturingRunner,
     )
 
-    paths = {
-      ...paths,
+    paths.value = {
+      ...paths.value,
       sheetsage2: "/mnt/audio/SheetSage2",
       sheetsage2Base: "/mnt/audio/MERT-v2-FullSong",
     }

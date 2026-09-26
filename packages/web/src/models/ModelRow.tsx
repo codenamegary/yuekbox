@@ -1,6 +1,7 @@
 import * as React from "react"
 import { errorMessage } from "@/lib/problems"
 import { ActionButton, DownloadBar, StateDot } from "./ModelControls"
+import { downloadConfirmations } from "./models.confirmations"
 import { useSaveModelPathMutation, useStartModelDownloadMutation } from "./models.mutations"
 import { downloadRefusalFromError } from "./models.problems"
 import { formatBytes, ModelRowView } from "./models.view"
@@ -15,76 +16,64 @@ export type ModelRowProps = Readonly<{
  * One model: a dot, the name and its job, the resolved path or the download
  * size, and the two ways to get it. Paths are typed, not picked: a web page
  * cannot read a host folder from a picker.
+ *
+ * Refusals and errors derive from the mutations' own state, so a finished
+ * save replaces them instead of stacking stale state behind a hidden button.
+ * A refusal only sticks while the row still points at the refused folder.
  */
 export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) => {
   const savePath = useSaveModelPathMutation()
   const startDownload = useStartModelDownloadMutation()
   const [editing, setEditing] = React.useState(false)
   const [draft, setDraft] = React.useState("")
-  const [refusedPath, setRefusedPath] = React.useState<string | null>(null)
-  const [savedPath, setSavedPath] = React.useState<string | null>(null)
-  const [rowError, setRowError] = React.useState<string | null>(null)
-  const [confirming, setConfirming] = React.useState<number | null>(null)
 
-  const external = refusedPath ?? externalPath
+  const refusal =
+    startDownload.error === null ? null : downloadRefusalFromError(startDownload.error)
+  const confirming = refusal?.kind === "confirmation-required" ? refusal.expectedBytes : null
+  const refused = refusal?.kind === "external-path" ? refusal.path : (externalPath ?? null)
+  const external = refused !== null && refused === row.path ? refused : null
+  const rowError =
+    refusal === null && startDownload.error !== null ? errorMessage(startDownload.error) : null
+  const saveError = savePath.error !== null ? errorMessage(savePath.error) : null
+
   // The save is live server-side; this only says so when the folder turned out
   // empty. Readiness carries the saved path once the refetch lands, so the
   // note waits for that instead of flashing while the save is still in flight.
   const savedNote =
-    savedPath !== null && row.state === "missing" && row.path === savedPath
+    savePath.data !== undefined &&
+    row.state === "missing" &&
+    row.path === savePath.data.models[row.key]
       ? "saved · no model found at that folder"
       : null
 
   const openEditor = (path: string) => {
     setDraft(path)
-    setRowError(null)
-    setConfirming(null)
     setEditing(true)
   }
 
-  const closeEditor = () => {
-    setEditing(false)
-    setRowError(null)
-  }
-
   const download = (confirm: boolean) => {
-    setRowError(null)
     startDownload.mutate(
       { key: row.key, confirm },
       {
-        onSuccess: () => setConfirming(null),
-        onError: (error) => {
-          const refusal = downloadRefusalFromError(error)
-          if (refusal?.kind === "confirmation-required") {
-            setConfirming(refusal.expectedBytes)
-            return
-          }
-          if (refusal?.kind === "external-path") {
-            setRefusedPath(refusal.path)
-            openEditor(refusal.path)
-            return
-          }
-          setRowError(errorMessage(error))
+        onSuccess: () => {
+          // The user confirmed this model's size once; the next generation
+          // starts without asking again.
+          if (confirm) downloadConfirmations.remember(row.key)
         },
       },
     )
   }
 
   const save = () => {
-    const path = draft.trim()
-    if (path === "") {
-      setRowError("Enter a folder path.")
-      return
-    }
     savePath.mutate(
-      { key: row.key, path },
+      { key: row.key, path: draft.trim() },
       {
         onSuccess: () => {
-          setSavedPath(path)
+          // The refusal pointed at the old folder; the new folder deserves a
+          // fresh download button.
+          startDownload.reset()
           setEditing(false)
-          setRowError(null)
         },
-        onError: (error) => setRowError(errorMessage(error)),
       },
     )
   }
@@ -97,7 +86,7 @@ export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) 
           <ActionButton tone="primary" onClick={() => download(true)}>
             download {formatBytes(confirming)}
           </ActionButton>
-          <ActionButton tone="ghost" onClick={() => setConfirming(null)}>
+          <ActionButton tone="ghost" onClick={() => startDownload.reset()}>
             cancel
           </ActionButton>
         </>
@@ -113,7 +102,10 @@ export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) 
     return (
       <>
         {external === null ? (
-          <ActionButton tone="primary" onClick={() => download(true)}>
+          <ActionButton
+            tone="primary"
+            onClick={() => download(downloadConfirmations.confirmed(row.key))}
+          >
             download
             {row.sizeBytes > 0 ? ` · ${formatBytes(row.sizeBytes)}` : ""}
           </ActionButton>
@@ -172,6 +164,9 @@ export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) 
         {rowError !== null ? (
           <p className="mt-1 font-mono text-3xs text-rose-300/90">{rowError}</p>
         ) : null}
+        {saveError !== null ? (
+          <p className="mt-1 font-mono text-3xs text-rose-300/90">{saveError}</p>
+        ) : null}
 
         {editing ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -185,18 +180,22 @@ export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) 
               aria-label={`${row.name} folder path`}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter") save()
+                if (event.key === "Enter" && draft.trim() !== "") save()
                 if (event.key === "Escape") {
                   event.stopPropagation()
-                  closeEditor()
+                  setEditing(false)
                 }
               }}
               className="ai-input min-w-0 flex-1 basis-48"
             />
-            <ActionButton tone="primary" onClick={save} disabled={savePath.isPending}>
+            <ActionButton
+              tone="primary"
+              onClick={save}
+              disabled={savePath.isPending || draft.trim() === ""}
+            >
               {savePath.isPending ? "saving…" : "save"}
             </ActionButton>
-            <ActionButton tone="ghost" onClick={closeEditor}>
+            <ActionButton tone="ghost" onClick={() => setEditing(false)}>
               cancel
             </ActionButton>
           </div>

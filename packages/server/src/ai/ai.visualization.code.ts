@@ -1,7 +1,5 @@
+import { describeError } from "../shared/describe"
 import { cleanAgentText } from "./ai.prompts"
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 const fencedAnywhere = /```[a-zA-Z0-9]*\n([\s\S]*?)```/
 
@@ -24,21 +22,32 @@ const compilesToFunction = (code: string): boolean => {
   }
 }
 
+/**
+ * Offset, counted from the opening `{`, of the `}` that closes the first
+ * block. A pure fold so the depth lives in the accumulator, not a binding.
+ */
+const closingBraceOffset = (chars: readonly string[]): number | null => {
+  const found = chars.reduce<{ at: number | null; depth: number }>(
+    (state, char, offset) => {
+      if (state.at !== null) return state
+      if (char === "{") return { at: null, depth: state.depth + 1 }
+      if (char === "}") {
+        const depth = state.depth - 1
+        return depth === 0 ? { at: offset, depth } : { at: null, depth }
+      }
+      return state
+    },
+    { at: null, depth: 0 },
+  )
+  return found.at
+}
+
 /** Slice from `start` through the brace that closes the first block inside it. */
 const balancedFrom = (text: string, start: number): string | null => {
   const open = text.indexOf("{", start)
   if (open === -1) return null
-  let depth = 0
-  for (let index = open; index < text.length; index += 1) {
-    const char = text[index]
-    if (char === "{") {
-      depth += 1
-    } else if (char === "}") {
-      depth -= 1
-      if (depth === 0) return text.slice(start, index + 1).trim()
-    }
-  }
-  return null
+  const offset = closingBraceOffset(text.slice(open).split(""))
+  return offset === null ? null : text.slice(start, open + offset + 1).trim()
 }
 
 /**
@@ -205,13 +214,21 @@ const stubContext = (): StubContext => {
  * APIs that do not exist, so they retry instead of landing as a visual that
  * dies on the page.
  */
-export const smokeVisualization = (code: string): VisualizationSmokeResult => {
-  let factory: unknown
+/** Compiles the reply to a factory; a compile failure becomes its detail. */
+const compileFactory = (
+  code: string,
+): { ok: true; factory: unknown } | { ok: false; detail: string } => {
   try {
-    factory = makeFactory(code)
+    return { ok: true, factory: makeFactory(code) }
   } catch (error) {
-    return { ok: false, detail: `the code did not compile: ${messageOf(error)}` }
+    return { ok: false, detail: `the code did not compile: ${describeError(error)}` }
   }
+}
+
+export const smokeVisualization = (code: string): VisualizationSmokeResult => {
+  const compiled = compileFactory(code)
+  if (!compiled.ok) return { ok: false, detail: compiled.detail }
+  const factory = compiled.factory
   if (typeof factory !== "function") {
     return { ok: false, detail: "the reply was not a function" }
   }
@@ -257,6 +274,6 @@ export const smokeVisualization = (code: string): VisualizationSmokeResult => {
     instance.dispose()
     return { ok: true }
   } catch (error) {
-    return { ok: false, detail: `the visualization threw while drawing: ${messageOf(error)}` }
+    return { ok: false, detail: `the visualization threw while drawing: ${describeError(error)}` }
   }
 }

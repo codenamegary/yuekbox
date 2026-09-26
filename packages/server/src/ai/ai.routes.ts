@@ -14,7 +14,7 @@ import {
 } from "contracts/http/ai"
 import { PROBLEM_TYPES, ProblemError } from "contracts/http/error"
 import { FindMissingGenerationModels } from "../models/models.models"
-import { modelRequiredProblem } from "../shared/problems"
+import { ModelProblem, modelRequiredProblem } from "../shared/problems"
 import { toSongResponse } from "../songs/songs.responses"
 import { AiSlice } from "./ai.assembly"
 
@@ -46,8 +46,11 @@ const problem = (
   ...(errors !== undefined ? { errors } : {}),
 })
 
-const sendProblem = (reply: FastifyReply, body: ProblemBody) =>
-  reply.status(body.status).type("application/problem+json").send(body)
+const sendProblem = (reply: FastifyReply, body: ProblemBody | ModelProblem) =>
+  reply
+    .status(body.status ?? 500)
+    .type("application/problem+json")
+    .send(body)
 
 const issuePointer = (path: readonly PropertyKey[]): string =>
   path.length === 0 ? "/" : `/${path.map((segment) => String(segment)).join("/")}`

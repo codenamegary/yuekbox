@@ -68,10 +68,9 @@ export type ProvisionReport = Readonly<{
   steps: readonly ProvisionStepOutcome[]
 }>
 
-/** The uv binary provisioning runs, either the user's or the one we fetched. */
+/** The uv binary provisioning runs: the pinned, managed copy we fetched. */
 export type UvTool = Readonly<{
   path: string
-  source: "system" | "managed"
 }>
 
 export type UvFailure = Readonly<{

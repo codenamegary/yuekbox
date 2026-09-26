@@ -26,20 +26,20 @@ describe("mergeStored", () => {
   })
 
   test("apiKey writes and clears", () => {
-    let stored = mergeStored(defaultStoredConfig(), {
+    const written = mergeStored(defaultStoredConfig(), {
       style: { apiKey: "sk-secret-abc" },
     })
-    expect(stored.style.apiKey).toBe("sk-secret-abc")
-    stored = mergeStored(stored, { style: { apiKey: "" } })
-    expect(stored.style.apiKey).toBeNull()
+    expect(written.style.apiKey).toBe("sk-secret-abc")
+    const cleared = mergeStored(written, { style: { apiKey: "" } })
+    expect(cleared.style.apiKey).toBeNull()
   })
 
   test("omitted apiKey keeps the stored key", () => {
-    let stored = mergeStored(defaultStoredConfig(), {
+    const written = mergeStored(defaultStoredConfig(), {
       style: { apiKey: "sk-secret-abc" },
     })
-    stored = mergeStored(stored, { style: { model: "gpt-4o" } })
-    expect(stored.style.apiKey).toBe("sk-secret-abc")
+    const remerged = mergeStored(written, { style: { model: "gpt-4o" } })
+    expect(remerged.style.apiKey).toBe("sk-secret-abc")
   })
 
   test("invalid patch sections are ignored", () => {

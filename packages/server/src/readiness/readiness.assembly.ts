@@ -5,7 +5,7 @@ import {
   makeMeasurePathSize,
   makePathExists,
 } from "./readiness.adapters"
-import { ReadinessReader } from "./readiness.models"
+import { ModelReadinessKey, ReadinessReader } from "./readiness.models"
 import { CheckFfmpeg, ReadGpuFacts } from "./readiness.ports"
 import { makeReadReadiness } from "./readiness.read.usecase"
 
@@ -18,6 +18,8 @@ export const modelSizeTtlMs = 60_000
 export type AssembleReadinessDeps = Readonly<{
   /** Resolved per read, so `PUT /v1/config` takes effect with no restart. */
   readModelPaths: ReadCurrentModelPaths
+  /** The byte total a full download writes, straight from the download pins. */
+  expectedModelSizes: Readonly<Record<ModelReadinessKey, number>>
   checkFfmpeg: CheckFfmpeg
   readGpuFacts: ReadGpuFacts
   /** Test seam; the process root leaves it at `Date.now`. */
@@ -35,6 +37,7 @@ export const assembleReadinessSlice = (deps: AssembleReadinessDeps): ReadinessSl
   const now = deps.now ?? Date.now
   const readReadiness = makeReadReadiness({
     readModelPaths: deps.readModelPaths,
+    expectedModelSizes: deps.expectedModelSizes,
     measureModelSize: makeCachedModelSize({
       pathExists: makePathExists(),
       measurePathSize: makeMeasurePathSize(),

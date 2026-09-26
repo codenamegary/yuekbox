@@ -40,15 +40,20 @@ const retryDelayMs = 8000
  * machine lives entirely outside React's render rules.
  */
 export const createFullAutoController = () => {
+  // structure: allow-let
   let state: FullAutoState = initialFullAutoState
+  // structure: allow-let
   let handlers: FullAutoHandlers = {
     onWatch: () => {},
     onPlay: () => {},
     onTrackEnded: () => {},
     requestRandom: async () => null,
   }
+  // structure: allow-let
   let requestInFlight = false
+  // structure: allow-let
   let retryTimer: number | null = null
+  // structure: allow-let
   let playingSongId: string | null = null
   const listeners = new Set<() => void>()
 

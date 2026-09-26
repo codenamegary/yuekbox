@@ -27,6 +27,7 @@ const makeDownloads = (overrides: Partial<ModelDownloads> = {}): ModelDownloads 
   read: async (key: ModelDownloadKey) => ({ ...downloading, key }),
   readAll: async () => Object.freeze([downloading, otherSnapshot]),
   drain: async () => {},
+  stop: () => {},
   ...overrides,
 })
 
@@ -43,7 +44,7 @@ test("GET /v1/models/downloads answers the contract list", async () => {
 
   expect(response.statusCode).toBe(200)
   const parsed = ModelDownloadsSchema.parse(response.json())
-  expect(parsed.items.map((item) => item.key)).toEqual(["yue2", "yue2Vae"])
+  expect(parsed.map((item) => item.key)).toEqual(["yue2", "yue2Vae"])
   await app.close()
 })
 

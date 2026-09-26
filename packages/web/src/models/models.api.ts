@@ -9,12 +9,7 @@ import {
   modelsDownloadsPath,
 } from "contracts/http/models"
 import { Readiness, ReadinessSchema, readinessPath } from "contracts/http/readiness"
-import { toProblemError } from "@/lib/problems"
-
-const parseJson = async <T>(response: Response, parse: (value: unknown) => T): Promise<T> => {
-  if (!response.ok) throw await toProblemError(response)
-  return parse(await response.json())
-}
+import { parseJson } from "@/lib/http"
 
 export const fetchReadiness = async (): Promise<Readiness> => {
   const response = await fetch(readinessPath)
@@ -39,27 +34,13 @@ export const startModelDownload = async (
   return parseJson(response, (value) => ModelDownloadSnapshotSchema.parse(value))
 }
 
-const pathPatch = (key: ModelKey, path: string): ConfigPatch => {
-  switch (key) {
-    case "yue2":
-      return { models: { yue2: path } }
-    case "yue2Vae":
-      return { models: { yue2Vae: path } }
-    case "sheetsage2":
-      return { models: { sheetsage2: path } }
-    case "sheetsage2Base":
-      return { models: { sheetsage2Base: path } }
-    case "whisper":
-      return { models: { whisper: path } }
-  }
-}
-
 /** Writes one model path; the server validates it and answers with all five. */
 export const saveModelPath = async (key: ModelKey, path: string): Promise<Config> => {
+  const patch: ConfigPatch = { models: { [key]: path } }
   const response = await fetch(configPath, {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(pathPatch(key, path)),
+    body: JSON.stringify(patch),
   })
   return parseJson(response, (value) => ConfigSchema.parse(value))
 }

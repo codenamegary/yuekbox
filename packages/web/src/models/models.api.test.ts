@@ -74,10 +74,10 @@ test("readiness is read from the server and parsed with the contract", async () 
 })
 
 test("the downloads poll reads all five snapshots", async () => {
-  const stub = stubFetch(() => Response.json({ items: [snapshot] }))
+  const stub = stubFetch(() => Response.json([snapshot]))
   const report = await fetchModelDownloads()
   expect(stub.calls[0]?.url).toBe("/v1/models/downloads")
-  expect(report.items[0]?.currentFile).toBe("model-00001-of-00002.safetensors")
+  expect(report[0]?.currentFile).toBe("model-00001-of-00002.safetensors")
 })
 
 test("a download starts with the user's confirmation in the body", async () => {

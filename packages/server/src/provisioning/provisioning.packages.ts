@@ -1,11 +1,12 @@
 import { yue2RuntimePin } from "../runtime/runtime.pins"
 
 /**
- * The uv release yuekbox downloads when the machine has no `uv` on PATH.
- * Pinned to one release archive (x86_64 Linux, the v1 target) and its SHA-256
- * so a corrupted or substituted archive never lands in the home. The local
- * uv 0.9.18 is the version this was developed and verified against; bump the
- * version and both URL and checksum together.
+ * The uv release yuekbox downloads and manages itself. A uv found on PATH
+ * is deliberately ignored, so provisioning always runs this exact version.
+ * Pinned to one release archive (x86_64 Linux, the v1 target) and its
+ * SHA-256 so a corrupted or substituted archive never lands in the home.
+ * The local uv 0.9.18 is the version this was developed and verified
+ * against; bump the version and both URL and checksum together.
  *
  * Checksums come from the release's `.sha256` asset:
  * https://github.com/astral-sh/uv/releases/tag/0.9.18
@@ -18,7 +19,7 @@ export const uvPin = Object.freeze({
   sha256: "c2def3db178ade63933fa15ffc96e882c196ce53e06173dcee05b36c5f6f68f5",
 })
 
-/** PyPI, the extra index for everything the CUDA wheel index does not host. */
+/** PyPI, the primary index. uv falls back to it for anything the extra index lacks. */
 export const pypiIndexUrl = "https://pypi.org/simple"
 
 /**
@@ -33,9 +34,13 @@ export type VenvPin = Readonly<{
   name: string
   /** The managed Python version the venv is built with. */
   python: string
-  /** The primary index; the CUDA wheel index for torch packages. */
+  /** The primary index (`--index-url`). uv falls back to it. */
   indexUrl: string
-  /** The extra index every other pinned package resolves from. */
+  /**
+   * The priority index (`--extra-index-url`). uv checks it first, so the
+   * pinned torch build resolves its CUDA 12.8 wheels from here instead of
+   * the plain build on PyPI.
+   */
   extraIndexUrl: string
   /** Exact pins (`name==version`) or direct references (`name @ url`). */
   packages: readonly string[]
@@ -52,8 +57,8 @@ export type VenvPin = Readonly<{
 export const venvPin: VenvPin = Object.freeze({
   name: "python",
   python: "3.12.3",
-  indexUrl: torchWheelIndexUrl,
-  extraIndexUrl: pypiIndexUrl,
+  indexUrl: pypiIndexUrl,
+  extraIndexUrl: torchWheelIndexUrl,
   packages: Object.freeze([
     `yue2-infer @ git+${yue2RuntimePin.repository}@${yue2RuntimePin.commit}`,
     "torch==2.10.0",

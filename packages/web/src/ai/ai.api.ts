@@ -18,12 +18,7 @@ import {
   WriterScope,
 } from "contracts/http/ai"
 import { Song, SongSchema } from "contracts/http/songs"
-import { toProblemError } from "@/lib/problems"
-
-const parseJson = async <T>(response: Response, parse: (value: unknown) => T): Promise<T> => {
-  if (!response.ok) throw await toProblemError(response)
-  return parse(await response.json())
-}
+import { parseJson } from "@/lib/http"
 
 export const fetchAiPresets = async (): Promise<AiPresets> => {
   const response = await fetch(aiPresetsPath)

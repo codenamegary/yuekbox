@@ -64,11 +64,10 @@ export const createAudioEngine = (): AudioEngine => {
     if (analyser === null || scratch === null) return
     analyser.getByteFrequencyData(scratch)
     const groupSize = Math.max(1, Math.floor(scratch.length / binCount))
-    for (let index = 0; index < binCount; index += 1) {
-      let total = 0
-      for (let offset = 0; offset < groupSize; offset += 1) {
-        total += scratch[index * groupSize + offset] ?? 0
-      }
+    for (const index of bins.keys()) {
+      const total = scratch
+        .slice(index * groupSize, (index + 1) * groupSize)
+        .reduce((sum, value) => sum + value, 0)
       const average = total / groupSize / 255
       const previous = bins[index] ?? 0
       bins[index] = previous * 0.55 + average * 0.45
@@ -76,7 +75,7 @@ export const createAudioEngine = (): AudioEngine => {
   }
 
   const idle = () => {
-    for (let index = 0; index < binCount; index += 1) {
+    for (const index of bins.keys()) {
       const previous = bins[index] ?? 0
       bins[index] = previous + (0.3 - previous) * 0.22
     }
