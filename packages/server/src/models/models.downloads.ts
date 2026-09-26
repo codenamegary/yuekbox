@@ -101,6 +101,36 @@ const jobSnapshot = (
     ...(job.errorDetail !== undefined ? { errorDetail: job.errorDetail } : {}),
   })
 
+type StagedPartition = Readonly<{
+  bytesDone: number
+  remaining: readonly ModelTreeFile[]
+}>
+
+/** Whole staged files count toward progress. Anything else is still to fetch, in tree order. */
+const accountForStagedFile = async (
+  partition: StagedPartition,
+  file: ModelTreeFile,
+  tempDir: string,
+  measureFileBytes: MeasureFileBytes,
+): Promise<StagedPartition> => {
+  const staged = await measureFileBytes(join(tempDir, file.path))
+  if (staged === file.sizeBytes) {
+    return { bytesDone: partition.bytesDone + staged, remaining: partition.remaining }
+  }
+  return { bytesDone: partition.bytesDone, remaining: [...partition.remaining, file] }
+}
+
+const partitionStagedFiles = (
+  files: readonly ModelTreeFile[],
+  tempDir: string,
+  measureFileBytes: MeasureFileBytes,
+): Promise<StagedPartition> =>
+  files.reduce(
+    (partition, file) =>
+      partition.then((current) => accountForStagedFile(current, file, tempDir, measureFileBytes)),
+    Promise.resolve<StagedPartition>({ bytesDone: 0, remaining: [] }),
+  )
+
 /**
  * Downloads pinned Hugging Face snapshots into `<home>/models`, on explicit
  * request. Files stage under `<home>/models/.downloads/<key>` and the folder is
@@ -167,21 +197,16 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
     }
 
     await deps.ensureDirectory(tempDir)
-    let bytesDone = 0 // structure: allow-let
-    const remaining: ModelTreeFile[] = []
-    for (const file of tree) {
-      const staged = await deps.measureFileBytes(join(tempDir, file.path))
-      if (staged === file.sizeBytes) {
-        bytesDone += staged
-        continue
-      }
-      remaining.push(file)
-    }
+    const staged = await partitionStagedFiles(tree, tempDir, deps.measureFileBytes)
     job.state = "downloading"
-    job.bytesDone = bytesDone
+    job.bytesDone = staged.bytesDone
 
-    for (const file of remaining) {
-      const base = bytesDone
+    const downloadRemaining = async (
+      files: readonly ModelTreeFile[],
+      bytesDone: number,
+    ): Promise<boolean> => {
+      const file = files[0]
+      if (file === undefined) return true
       job.currentFile = file.path
       const downloaded = await deps.downloadFile({
         url: modelFileUrl(pin.repo, pin.revision, file.path),
@@ -189,17 +214,21 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
         expectedBytes: file.sizeBytes,
         sha256: file.sha256,
         onBytes: (written) => {
-          job.bytesDone = base + written
+          job.bytesDone = bytesDone + written
         },
         signal,
       })
       if (!downloaded.ok) {
         fail(downloaded.error)
-        return
+        return false
       }
-      bytesDone += file.sizeBytes
-      job.bytesDone = bytesDone
+      const nextBytes = bytesDone + file.sizeBytes
+      job.bytesDone = nextBytes
+      return downloadRemaining(files.slice(1), nextBytes)
     }
+
+    const finished = await downloadRemaining(staged.remaining, staged.bytesDone)
+    if (!finished) return
     job.currentFile = null
 
     if (await deps.pathExists(target)) {
