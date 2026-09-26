@@ -36,8 +36,9 @@ export const modelDirectoryNames = Object.freeze({
 export const yue2PythonPath = (home: string): string =>
   join(homeLayout(home).venvs, "yue2", "bin", "python")
 
-export const yue2ScriptPath = (home: string): string =>
-  join(homeLayout(home).venvs, "yue2", "bin", "yue2")
+/** Our generate entrypoint, installed by the script installer. */
+export const generateScriptPath = (home: string): string =>
+  join(homeLayout(home).scripts, "generate.py")
 
 export const sheetsage2PythonPath = (home: string): string =>
   join(homeLayout(home).venvs, "sheetsage2", "bin", "python")

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { join } from "node:path"
 import {
   defaultHome,
+  generateScriptPath,
   homeLayout,
   lyricAlignPythonPath,
   lyricAlignScriptPath,
@@ -11,7 +12,6 @@ import {
   sheetsage2ScriptPath,
   sqlitePath,
   yue2PythonPath,
-  yue2ScriptPath,
 } from "./home"
 
 test("layout keeps models, venvs, scripts, and data under the home", () => {
@@ -38,7 +38,7 @@ test("venv and script defaults resolve under the home", () => {
   const home = "/home/u/.yuekbox"
 
   expect(yue2PythonPath(home)).toBe(join(home, "venvs/yue2/bin/python"))
-  expect(yue2ScriptPath(home)).toBe(join(home, "venvs/yue2/bin/yue2"))
+  expect(generateScriptPath(home)).toBe(join(home, "scripts/generate.py"))
   expect(sheetsage2PythonPath(home)).toBe(join(home, "venvs/sheetsage2/bin/python"))
   expect(sheetsage2ScriptPath(home)).toBe(join(home, "scripts/transcribe.py"))
   expect(lyricAlignPythonPath(home)).toBe(join(home, "venvs/lyricalign/bin/python"))
