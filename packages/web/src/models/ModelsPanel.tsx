@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useEscapeKey } from "@/lib/use-escape-key"
 import { useReadinessQuery } from "./models.queries"
 import { modelCatalogOrder } from "./models.catalog"
 import { ModelRows } from "./ModelRows"
@@ -15,15 +16,9 @@ export type ModelsPanelProps = Readonly<{
  * so it stays separate from AI settings: models matter before AI is ever on.
  */
 export const ModelsPanel: React.FC<ModelsPanelProps> = ({ onClose }) => {
+  useEscapeKey(onClose)
   const readiness = useReadinessQuery()
 
-  React.useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [onClose])
 
   return (
     <div

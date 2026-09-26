@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useEscapeKey } from "@/lib/use-escape-key"
 import { MissingModel, ModelKey, modelKeyOrder } from "contracts/http/models"
 import { cn } from "@/lib/cn"
 import { ActionButton } from "./ModelControls"
@@ -30,26 +31,20 @@ const externalPaths = (models: readonly MissingModel[]): Record<ModelKey, string
  * problem; this only renders them with the same two choices the panel offers.
  */
 export const MissingModelDialog: React.FC<MissingModelDialogProps> = ({ models, onClose }) => {
+  useEscapeKey(onClose)
   const readiness = useReadinessQuery()
 
-  React.useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [onClose])
+  const allReady = models.every((model) => readiness.data?.models[model.key].state === "ready")
 
   const keys = models.map((model) => model.key)
   const refused = externalPaths(models)
-
-  const allReady = models.every((model) => readiness.data?.models[model.key].state === "ready")
+  const title = allReady ? modelsReadyTitle(models) : blockedTitle(models)
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={blockedTitle(models)}
+      aria-label={title}
       className="fixed inset-0 z-[65] flex items-center justify-center p-4 sm:p-6"
     >
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
@@ -64,7 +59,7 @@ export const MissingModelDialog: React.FC<MissingModelDialogProps> = ({ models, 
           {allReady ? "ready to generate" : "generation blocked"}
         </p>
         <h2 className="mt-2 text-lg font-semibold text-slate-50">
-          {allReady ? modelsReadyTitle(models) : blockedTitle(models)}
+          {title}
         </h2>
         {allReady ? null : (
           <p className="mt-2 text-sm leading-relaxed text-white/60">{blockedDetail(models)}</p>

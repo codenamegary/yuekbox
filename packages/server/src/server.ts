@@ -226,7 +226,8 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
 if (import.meta.main) {
   const running = await startServer({ argv: Bun.argv, env: process.env, osHome: homedir() })
 
-  let stopping = false
+  // A re-entrancy latch mutated only by the signal handlers below.
+  let stopping = false // structure: allow-let
   const exitCode = { SIGINT: 130, SIGTERM: 143 } as Record<string, number>
 
   const shutdown = async (signal: string): Promise<void> => {
