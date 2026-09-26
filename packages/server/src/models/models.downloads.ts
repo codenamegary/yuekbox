@@ -12,6 +12,7 @@ import {
   StartModelDownloadError,
 } from "./models.models"
 import { downloadTempDir, isInsideModelsDir } from "./models.paths"
+import { downloadFailureMessage } from "./models.messages"
 import { modelDownloadPins, ModelDownloadPin, ModelDownloadPins } from "./models.pins"
 import {
   DownloadModelFile,
@@ -60,9 +61,7 @@ type Job = {
   errorDetail?: string
 }
 
-const detailLimit = 2000
-
-const messageOf = (error: unknown): string =>
+const moveFailureDetail = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
 
 const presentSnapshot = (
@@ -144,8 +143,10 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
     const fail = (failure: ModelDownloadFailure): void => {
       job.state = "failed"
       job.currentFile = null
-      job.errorDetail = failure.detail.slice(0, detailLimit)
-      deps.logError?.(`model download failed (${key})`, failure.detail)
+      // The user sees the plain kind-level line; raw details (repository
+      // URLs, checksums, HTTP codes) stay in the server log only.
+      job.errorDetail = downloadFailureMessage(failure)
+      deps.logError?.(`model download failed (${key}): ${failure.detail}`, failure)
     }
 
     const treeResult = await deps.readModelTree(pin.repo, pin.revision)
@@ -216,7 +217,7 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
         jobs.delete(key)
         return
       }
-      fail({ kind: "move_failed", detail: messageOf(error) })
+      fail({ kind: "move_failed", detail: moveFailureDetail(error) })
       return
     }
     jobs.delete(key)
@@ -263,7 +264,7 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
         if (current !== undefined) {
           current.state = "failed"
           current.currentFile = null
-          current.errorDetail = messageOf(error).slice(0, detailLimit)
+          current.errorDetail = "the download failed unexpectedly"
         }
         deps.logError?.(`model download failed (${key})`, error)
       })

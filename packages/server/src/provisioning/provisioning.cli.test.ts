@@ -61,6 +61,10 @@ test("prints every step and ends ready", async () => {
 
 test("a failure prints the plain-English message and the retry, then exits nonzero", async () => {
   const { lines, log } = collectingLog()
+  const details: string[] = []
+  const logDetail = (line: string): void => {
+    details.push(line)
+  }
   const provisionAll: ProvisionAll = async (input) => {
     input.onProgress?.(progressEvent("uv", "started"))
     input.onProgress?.(progressEvent("uv", "completed"))
@@ -77,15 +81,23 @@ test("a failure prints the plain-English message and the retry, then exits nonze
     }
   }
 
-  const code = await runProvisioningCommand({ home: "/home/u/.yuekbox", provisionAll, log })
+  const code = await runProvisioningCommand({
+    home: "/home/u/.yuekbox",
+    provisionAll,
+    log,
+    logDetail,
+  })
 
   expect(code).toBe(1)
   const output = lines.join("\n")
   expect(output).toContain("song tools")
   expect(output.toLowerCase()).toContain("try again")
+  expect(output).toContain("Run yuekbox --provision to retry")
   expect(output).not.toContain("torch")
   expect(output).not.toContain("exited with code")
   expect(output).not.toMatch(forbidden)
+  // The raw detail is for diagnosis, not for the happy path: stderr only.
+  expect(details.join("\n")).toContain("could not find torch==2.10.0")
 })
 
 test("the progress stream is forwarded as it arrives", async () => {
@@ -119,5 +131,6 @@ test("an unexpected throw still prints a plain-English failure, not a stack trac
   expect(output).not.toContain("boom")
   expect(output).not.toContain("provisioning.cli.ts")
   expect(output.toLowerCase()).toContain("try again")
+  expect(output).toContain("Run yuekbox --provision to retry")
   expect(output).not.toMatch(forbidden)
 })

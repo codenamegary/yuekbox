@@ -6,6 +6,8 @@ export type ProvisioningCommandDeps = Readonly<{
   home: string
   provisionAll: ProvisionAll
   log: (line: string) => void
+  /** The diagnostic stream; the process root leaves it at console.error. */
+  logDetail?: (line: string) => void
 }>
 
 const progressLine = (event: ProvisionProgress): string => {
@@ -21,15 +23,18 @@ const progressLine = (event: ProvisionProgress): string => {
   }
 }
 
+const retryHint = "Run yuekbox --provision to retry."
+
 const unexpectedFailureMessage =
   "yuekbox could not finish setting up. Check your internet connection, then try again."
 
 /**
  * The `--provision` command. Streams one plain-English line per piece, and on
- * a stop prints the mapped message and a retry hint before exiting nonzero —
- * never a raw error.
+ * a stop prints the mapped message on stdout with the raw detail on stderr,
+ * then a retry hint, then exits nonzero.
  */
 export const runProvisioningCommand = async (deps: ProvisioningCommandDeps): Promise<number> => {
+  const logDetail = deps.logDetail ?? ((line: string) => console.error(line))
   deps.log("Setting up yuekbox for this machine.")
 
   let result: Awaited<ReturnType<ProvisionAll>>
@@ -41,14 +46,15 @@ export const runProvisioningCommand = async (deps: ProvisioningCommandDeps): Pro
   } catch {
     deps.log("")
     deps.log(unexpectedFailureMessage)
-    deps.log("Run yuekbox again to retry.")
+    deps.log(retryHint)
     return 1
   }
 
   if (!result.ok) {
     deps.log("")
     deps.log(provisionFailureMessage(result.error))
-    deps.log("Run yuekbox again to retry.")
+    logDetail(result.error.detail)
+    deps.log(retryHint)
     return 1
   }
 

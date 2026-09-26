@@ -255,7 +255,7 @@ test("a failed job remembers why and a new start retries it", async () => {
 
   const failed = await downloads.read("yue2")
   expect(failed.state).toBe("failed")
-  expect(failed.errorDetail).toContain("503")
+  expect(failed.errorDetail).toBe("could not reach the model repository")
 
   const retried = await downloads.start({ key: "yue2", confirm: true })
   expect(retried.ok).toBe(true)
@@ -274,7 +274,32 @@ test("a pinned revision whose tree total does not match the pin fails loudly", a
 
   const snapshot = await downloads.read("yue2")
   expect(snapshot.state).toBe("failed")
-  expect(snapshot.errorDetail).toContain("6")
+  expect(snapshot.errorDetail).toBe(
+    "the repository no longer matches the pinned release of this model",
+  )
+})
+
+test("a failure keeps the raw detail out of the snapshot the UI serves", async () => {
+  const logged: string[] = []
+  const { deps } = makeDeps({
+    readModelTree: async () => ({
+      ok: false,
+      error: {
+        kind: "tree_fetch_failed",
+        detail: "GET https://huggingface.co/api/models/x/tree/r failed with HTTP 503",
+      },
+    }),
+    logError: (message) => logged.push(message),
+  })
+  const downloads = makeModelDownloads(deps)
+
+  await downloads.start({ key: "yue2", confirm: true })
+  await downloads.drain()
+
+  const snapshot = await downloads.read("yue2")
+  expect(snapshot.errorDetail).toBe("could not reach the model repository")
+  expect(snapshot.errorDetail).not.toContain("huggingface")
+  expect(logged.join("\n")).toContain("huggingface.co")
 })
 
 test("reads all five models in report order and reports idle when nothing happened", async () => {
