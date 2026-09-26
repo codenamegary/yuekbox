@@ -43,6 +43,23 @@ const toReferenceSummary = (fileName: string): SongReference | null => {
   return parts === null ? null : Object.freeze({ id: parts.id, filename: parts.displayName })
 }
 
+/** Resolves the uploaded reference for a supplied referenceId, else null. */
+const resolveUpload = async (
+  deps: CreateSongDeps,
+  referenceId: string | null,
+): Promise<Result<UploadedReference | null, CreateSongError>> => {
+  if (referenceId === null) return ok(null)
+  const upload = await findUploadedReference(deps.find, referenceId)
+  if (upload === null) {
+    return err({
+      kind: "validation_error",
+      pointer: "/referenceId",
+      code: referenceUnavailableCode,
+    })
+  }
+  return ok(upload)
+}
+
 export const makeCreateSong =
   (deps: CreateSongDeps) =>
   async (body: CreateSongBody): Promise<Result<Song, CreateSongError>> => {
@@ -55,17 +72,9 @@ export const makeCreateSong =
     }
 
     const referenceId = parsed.data.referenceId ?? null
-    let upload: UploadedReference | null = null
-    if (referenceId !== null) {
-      upload = await findUploadedReference(deps.find, referenceId)
-      if (upload === null) {
-        return err({
-          kind: "validation_error",
-          pointer: "/referenceId",
-          code: referenceUnavailableCode,
-        })
-      }
-    }
+    const uploadResult = await resolveUpload(deps, referenceId)
+    if (!uploadResult.ok) return uploadResult
+    const upload = uploadResult.value
 
     const now = deps.now()
     const songId = deps.generateId()

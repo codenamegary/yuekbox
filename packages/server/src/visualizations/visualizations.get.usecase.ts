@@ -13,6 +13,24 @@ export type GetVisualizationDeps = Readonly<{
   checksum: (code: string) => string
 }>
 
+/** A stored code wins, then an in-flight run, then the last failure, else nothing. */
+const visualizationFor = (
+  deps: GetVisualizationDeps,
+  songId: string,
+  code: string | null,
+): SongVisualization | null => {
+  if (code !== null) {
+    return {
+      status: deps.isInFlight(songId) ? "rerolling" : "ready",
+      code,
+      checksum: deps.checksum(code),
+    }
+  }
+  if (deps.isInFlight(songId)) return { status: "pending" }
+  const failure = deps.failureFor(songId)
+  return failure === null ? null : { status: "failed", errorDetail: failure }
+}
+
 /**
  * The file on disk is the durable truth: when it exists the answer is ready
  * (or rerolling while a new run is in flight). Pending and failed only exist
@@ -27,19 +45,7 @@ export const makeGetVisualization =
 
     const [code, analysis] = await Promise.all([deps.readCode(songId), deps.readAnalysis(songId)])
 
-    let visualization: SongVisualization | null = null
-    if (code !== null) {
-      visualization = {
-        status: deps.isInFlight(songId) ? "rerolling" : "ready",
-        code,
-        checksum: deps.checksum(code),
-      }
-    } else if (deps.isInFlight(songId)) {
-      visualization = { status: "pending" }
-    } else {
-      const failure = deps.failureFor(songId)
-      if (failure !== null) visualization = { status: "failed", errorDetail: failure }
-    }
+    const visualization = visualizationFor(deps, songId, code)
 
     return ok({ visualization, analysis })
   }

@@ -4,17 +4,21 @@ import { ModelPathOverrides } from "contracts/http/config"
 import { ConfigFileSchema } from "./config.models"
 import { LoadModelOverrides, SaveModelOverrides } from "./config.ports"
 
-/** Empty files and a bare `models:` line mean "no overrides", never an error. */
-export const parseConfigFile = (text: string): ModelPathOverrides => {
-  if (text.trim() === "") return {}
-
-  let value: unknown
+/** Parses YAML, mapping a parse failure to a plain-language error. */
+const parseYaml = (text: string): unknown => {
   try {
-    value = Bun.YAML.parse(text)
+    return Bun.YAML.parse(text)
   } catch (error: unknown) {
     const detail = error instanceof Error ? error.message : String(error)
     throw new Error(`config file is not valid YAML: ${detail}`)
   }
+}
+
+/** Empty files and a bare `models:` line mean "no overrides", never an error. */
+export const parseConfigFile = (text: string): ModelPathOverrides => {
+  if (text.trim() === "") return {}
+
+  const value = parseYaml(text)
 
   const parsed = ConfigFileSchema.safeParse(value)
   if (!parsed.success) {

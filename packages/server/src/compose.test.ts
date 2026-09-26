@@ -240,18 +240,18 @@ const geminiWildReply = `const factory = (host) => {
 
 /** A real OpenAI-compatible endpoint; the first reply is bad so authoring retries. */
 const startFakeOpenAI = () => {
-  let calls = 0
+  const replies: string[] = []
   const server = Bun.serve({
     port: 0,
     routes: {
       "/v1/chat/completions": () => {
-        calls += 1
-        const content = calls === 1 ? geminiWildReply : visualizationCode
+        const content = replies.length === 0 ? geminiWildReply : visualizationCode
+        replies.push(content)
         return Response.json({ choices: [{ message: { role: "assistant", content } }] })
       },
     },
   })
-  return { server, calls: () => calls }
+  return { server, calls: () => replies.length }
 }
 
 test("creating a Song authors a visualization and deleting it takes the file along", async () => {

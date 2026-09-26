@@ -28,6 +28,20 @@ const retryHint = "Run yuekbox --provision to retry."
 const unexpectedFailureMessage =
   "yuekbox could not finish setting up. Check your internet connection, then try again."
 
+/** Runs provisioning; a thrown setup maps to null for the catch-all message. */
+const provisionOrFail = async (
+  deps: ProvisioningCommandDeps,
+): Promise<Awaited<ReturnType<ProvisionAll>> | null> => {
+  try {
+    return await deps.provisionAll({
+      home: deps.home,
+      onProgress: (event) => deps.log(progressLine(event)),
+    })
+  } catch {
+    return null
+  }
+}
+
 /**
  * The `--provision` command. Streams one plain-English line per piece, and on
  * a stop prints the mapped message on stdout with the raw detail on stderr,
@@ -37,13 +51,8 @@ export const runProvisioningCommand = async (deps: ProvisioningCommandDeps): Pro
   const logDetail = deps.logDetail ?? ((line: string) => console.error(line))
   deps.log("Setting up yuekbox for this machine.")
 
-  let result: Awaited<ReturnType<ProvisionAll>>
-  try {
-    result = await deps.provisionAll({
-      home: deps.home,
-      onProgress: (event) => deps.log(progressLine(event)),
-    })
-  } catch {
+  const result = await provisionOrFail(deps)
+  if (result === null) {
     deps.log("")
     deps.log(unexpectedFailureMessage)
     deps.log(retryHint)

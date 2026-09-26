@@ -43,8 +43,8 @@ export const runProcess: ProcessRunner = async (command, cwd, onStderrLine, env)
   })
 
   const decoder = new TextDecoder()
-  let tail = ""
-  let pending = ""
+  let tail = "" // structure: allow-let
+  let pending = "" // structure: allow-let
 
   const consumeStderr = (async () => {
     for await (const chunk of proc.stderr) {

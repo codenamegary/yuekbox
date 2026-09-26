@@ -163,7 +163,7 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
     }
 
     await deps.ensureDirectory(tempDir)
-    let bytesDone = 0
+    let bytesDone = 0 // structure: allow-let
     const remaining: ModelTreeFile[] = []
     for (const file of tree) {
       const staged = await deps.measureFileBytes(join(tempDir, file.path))

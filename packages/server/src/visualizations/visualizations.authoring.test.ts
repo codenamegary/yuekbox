@@ -8,11 +8,13 @@ const song = songFixture({ id: "01J8K3R4P9ABCDEFGHJKMNPQRS", style: "pop", lyric
 const code = "(host) => ({})"
 
 const deferred = <T>() => {
-  let resolve!: (value: T) => void
+  const box: { resolve: (value: T) => void } = {
+    resolve: () => {},
+  }
   const promise = new Promise<T>((settle) => {
-    resolve = settle
+    box.resolve = settle
   })
-  return { promise, resolve }
+  return { promise, resolve: box.resolve }
 }
 
 describe("makeVisualizationAuthoring", () => {
@@ -68,10 +70,10 @@ describe("makeVisualizationAuthoring", () => {
 
   test("a second start while in flight changes nothing", async () => {
     const first = deferred<Result<Readonly<{ code: string }>, VisualizationAuthorError>>()
-    let calls = 0
+    const calls: number[] = []
     const authoring = makeVisualizationAuthoring({
       author: () => {
-        calls += 1
+        calls.push(1)
         return first.promise
       },
       readAnalysis: async () => null,
@@ -81,17 +83,17 @@ describe("makeVisualizationAuthoring", () => {
     authoring.start(song)
     authoring.start(song)
     await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(calls).toBe(1)
+    expect(calls).toHaveLength(1)
 
     first.resolve(ok({ code }))
     await authoring.drain()
   })
 
   test("a reroll clears the remembered failure", async () => {
-    let reply: "failed" | "ok" = "failed"
+    const reply: { mode: "failed" | "ok" } = { mode: "failed" }
     const authoring = makeVisualizationAuthoring({
       author: async () =>
-        reply === "failed"
+        reply.mode === "failed"
           ? { ok: false, error: { kind: "upstream_failed", detail: "down" } }
           : ok({ code }),
       readAnalysis: async () => null,
@@ -102,7 +104,7 @@ describe("makeVisualizationAuthoring", () => {
     await authoring.drain()
     expect(authoring.failureFor(song.id)).toBe("down")
 
-    reply = "ok"
+    reply.mode = "ok"
     authoring.start(song)
     expect(authoring.failureFor(song.id)).toBeNull()
     await authoring.drain()

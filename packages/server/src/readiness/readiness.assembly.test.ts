@@ -11,17 +11,17 @@ const modelPaths: ModelPaths = Object.freeze({
 })
 
 test("assembled readiness reuses the cached system probes across reads", async () => {
-  let ffmpegCalls = 0
-  let gpuCalls = 0
+  const ffmpegCalls: number[] = []
+  const gpuCalls: number[] = []
   const slice = assembleReadinessSlice({
     expectedModelSizes: { yue2: 1, yue2Vae: 1, sheetsage2: 1, sheetsage2Base: 1, whisper: 1 },
     readModelPaths: async () => modelPaths,
     checkFfmpeg: async () => {
-      ffmpegCalls += 1
+      ffmpegCalls.push(1)
       return true
     },
     readGpuFacts: async () => {
-      gpuCalls += 1
+      gpuCalls.push(1)
       return { kind: "nvidia", driverVersion: "616.56" }
     },
     now: () => 1_000,
@@ -31,6 +31,6 @@ test("assembled readiness reuses the cached system probes across reads", async (
   const second = await slice.readReadiness()
 
   expect(first).toEqual(second)
-  expect(ffmpegCalls).toBe(1)
-  expect(gpuCalls).toBe(1)
+  expect(ffmpegCalls).toHaveLength(1)
+  expect(gpuCalls).toHaveLength(1)
 })

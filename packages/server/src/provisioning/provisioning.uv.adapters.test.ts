@@ -41,13 +41,13 @@ test("reuses the managed uv on a rerun without downloading", async () => {
 
 test("rebuilds when the binary is gone even with a stamp", async () => {
   await withTempDir(async (dir) => {
-    let downloaded = false
+    const downloads: string[] = []
     await mkdir(join(dir, "tools"), { recursive: true })
     await writeFile(uvStampPath(dir), "{}\n", "utf8")
     const ensureUv = makeEnsureUv({
       home: dir,
       downloadFile: async (request) => {
-        downloaded = true
+        downloads.push(request.destPath)
         await mkdir(dirname(request.destPath), { recursive: true })
         await writeFile(request.destPath, "archive bytes", "utf8")
         return ok({ path: request.destPath, bytes: 13 })
@@ -65,7 +65,7 @@ test("rebuilds when the binary is gone even with a stamp", async () => {
     const result = await ensureUv()
 
     expect(result).toEqual({ ok: true, value: { path: join(dir, "tools", "uv-0.9.18", "uv") } })
-    expect(downloaded).toBe(true)
+    expect(downloads).toHaveLength(1)
   })
 })
 

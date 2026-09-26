@@ -26,12 +26,13 @@ const parseVersion = (version: string): readonly number[] | null => {
 
 const isAtLeast = (version: readonly number[], minimum: readonly number[]): boolean => {
   const length = Math.max(version.length, minimum.length)
-  for (let index = 0; index < length; index += 1) {
-    const left = version[index] ?? 0
-    const right = minimum[index] ?? 0
-    if (left !== right) return left > right
-  }
-  return true
+  const padded = (parts: readonly number[]): readonly number[] =>
+    Array.from({ length }, (_, index) => parts[index] ?? 0)
+  const left = padded(version)
+  const right = padded(minimum)
+  const differing = left.findIndex((value, index) => value !== right[index])
+  if (differing === -1) return true
+  return (left[differing] ?? 0) > (right[differing] ?? 0)
 }
 
 /**

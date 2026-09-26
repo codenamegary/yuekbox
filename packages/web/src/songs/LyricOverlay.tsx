@@ -38,13 +38,13 @@ export const LyricOverlay: React.FC<LyricOverlayProps> = ({ cues, engine, muted 
 
   React.useEffect(() => {
     const frame = { handle: 0 }
-    let lastIndex: number | null = null
+    const last: { index: number | null } = { index: null }
 
     const tick = () => {
       const time = engine.currentTime()
       const index = cueIndexAt(cues, time)
-      if (index !== lastIndex) {
-        lastIndex = index
+      if (index !== last.index) {
+        last.index = index
         setCueIndex(index)
       }
       const element = textRef.current

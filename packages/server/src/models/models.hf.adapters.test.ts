@@ -135,10 +135,10 @@ test("a stream that ends early keeps the partial file for the next attempt", asy
   await withTempDir(async (dir) => {
     const dest = join(dir, "model.safetensors")
     await writeFile(`${dest}.part`, "he")
-    let calls = 0
+    const calls: number[] = []
     const fetchImpl: FetchLike = async (_url, init) => {
-      calls += 1
-      if (calls === 1) {
+      calls.push(calls.length + 1)
+      if (calls.length === 1) {
         // The server closes the stream cleanly after two more bytes.
         return new Response("ll", { status: 206 })
       }

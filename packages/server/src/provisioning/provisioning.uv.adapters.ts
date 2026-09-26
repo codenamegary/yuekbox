@@ -3,7 +3,7 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { ProcessOutcome, ProcessRunner } from "../shared/process"
 import { describeError } from "../shared/describe"
-import { err, ok } from "../shared/result"
+import { err, ok, Result } from "../shared/result"
 import { homeLayout } from "../shared/home"
 import { uvPin } from "./provisioning.packages"
 import { DownloadFile, EnsureUv } from "./provisioning.ports"
@@ -71,19 +71,29 @@ export const makeEnsureUv = (env: EnsureUvEnv): EnsureUv => {
       })
     }
 
-    let outcome: ProcessOutcome
-    try {
-      outcome = await env.runProcess(
-        ["tar", "-xzf", archive, "--strip-components=1", "-C", staging],
-        env.home,
-        () => undefined,
-      )
-    } catch (error: unknown) {
-      return err({
-        kind: "uv_unavailable",
-        detail: `could not extract the archive: ${describeError(error)}`,
-      })
+    /** Extracts the pinned archive into staging; a spawn failure becomes its message. */
+    const extractArchive = async (
+      archive: string,
+      staging: string,
+    ): Promise<Result<ProcessOutcome, string>> => {
+      try {
+        return ok(
+          await env.runProcess(
+            ["tar", "-xzf", archive, "--strip-components=1", "-C", staging],
+            env.home,
+            () => undefined,
+          ),
+        )
+      } catch (error: unknown) {
+        return err(`could not extract the archive: ${describeError(error)}`)
+      }
     }
+
+    const extracted = await extractArchive(archive, staging)
+    if (!extracted.ok) {
+      return err({ kind: "uv_unavailable", detail: extracted.error })
+    }
+    const outcome = extracted.value
     if (outcome.exitCode !== 0) {
       await rm(staging, { recursive: true, force: true }).catch(() => undefined)
       const detail = outcome.stderrTail.trim() || `tar exited with code ${outcome.exitCode}`

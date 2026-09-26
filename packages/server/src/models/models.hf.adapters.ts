@@ -72,7 +72,7 @@ const writeBody = async (
 
   const handle = await open(partPath, start > 0 ? "a" : "w")
   const hash = request.sha256 === null ? null : createHash("sha256")
-  let written = start
+  let written = start // structure: allow-let
   try {
     // A resumed part is hashed first, so the LFS checksum still covers the whole file.
     if (hash !== null && start > 0) {

@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { envWithout, ProcessOutcome, ProcessRunner } from "../shared/process"
 import { describeError } from "../shared/describe"
-import { err, ok } from "../shared/result"
+import { err, ok, Result } from "../shared/result"
 import { homeLayout } from "../shared/home"
 import { z } from "zod"
 import { EnsurePython, EnsureVenv } from "./provisioning.ports"
@@ -46,6 +46,18 @@ export const venvStampPath = (dir: string): string => join(dir, ".yuekbox.json")
 const describeExit = (outcome: { exitCode: number; stderrTail: string }, what: string): string =>
   outcome.stderrTail.trim() || `${what} exited with code ${outcome.exitCode}`
 
+/** Runs one uv command with the managed environment; a spawn failure becomes its message. */
+const runUv = async (
+  env: PythonAdapterEnv,
+  command: readonly string[],
+): Promise<Result<ProcessOutcome, string>> => {
+  try {
+    return ok(await env.runProcess(command, env.home, () => undefined, uvEnv(env.home)))
+  } catch (error: unknown) {
+    return err(`could not run uv: ${describeError(error)}`)
+  }
+}
+
 /**
  * Installs every managed Python version with uv into `<home>/tools/python`.
  * uv keeps the builds self-contained there, so nothing depends on a system
@@ -54,7 +66,7 @@ const describeExit = (outcome: { exitCode: number; stderrTail: string }, what: s
 export const makeEnsurePython = (env: PythonAdapterEnv): EnsurePython => {
   return async (uv, versions) => {
     const installDir = managedPythonDir(env.home)
-    let installedAny = false
+    const installed: string[] = []
 
     for (const version of versions) {
       if (existsSync(pythonStampPath(env.home, version))) continue
@@ -68,24 +80,22 @@ export const makeEnsurePython = (env: PythonAdapterEnv): EnsurePython => {
         })
       }
 
-      let outcome: ProcessOutcome
-      try {
-        outcome = await env.runProcess(
-          [uv.path, "python", "install", "--install-dir", installDir, "--no-bin", version],
-          env.home,
-          () => undefined,
-          uvEnv(env.home),
-        )
-      } catch (error: unknown) {
-        return err({
-          kind: "python_unavailable",
-          detail: `could not run uv: ${describeError(error)}`,
-        })
+      const outcome = await runUv(env, [
+        uv.path,
+        "python",
+        "install",
+        "--install-dir",
+        installDir,
+        "--no-bin",
+        version,
+      ])
+      if (!outcome.ok) {
+        return err({ kind: "python_unavailable", detail: outcome.error })
       }
-      if (outcome.exitCode !== 0) {
+      if (outcome.value.exitCode !== 0) {
         return err({
           kind: "python_unavailable",
-          detail: describeExit(outcome, `python install ${version}`),
+          detail: describeExit(outcome.value, `python install ${version}`),
         })
       }
 
@@ -101,10 +111,10 @@ export const makeEnsurePython = (env: PythonAdapterEnv): EnsurePython => {
           detail: `could not stamp ${version}: ${describeError(error)}`,
         })
       }
-      installedAny = true
+      installed.push(version)
     }
 
-    return ok({ status: installedAny ? "installed" : "ready" })
+    return ok({ status: installed.length > 0 ? "installed" : "ready" })
   }
 }
 
@@ -148,50 +158,36 @@ export const makeEnsureVenv = (env: PythonAdapterEnv): EnsureVenv => {
       })
     }
 
-    let venv: ProcessOutcome
-    try {
-      venv = await env.runProcess(
-        [uv.path, "venv", "--python", request.pythonVersion, request.dir],
-        env.home,
-        () => undefined,
-        uvEnv(env.home),
-      )
-    } catch (error: unknown) {
-      return err({ kind: "venv_failed", detail: `could not run uv: ${describeError(error)}` })
+    const venv = await runUv(env, [uv.path, "venv", "--python", request.pythonVersion, request.dir])
+    if (!venv.ok) {
+      return err({ kind: "venv_failed", detail: venv.error })
     }
-    if (venv.exitCode !== 0) {
+    if (venv.value.exitCode !== 0) {
       return err({
         kind: "venv_failed",
-        detail: describeExit(venv, `venv ${request.name}`),
+        detail: describeExit(venv.value, `venv ${request.name}`),
       })
     }
 
-    let install: ProcessOutcome
-    try {
-      install = await env.runProcess(
-        [
-          uv.path,
-          "pip",
-          "install",
-          "--python",
-          join(request.dir, "bin", "python"),
-          "--index-url",
-          request.indexUrl,
-          "--extra-index-url",
-          request.extraIndexUrl,
-          ...request.packages,
-        ],
-        env.home,
-        () => undefined,
-        uvEnv(env.home),
-      )
-    } catch (error: unknown) {
-      return err({ kind: "venv_failed", detail: `could not run uv: ${describeError(error)}` })
+    const install = await runUv(env, [
+      uv.path,
+      "pip",
+      "install",
+      "--python",
+      join(request.dir, "bin", "python"),
+      "--index-url",
+      request.indexUrl,
+      "--extra-index-url",
+      request.extraIndexUrl,
+      ...request.packages,
+    ])
+    if (!install.ok) {
+      return err({ kind: "venv_failed", detail: install.error })
     }
-    if (install.exitCode !== 0) {
+    if (install.value.exitCode !== 0) {
       return err({
         kind: "venv_failed",
-        detail: describeExit(install, `installing ${request.name}`),
+        detail: describeExit(install.value, `installing ${request.name}`),
       })
     }
 

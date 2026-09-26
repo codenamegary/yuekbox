@@ -135,13 +135,13 @@ test("a present model is a no-op even without a confirmation", async () => {
 
 test("a confirmed start downloads every file and moves the staged folder into place", async () => {
   const { deps, calls } = makeDeps()
-  let present = false
+  const stage: { present: boolean } = { present: false }
   const downloads = makeModelDownloads({
     ...deps,
-    pathExists: async (path) => path === modelPaths.yue2 && present,
+    pathExists: async (path) => path === modelPaths.yue2 && stage.present,
     moveDirectory: async (from, to) => {
       calls.moves.push(Object.freeze([from, to]))
-      present = true
+      stage.present = true
     },
   })
 

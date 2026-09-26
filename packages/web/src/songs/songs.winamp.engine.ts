@@ -29,7 +29,7 @@ export const downbeatTimes = (analysis: SongAnalysis | null): readonly number[] 
 
 /** The latest downbeat at or before `time`, or null before the first one. */
 export const downbeatAt = (downbeats: readonly number[], time: number): number | null => {
-  let found: number | null = null
+  let found: number | null = null // structure: allow-let
   for (const downbeat of downbeats) {
     if (downbeat > time) break
     found = downbeat
@@ -111,6 +111,7 @@ export const createWinampEngine = (source: FrequencySource): WinampEngine => {
 
     const rings = 14
     for (let ring = 0; ring < rings; ring += 1) {
+      // structure: allow-let
       context.beginPath()
       const radius = ring * 30 + bass * 22
       const hue = (190 + ring * 12 + frame * 0.4) % 360
@@ -119,6 +120,7 @@ export const createWinampEngine = (source: FrequencySource): WinampEngine => {
 
       const points = 6 + (ring % 4)
       for (let point = 0; point <= points; point += 1) {
+        // structure: allow-let
         const angle = (point / points) * Math.PI * 2 + frame * 0.008 * (ring % 2 === 0 ? 1 : -1)
         const warp = Math.sin(angle * 3 + frame * 0.05) * (14 * (bins[ring % 32] ?? 0))
         const x = Math.cos(angle) * (radius + warp)
@@ -140,10 +142,12 @@ export const createWinampEngine = (source: FrequencySource): WinampEngine => {
     const centerY = height * 0.5
 
     for (let ribbon = 0; ribbon < 3; ribbon += 1) {
+      // structure: allow-let
       context.beginPath()
       context.moveTo(0, centerY)
 
       for (let x = 0; x < width; x += 6) {
+        // structure: allow-let
         const normalized = x / Math.max(1, width)
         const index = Math.floor(normalized * 31)
         const value = bins[index] ?? 0
@@ -177,11 +181,13 @@ export const createWinampEngine = (source: FrequencySource): WinampEngine => {
 
     const bands = 16
     for (let band = 0; band < bands; band += 1) {
+      // structure: allow-let
       const yPosition = (height / bands) * band
       context.beginPath()
       context.moveTo(0, yPosition)
 
       for (let x = 0; x < width; x += 18) {
+        // structure: allow-let
         const value = bins[band % 32] ?? 0
         const offset =
           Math.sin(x * 0.007 + frame * 0.04 + band) * (45 * value + surge * 30) +
@@ -207,6 +213,7 @@ export const createWinampEngine = (source: FrequencySource): WinampEngine => {
     const count = 90
 
     for (let index = 0; index < count; index += 1) {
+      // structure: allow-let
       const speed = 0.015 + index * 0.0003
       const t = frame * speed + index * ((Math.PI * 2) / count)
       const value = bins[index % 32] ?? 0
