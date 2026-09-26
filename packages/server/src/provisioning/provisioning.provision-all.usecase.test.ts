@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { join } from "node:path"
 import { err, ok } from "../shared/result"
 import { ProvisionProgress, UvTool, VenvRequest } from "./provisioning.models"
-import { venvPin } from "./provisioning.packages"
+import { pypiIndexUrl, venvFingerprint, venvPin } from "./provisioning.packages"
 import {
   EnsurePython,
   EnsureUv,
@@ -131,9 +131,12 @@ test("builds exactly one shared venv under <home>/venvs with the manifest pin", 
   expect(request.name).toBe(venvPin.name)
   expect(request.pythonVersion).toBe(venvPin.python)
   expect(request.packages).toEqual(venvPin.packages)
-  expect(request.extraIndexUrl).toBe(venvPin.extraIndexUrl)
+  expect(request.indexUrl).toBe(pypiIndexUrl)
+  expect(request.extraIndexUrl).toBe("https://download.pytorch.org/whl/cu128")
   expect(request.fingerprint.length).toBeGreaterThan(0)
-  expect(request.indexUrl).toBe("https://download.pytorch.org/whl/cu128")
+  expect(request.fingerprint).toBe(
+    venvFingerprint({ ...venvPin, extraIndexUrl: "https://download.pytorch.org/whl/cu128" }),
+  )
   expect(state.scriptDirs).toEqual([join(home, "scripts")])
 })
 

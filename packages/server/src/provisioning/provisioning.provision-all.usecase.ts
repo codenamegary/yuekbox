@@ -8,7 +8,7 @@ import {
   ProvisionStepStatus,
   provisionStepLabels,
 } from "./provisioning.models"
-import { managedPythonVersions, venvFingerprint, venvPin } from "./provisioning.packages"
+import { managedPythonVersions, venvFingerprint, venvPin, VenvPin } from "./provisioning.packages"
 import {
   EnsurePython,
   EnsureUv,
@@ -75,14 +75,17 @@ export const makeProvisionAll =
     finish("gpu", "completed")
 
     emit("environment", "started")
+    // The GPU check picks the CUDA wheel index; the stamp and the install
+    // command both derive from this one pin so they can never disagree.
+    const pin: VenvPin = { ...venvPin, extraIndexUrl: gpu.value.indexUrl }
     const built = await deps.ensureVenv(uv.value, {
-      name: venvPin.name,
+      name: pin.name,
       dir: venvPath(input.home),
-      pythonVersion: venvPin.python,
-      indexUrl: gpu.value.indexUrl,
-      extraIndexUrl: venvPin.extraIndexUrl,
-      packages: venvPin.packages,
-      fingerprint: venvFingerprint(venvPin),
+      pythonVersion: pin.python,
+      indexUrl: pin.indexUrl,
+      extraIndexUrl: pin.extraIndexUrl,
+      packages: pin.packages,
+      fingerprint: venvFingerprint(pin),
     })
     if (!built.ok) {
       return err(stop("environment", { kind: built.error.kind, detail: built.error.detail }))

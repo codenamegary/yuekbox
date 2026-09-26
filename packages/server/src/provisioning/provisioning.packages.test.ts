@@ -20,8 +20,10 @@ test("uv is pinned to one release archive with a checksum", () => {
 test("one shared environment pins the tested union on the CUDA 12.8 wheels", () => {
   expect(venvPin.name).toBe("python")
   expect(venvPin.python).toBe("3.12.3")
-  expect(venvPin.indexUrl).toBe("https://download.pytorch.org/whl/cu128")
-  expect(venvPin.extraIndexUrl).toBe(pypiIndexUrl)
+  // uv prefers --extra-index-url over --index-url, so the CUDA wheel index
+  // must be the extra index or the pinned torch resolves plain from PyPI.
+  expect(venvPin.indexUrl).toBe(pypiIndexUrl)
+  expect(venvPin.extraIndexUrl).toBe(torchWheelIndexUrl)
   expect(venvPin.packages).toEqual([
     `yue2-infer @ git+${yue2RuntimePin.repository}@${yue2RuntimePin.commit}`,
     "torch==2.10.0",

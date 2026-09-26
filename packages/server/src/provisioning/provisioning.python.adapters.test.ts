@@ -167,9 +167,9 @@ test("builds the venv then installs the pinned packages", async () => {
         "--python",
         join(venvDir, "bin", "python"),
         "--index-url",
-        "https://download.pytorch.org/whl/cu128",
-        "--extra-index-url",
         "https://pypi.org/simple",
+        "--extra-index-url",
+        "https://download.pytorch.org/whl/cu128",
         ...venvPin.packages,
       ],
     ])
