@@ -3,6 +3,7 @@ import { PROBLEM_TYPES } from "contracts/http/error"
 import { ReferenceSchema } from "contracts/http/references"
 import { unusedAiFixture } from "../ai/ai.fixtures"
 import { buildApp } from "../app"
+import { unusedConfigFixture } from "../config/config.fixtures"
 import { ok } from "../shared/result"
 import { unusedVisualizationsFixture } from "../visualizations/visualizations.fixtures"
 import { makeSongsSliceFixture, referenceFixture, songFixture } from "./songs.fixtures"
@@ -20,6 +21,7 @@ const makeApp = (songs: SongsSlice) =>
     referenceMaxBytes: 1024,
     ai: unusedAiFixture(),
     visualizations: unusedVisualizationsFixture(),
+    config: unusedConfigFixture(),
     status: async () => ({
       version: "0.1.0",
       state: "online",

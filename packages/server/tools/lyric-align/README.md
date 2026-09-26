@@ -20,8 +20,8 @@ The generation worker runs this on every rendered song at the `sync` stage. To
 run it by hand:
 
 ```bash
-~/sites/yue2/.venv-lyricalign/bin/python \
-  packages/server/tools/lyric-align/align.py \
+~/.yuekbox/venvs/lyricalign/bin/python \
+  ~/.yuekbox/scripts/align.py \
   --audio "<song folder>/generated_<song id>.mp3" \
   --out "<song folder>/alignment" \
   --calibration-out "<song folder>/calibration.json"
@@ -32,10 +32,13 @@ run it by hand:
 - `alignment/demucs/.../vocals.wav` is cached and reused on later runs.
 - `calibration.json` is the app-shaped file the server reads: `{ "cues": [...] }`.
 
-The server picks the interpreter and script up from `LYRIC_ALIGN_PYTHON` and
-`LYRIC_ALIGN_SCRIPT`, and the device from `LYRIC_ALIGN_DEVICE` (default
-`cuda:0`). Missing pieces are logged at boot, and a song still completes without
-a calibration when the run fails.
+The server runs the venv and script from yuekbox's home
+(`~/.yuekbox/venvs/lyricalign/bin/python` and `~/.yuekbox/scripts/align.py` by
+default; `LYRIC_ALIGN_PYTHON`, `LYRIC_ALIGN_SCRIPT`, and `LYRIC_ALIGN_DEVICE`
+are internal env overrides), and the device defaults to `cuda:0`. The script
+source lives in this folder; provisioning copies it into the home. Missing
+pieces are logged at boot, and a song still completes without a calibration
+when the run fails.
 
 ## Notes
 

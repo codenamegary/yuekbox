@@ -6,6 +6,7 @@ import { Status } from "contracts/http/status"
 import { PROBLEM_TYPES } from "contracts/http/error"
 import { unusedAiFixture } from "../ai/ai.fixtures"
 import { buildApp } from "../app"
+import { unusedConfigFixture } from "../config/config.fixtures"
 import { openDatabase } from "../db/client"
 import { assembleMediaSlice } from "../media/media.assembly"
 import { ok } from "../shared/result"
@@ -36,6 +37,7 @@ const makeApp = (songs: SongsSlice) =>
     referenceMaxBytes: 1024,
     ai: unusedAiFixture(),
     visualizations: unusedVisualizationsFixture(),
+    config: unusedConfigFixture(),
     status: async () => statusFixture,
   })
 

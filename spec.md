@@ -207,6 +207,7 @@ No `{ data: ... }` wrapper. Song JSON never includes MP3 bytes.
 ./http/collection
 ./http/status
 ./http/songs
+./http/config
 ```
 
 Schemas (Zod 4, `z.strictObject`, `z.infer` for types):
@@ -268,8 +269,17 @@ Layout:
 ```text
 packages/server/src/
 ├── app.ts
-├── server.ts                 # env, real vendor adapters, boot recovery, listen, signals
+├── server.ts                 # boot env, real vendor adapters, boot recovery, listen, signals
 ├── compose.ts                # media -> songs -> generation -> app wiring
+├── config/                   # home layout and the five user-configurable model paths
+│   ├── config.models.ts
+│   ├── config.ports.ts
+│   ├── config.resolve.ts     # the one resolution module
+│   ├── config.boot.ts
+│   ├── config.get.usecase.ts
+│   ├── config.update.usecase.ts
+│   ├── config.yaml.adapters.ts
+│   └── config.routes.ts
 ├── db/
 │   ├── client.ts
 │   └── migrations/
@@ -286,6 +296,9 @@ packages/server/src/
 │   ├── generation.ffmpeg.adapters.ts
 │   └── generation.sheetsage2.adapters.ts
 ├── shared/
+│   ├── home.ts               # the ~/.yuekbox layout: models, venvs, scripts, data
+│   ├── problems.ts
+│   ├── process.ts
 │   └── result.ts
 ├── songs/                    # lifecycle, routes, naming; depends on media
 │   ├── songs.models.ts
@@ -314,7 +327,7 @@ packages/server/src/
     └── visualizations.assembly.ts
 ```
 
-`server.ts` loads env, builds the real vendor adapters, calls `composeServer`, runs boot recovery, listens, and handles SIGTERM. `compose.ts` builds media, then songs, then generation, then the app and the AI slice; the process-root wiring test calls the same function.
+`server.ts` resolves the boot env (home, config.yaml, CLI flags), builds the real vendor adapters, calls `composeServer`, runs boot recovery, listens, and handles SIGTERM. `compose.ts` builds media, then songs, then generation, then the app and the AI slice; the process-root wiring test calls the same function.
 
 Use cases are single-shot. The worker loop lives in `generation.worker.ts`. Routes enqueue then return. The worker claims work.
 
@@ -326,6 +339,7 @@ One direction only: `media` depends on nothing, `songs` depends on media, `gener
 - `songs` owns the lifecycle table, the `/v1/songs` and `/v1/references` routes, file naming and folder discovery, upload to `temp/`, the reference move at create time, audio streaming, `visualization.js` reads and writes, and folder removal on delete. It exposes route-facing methods plus the capabilities record the worker consumes.
 - `generation` owns the worker loop plus the yue2, ffmpeg, and sheetsage2 adapters. It reaches songs only through the capabilities record.
 - `ai` owns the writer config, prompts, model calls, and validation for style, lyrics, and visuals. It never touches songs directly; compose hands it `createSong` and wires its visual authoring into the visualizations slice.
+- `config` owns the `~/.yuekbox` layout and the five user-configurable model paths. Resolution lives in one module (`config.resolve.ts`), with precedence CLI flag > `config.yaml` > `<home>/models/<name>`. It reads and writes `config.yaml` atomically and serves `GET`/`PUT /v1/config`. Adapters receive resolved paths; none of them read `YUE2_KIT` or work out a model location on their own.
 - `visualizations` owns the `/v1/songs/:id/visualization` routes, the in-memory per-Song pending/failed state, single-flight rerolls, and the author flow. The file on disk is the durable record; there is no table and no boot recovery.
 - `wake` (`() => void`) starts the worker. `compose.ts` passes it to the songs POST route and the AI slice. `/v1/status` reads queue depth from songs and `isBusy` from the generation worker.
 
@@ -375,7 +389,7 @@ RemoveTempDir
 
 `RunYue2Generate` takes `{ lyrics, style, seed, cot, abc, outputDir, onStage, onProgress }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter shells out to the YuE2 venv. It does not import Python.
 
-`RunLyricAlign` takes `{ audioPath, outputDir }` and returns the calibration, or a Result error. The adapter runs `packages/server/tools/lyric-align/align.py` (Demucs vocal stem, Whisper word timings, silence gate, display-line grouping) and reads back the `calibration.json` it writes under the output dir.
+`RunLyricAlign` takes `{ audioPath, outputDir }` and returns the calibration, or a Result error. The adapter runs the lyric-align script at `<home>/scripts/align.py` (source: `packages/server/tools/lyric-align/align.py`; Demucs vocal stem, Whisper word timings, silence gate, display-line grouping) and reads back the `calibration.json` it writes under the output dir.
 
 `RunVocalTranscript` takes `{ audioPath, outputDir, durationSeconds }` and returns the parsed notes, beats, and sections plus the transcript output directory, or a Result error. The adapter runs `transcribe.py` with `--task melody-vocal` against the rendered FLAC and parses `melody_vocal.lab`, `beat.lab`, and `structure.lab`. A missing or malformed lab row is dropped; a run without `melody_vocal.lab` fails.
 
@@ -385,7 +399,7 @@ RemoveTempDir
 
 ### SQLite
 
-WAL mode. Busy timeout set. File path from env, default `packages/server/data/yuekbox.sqlite`.
+WAL mode. Busy timeout set. File path from `SQLITE_PATH`, default `<home>/data/yuekbox.sqlite`.
 
 One table holds lifecycle state. Media lives on disk, so list queries never touch it:
 
@@ -465,19 +479,19 @@ Each Song may own one AI-authored canvas visualization.
 <yue2-python> -m yue2 generate
   --request <tmp>/request.json
   --output <tmp>/out
-  --model <YUE2_KIT>/models/YuE2-3B
-  --vae <YUE2_KIT>/models/YuE2-Vae
+  --model <models.yue2>
+  --vae <models.yue2Vae>
   --budget <YUE2_GPU_BUDGET>
   --offline
   --device cuda
 ```
 
-CLI flags must match the installed `yue2` parser. If the module form fails, call the venv `yue2` script with the same flags.
+CLI flags must match the installed `yue2` parser. If the module form fails, call the venv `yue2` script with the same flags. `<models.yue2>` and `<models.yue2Vae>` are the resolved config values (CLI flag > `config.yaml` > `<home>/models/<name>`), never a checkout path.
 
 5. Worker updates `stage` when stderr progress names a known stage. If parsing fails, leave the stage until done. Status stays `running`.
-6. If the Song has a Reference, transcribe it before generation. Run `<sheetsage2-python> <kit>/skills/yue2-music/scripts/transcribe.py <MEDIA_DIR>/<TITLE>_<SONG_ID>/references/<name>_<ulid>.<ext> --output <tmp>/transcribe --task melody-full --device cuda --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`, read `score.abc`, write it to `reference_score.abc` in the Song folder, then generate with `cot = melody` and the ABC in the request JSON. A missing Reference file fails the Song before the script spawns; any other failure fails the Song.
-7. On success, read `audio.flac`. Encode MP3. Run the lyric aligner with `<LYRIC_ALIGN_PYTHON> <LYRIC_ALIGN_SCRIPT> --audio <FLAC> --out <tmp>/lyric-align --calibration-out <tmp>/lyric-align/calibration.json --device <LYRIC_ALIGN_DEVICE>`, read the `calibration.json` it writes, and pass the cues to `CompleteSong`, which writes `calibration.json` in the Song folder. The overlay shows the transcript as sung.
-8. Still inside `sync`, run the transcript pass on the rendered FLAC with `<SHEETSAGE2_PYTHON> <SHEETSAGE2_SCRIPT> <FLAC> --output <tmp>/transcript --task melody-vocal --device <SHEETSAGE2_DEVICE> --model <SHEETSAGE2_MODEL> [--base-model <SHEETSAGE2_BASE_MODEL>] [--offline]`. Parse `melody_vocal.lab`, `beat.lab`, and `structure.lab` into notes, beats, and sections, copy the raw `<tmp>/transcript` tree into `analysis/sheetsage2/`, and pass the derived analysis to `CompleteSong`, which writes `analysis.json`. A failed run, a missing SheetSage2, or a failed copy logs and leaves the Song without an analysis; the Song still completes. `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the Song folder and marks the row `complete` with `durationSeconds` and the truncation flags. Delete the temp dir (FLAC does not stay on disk).
+6. If the Song has a Reference, transcribe it before generation. Run `<home>/venvs/sheetsage2/bin/python <home>/scripts/transcribe.py <MEDIA_DIR>/<TITLE>_<SONG_ID>/references/<name>_<ulid>.<ext> --output <tmp>/transcribe --task melody-full --device cuda --model <models.sheetsage2> --base-model <models.sheetsage2Base> [--offline]`, read `score.abc`, write it to `reference_score.abc` in the Song folder, then generate with `cot = melody` and the ABC in the request JSON. A missing Reference file fails the Song before the script spawns; any other failure fails the Song.
+7. On success, read `audio.flac`. Encode MP3. Run the lyric aligner with `<home>/venvs/lyricalign/bin/python <home>/scripts/align.py --audio <FLAC> --out <tmp>/lyric-align --calibration-out <tmp>/lyric-align/calibration.json --device <LYRIC_ALIGN_DEVICE>`, read the `calibration.json` it writes, and pass the cues to `CompleteSong`, which writes `calibration.json` in the Song folder. The overlay shows the transcript as sung.
+8. Still inside `sync`, run the transcript pass on the rendered FLAC with `<home>/venvs/sheetsage2/bin/python <home>/scripts/transcribe.py <FLAC> --output <tmp>/transcript --task melody-vocal --device <SHEETSAGE2_DEVICE> --model <models.sheetsage2> --base-model <models.sheetsage2Base> [--offline]`. Parse `melody_vocal.lab`, `beat.lab`, and `structure.lab` into notes, beats, and sections, copy the raw `<tmp>/transcript` tree into `analysis/sheetsage2/`, and pass the derived analysis to `CompleteSong`, which writes `analysis.json`. A failed run, a missing SheetSage2, or a failed copy logs and leaves the Song without an analysis; the Song still completes. `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the Song folder and marks the row `complete` with `durationSeconds` and the truncation flags. Delete the temp dir (FLAC does not stay on disk).
 9. On failure, mark `failed`, store a short `errorDetail`, delete the temp dir.
 9. Claim the next queued Song.
 
@@ -497,28 +511,66 @@ Do not shell-interpolate paths. Pass args as an argv array.
 
 If ffmpeg exits non-zero, the Song is `failed`. Do not store a partial blob.
 
-### Env
+### Home and model config
+
+yuekbox owns `~/.yuekbox` (override with `--home`). Everything the app manages lives there, and the user never configures it:
+
+```text
+~/.yuekbox/
+├── config.yaml           # the only user-editable file
+├── models/<name>/        # the five model directories
+├── venvs/<name>/         # python venvs: yue2, sheetsage2, lyricalign
+├── scripts/              # transcribe.py and align.py
+└── data/                 # yuekbox.sqlite and per-Song media
+```
+
+The only user-configurable thing is where the five model files live:
+
+| Config key | Model |
+|---|---|
+| `models.yue2` | YuE2-3B |
+| `models.yue2Vae` | YuE2-Vae |
+| `models.sheetsage2` | SheetSage2 |
+| `models.sheetsage2Base` | MERT-v2-FullSong |
+| `models.whisper` | Whisper large-v3-turbo |
+
+`config.yaml` is optional and partial. Unset keys fall back to `<home>/models/<name>`:
+
+```yaml
+models:
+  yue2: /mnt/audio/YuE2-3B
+  whisper: /mnt/audio/whisper-large-v3-turbo
+```
+
+Resolution precedence per model, highest wins:
+
+1. CLI flag: `--yue2-model`, `--yue2-vae`, `--sheetsage2`, `--sheetsage2-base`, `--whisper`
+2. `config.yaml`
+3. `<home>/models/<name>`
+
+`--config` points at another config file. `GET /v1/config` returns the effective model paths as `{ "models": { ... } }`; `PUT /v1/config` accepts a partial `{ "models": { ... } }` update and writes `config.yaml` atomically (temp file then rename). `YUE2_KIT` does not exist; no code reads it. A malformed `config.yaml` fails boot with the file path and never silently falls back.
+
+Internal escape hatches, not part of the user surface and not in the UI:
 
 ```text
 HOST                    default 127.0.0.1
 PORT                    default 8787
-SQLITE_PATH             default ./data/yuekbox.sqlite
-MEDIA_DIR               default ./data/media
-YUE2_KIT                default ../../ (repo root that holds models/ and .venv)
-YUE2_PYTHON             default $YUE2_KIT/.venv/bin/python
+SQLITE_PATH             default <home>/data/yuekbox.sqlite
+MEDIA_DIR               default <home>/data/media
+YUE2_PYTHON             default <home>/venvs/yue2/bin/python
 YUE2_GPU_BUDGET         default 16
 FFMPEG_BIN              default ffmpeg
-SHEETSAGE2_PYTHON       default $YUE2_KIT/.venv-sheetsage2/bin/python
-SHEETSAGE2_SCRIPT       default $YUE2_KIT/skills/yue2-music/scripts/transcribe.py
-SHEETSAGE2_MODEL        default $YUE2_KIT/models/SheetSage2
-SHEETSAGE2_BASE_MODEL   default <YUE2_KIT>/models/MERT-v2-FullSong when that folder exists, else unset (let the snapshot resolve its MERT-v2 parent)
+SHEETSAGE2_PYTHON       default <home>/venvs/sheetsage2/bin/python
+SHEETSAGE2_SCRIPT       default <home>/scripts/transcribe.py
 SHEETSAGE2_DEVICE       default cuda
 SHEETSAGE2_OFFLINE      default 1; set 0 to allow the Hugging Face cache to resolve
-LYRIC_ALIGN_PYTHON      default $YUE2_KIT/.venv-lyricalign/bin/python
-LYRIC_ALIGN_SCRIPT      default <repo>/packages/server/tools/lyric-align/align.py
+LYRIC_ALIGN_PYTHON      default <home>/venvs/lyricalign/bin/python
+LYRIC_ALIGN_SCRIPT      default <home>/scripts/align.py
 LYRIC_ALIGN_DEVICE      default cuda:0
 REFERENCE_MAX_BYTES     default 26214400 (25 MiB)
 ```
+
+The yue2 adapter runs `<home>/venvs/yue2/bin/python -m yue2`, falling back to `<home>/venvs/yue2/bin/yue2`.
 
 Bind localhost by default. This app talks to a local GPU.
 
@@ -546,6 +598,12 @@ Cover at least:
 - `GET /v1/songs/:id/audio` serves a range from a multi-megabyte file in the folder, 416s an unsatisfiable range, and 404s when the file is gone.
 - Transcribe points the script at the stored path and fails before spawning when the file is missing.
 - Lyric align parses the calibration, rejects an empty or contract-breaking one, and fails before spawning when the environment or audio is missing.
+- Config resolution per model: CLI flag > `config.yaml` > `<home>/models/<name>`, with each of the five keys covered and unrelated keys left alone.
+- Config CLI flags parse `--flag value` and `--flag=value`, the last occurrence wins, and an unknown or value-less flag fails loud.
+- `config.yaml` parses partial overrides, rejects unknown keys and wrong types with a clear error, and an empty or missing file means no overrides.
+- `PUT /v1/config` merges a partial update, writes atomically (no temp file left behind), returns the effective paths, and rejects an unknown key or a non-string path with 400.
+- Boot env: home, venvs, scripts, SQLite, and media default under `~/.yuekbox`; explicit env overrides still win; `--home` moves the layout.
+- No source reads the removed `YUE2_KIT` escape hatch.
 - Deleting a Song removes the row and the folder; a folder failure is logged, not fatal.
 - Creating a Song fires the queued hook after the row and folder exist, and not when validation fails.
 - `visualization.js` round-trips through the songs slice; writing without a folder throws instead of dropping the code.
@@ -714,6 +772,8 @@ rotates the trip mode only when the finished Song has no ready visualization.
 | Case | HTTP / Song |
 |---|---|
 | Bad JSON or schema | 400 validation-error |
+| Bad `PUT /v1/config` body | 400 validation-error; nothing is written |
+| Malformed `config.yaml` | Boot fails with the file path; the server does not start |
 | Unknown id | 404 not-found |
 | Audio requested before complete | 409 conflict |
 | ffmpeg missing at boot | process still starts, `/v1/status.ffmpeg = missing`, generate fails the Song |

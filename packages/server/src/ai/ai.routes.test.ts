@@ -3,6 +3,7 @@ import { PROBLEM_TYPES } from "contracts/http/error"
 import { CreateSongBody, SongSchema } from "contracts/http/songs"
 import { Status } from "contracts/http/status"
 import { buildApp, AppDeps } from "../app"
+import { unusedConfigFixture } from "../config/config.fixtures"
 import { ok } from "../shared/result"
 import { makeSongsSliceFixture, songFixture } from "../songs/songs.fixtures"
 import { openDatabase } from "../db/client"
@@ -10,13 +11,14 @@ import { unusedVisualizationsFixture } from "../visualizations/visualizations.fi
 import { AiSlice, assembleAiSlice } from "./ai.assembly"
 
 const makeApp = (
-  deps: Omit<AppDeps, "referenceMaxBytes" | "wake" | "visualizations">,
+  deps: Omit<AppDeps, "referenceMaxBytes" | "wake" | "visualizations" | "config">,
   wake: () => void = () => {},
 ) =>
   buildApp({
     referenceMaxBytes: 1024,
     wake,
     visualizations: unusedVisualizationsFixture(),
+    config: unusedConfigFixture(),
     ...deps,
   })
 

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { parseYue2Line } from "./generation.yue2.adapters"
+import { join } from "node:path"
+import { checkYue2, generateArgs, parseYue2Line, Yue2AdapterEnv } from "./generation.yue2.adapters"
 
 test("parses a numeric synthesizing line", () => {
   expect(
@@ -45,4 +46,58 @@ test("summary and unrelated lines are ignored", () => {
   expect(parseYue2Line("[YuE2] Running Loading model: elapsed 61.9s")).toBeNull()
   expect(parseYue2Line("Loading model")).toBeNull()
   expect(parseYue2Line("")).toBeNull()
+})
+
+const env: Yue2AdapterEnv = {
+  pythonBin: process.execPath,
+  scriptBin: process.execPath,
+  model: "/models/YuE2-3B",
+  vae: "/models/YuE2-Vae",
+  gpuBudget: 16,
+  cwd: "/tmp",
+}
+
+test("generate args pass the resolved model and vae, not a kit root", () => {
+  const args = generateArgs(
+    env,
+    {
+      songId: "song-1",
+      lyrics: "hello",
+      style: "pop",
+      seed: 7,
+      cot: "full",
+      abc: null,
+      outputDir: "/tmp/output",
+      onStage: () => {},
+      onProgress: () => {},
+    },
+    "/tmp/output/request.json",
+  )
+
+  expect(args).toEqual([
+    "generate",
+    "--request",
+    "/tmp/output/request.json",
+    "--output",
+    join("/tmp/output", "out"),
+    "--model",
+    "/models/YuE2-3B",
+    "--vae",
+    "/models/YuE2-Vae",
+    "--budget",
+    "16",
+    "--offline",
+    "--device",
+    "cuda",
+  ])
+})
+
+test("checkYue2 needs the python, the model, and the vae", () => {
+  expect(checkYue2({ pythonBin: process.execPath, model: import.meta.path, vae: "/nope" })).toBe(
+    "missing",
+  )
+  expect(checkYue2({ pythonBin: "/nope", model: import.meta.path, vae: "/nope" })).toBe("missing")
+  expect(
+    checkYue2({ pythonBin: process.execPath, model: import.meta.path, vae: process.execPath }),
+  ).toBe("ok")
 })

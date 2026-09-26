@@ -7,6 +7,7 @@ import { ReferenceSchema } from "contracts/http/references"
 import { SongSchema } from "contracts/http/songs"
 import { SongVisualizationResponseSchema } from "contracts/http/visualizations"
 import { composeServer } from "./compose"
+import { unusedConfigFixture } from "./config/config.fixtures"
 import { openDatabase } from "./db/client"
 import { ok } from "./shared/result"
 import {
@@ -22,6 +23,7 @@ const mp3Bytes = Uint8Array.from({ length: 2 * 1024 * 1024 }, (_, index) => inde
 
 test("the wired app drives upload, create, complete, stream, and delete", async () => {
   const mediaDir = await mkdtemp(join(tmpdir(), "yuekbox-compose-test-"))
+  const configHome = await mkdtemp(join(tmpdir(), "yuekbox-compose-config-test-"))
   const handle = openDatabase({ path: ":memory:" })
   try {
     const transcribedPaths: string[] = []
@@ -31,6 +33,11 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
     const { app, generation } = composeServer({
       db: handle.db,
       mediaDir,
+      config: {
+        home: configHome,
+        configFilePath: join(configHome, "config.yaml"),
+        flags: {},
+      },
       runYue2Generate: async (input) => {
         generatedCalls.push({ cot: input.cot, abc: input.abc })
         return ok({
@@ -61,6 +68,19 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
       dependencies: { ffmpeg: "ok", yue2: "ok", sheetsage2: "ok" },
       now: () => "2026-09-17T04:00:00.000Z",
     })
+
+    const defaults = await app.inject({ method: "GET", url: "/v1/config" })
+    expect(defaults.statusCode).toBe(200)
+    expect(defaults.json().models.yue2).toBe(join(configHome, "models", "YuE2-3B"))
+
+    const savedConfig = await app.inject({
+      method: "PUT",
+      url: "/v1/config",
+      payload: { models: { whisper: "/mnt/models/whisper-large-v3-turbo" } },
+    })
+    expect(savedConfig.statusCode).toBe(200)
+    expect(savedConfig.json().models.whisper).toBe("/mnt/models/whisper-large-v3-turbo")
+    expect(existsSync(join(configHome, "config.yaml"))).toBe(true)
 
     const upload = await app.inject({
       method: "POST",
@@ -146,6 +166,7 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
   } finally {
     handle.close()
     await rm(mediaDir, { recursive: true, force: true })
+    await rm(configHome, { recursive: true, force: true })
   }
 })
 
@@ -182,6 +203,7 @@ test("creating a Song authors a visualization and deleting it takes the file alo
     const { app, visualizations } = composeServer({
       db: handle.db,
       mediaDir,
+      config: unusedConfigFixture(),
       runYue2Generate: async () =>
         ok({
           flacPath: "/tmp/yuekbox-compose-viz-test/audio.flac",

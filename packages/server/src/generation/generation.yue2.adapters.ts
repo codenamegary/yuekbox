@@ -10,10 +10,12 @@ import { GenerateSongError, RunYue2GenerateInput, RunYue2GenerateOutput } from "
 import { RunYue2Generate } from "./generation.ports"
 
 export type Yue2AdapterEnv = Readonly<{
-  kitRoot: string
   pythonBin: string
   scriptBin: string
+  model: string
+  vae: string
   gpuBudget: number
+  cwd: string
 }>
 
 const stageMarkers: ReadonlyArray<readonly [string, SongStage]> = [
@@ -52,26 +54,25 @@ const resultFileSchema = z.object({
   truncated: z.object({ abc: z.boolean(), semantic: z.boolean() }),
 })
 
-export const yue2ModelPath = (kitRoot: string) => join(kitRoot, "models", "YuE2-3B")
-export const yue2VaePath = (kitRoot: string) => join(kitRoot, "models", "YuE2-Vae")
+export const checkYue2 = (
+  env: Pick<Yue2AdapterEnv, "pythonBin" | "model" | "vae">,
+): "ok" | "missing" =>
+  existsSync(env.pythonBin) && existsSync(env.model) && existsSync(env.vae) ? "ok" : "missing"
 
-export const checkYue2 = (env: Pick<Yue2AdapterEnv, "kitRoot" | "pythonBin">): "ok" | "missing" =>
-  existsSync(env.pythonBin) &&
-  existsSync(yue2ModelPath(env.kitRoot)) &&
-  existsSync(yue2VaePath(env.kitRoot))
-    ? "ok"
-    : "missing"
-
-const generateArgs = (env: Yue2AdapterEnv, input: RunYue2GenerateInput, requestPath: string) => [
+export const generateArgs = (
+  env: Yue2AdapterEnv,
+  input: RunYue2GenerateInput,
+  requestPath: string,
+) => [
   "generate",
   "--request",
   requestPath,
   "--output",
   join(input.outputDir, "out"),
   "--model",
-  yue2ModelPath(env.kitRoot),
+  env.model,
   "--vae",
-  yue2VaePath(env.kitRoot),
+  env.vae,
   "--budget",
   String(env.gpuBudget),
   "--offline",
@@ -121,11 +122,11 @@ export const makeRunYue2Generate =
     }
 
     const args = generateArgs(env, input, requestPath)
-    const first = await runProcess([env.pythonBin, "-m", "yue2", ...args], env.kitRoot, parseLine)
+    const first = await runProcess([env.pythonBin, "-m", "yue2", ...args], env.cwd, parseLine)
 
     let outcome = first
     if (first.exitCode !== 0 && first.stderrTail.includes("No module named")) {
-      outcome = await runProcess([env.scriptBin, ...args], env.kitRoot, parseLine)
+      outcome = await runProcess([env.scriptBin, ...args], env.cwd, parseLine)
     }
 
     if (outcome.exitCode !== 0) {
