@@ -64,6 +64,9 @@ export const makeEnsureUv = (env: EnsureUvEnv): EnsureUv => {
     try {
       await mkdir(tools, { recursive: true })
       await rm(staging, { recursive: true, force: true })
+      // tar -C does not create the directory it changes into; without this,
+      // every fresh-machine install failed inside tar.
+      await mkdir(staging, { recursive: true })
     } catch (error: unknown) {
       return err({
         kind: "uv_unavailable",

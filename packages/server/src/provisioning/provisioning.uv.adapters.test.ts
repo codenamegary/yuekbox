@@ -53,10 +53,10 @@ test("rebuilds when the binary is gone even with a stamp", async () => {
         return ok({ path: request.destPath, bytes: 13 })
       },
       runProcess: async (command) => {
-        // Stage the binary where the extract was pointed, so the rename lands.
+        // Stage the binary where the extract was pointed, so the rename
+        // lands. The adapter creates the folder; this fake must not.
         const target = command[command.indexOf("-C") + 1]
         if (typeof target !== "string") throw new Error("no -C target")
-        await mkdir(target, { recursive: true })
         await writeFile(join(target, "uv"), "#!/bin/sh\n", "utf8")
         return { exitCode: 0, stdout: "", stderrTail: "" }
       },
@@ -86,7 +86,6 @@ test("a half-extracted copy without a stamp is not treated as installed", async 
         commands.push([...command])
         const target = command[command.indexOf("-C") + 1]
         if (typeof target !== "string") throw new Error("no -C target")
-        await mkdir(target, { recursive: true })
         await writeFile(join(target, "uv"), "#!/bin/sh\n", "utf8")
         return { exitCode: 0, stdout: "", stderrTail: "" }
       },
@@ -116,7 +115,8 @@ test("fetches the pinned archive, stages the extract, then stamps", async () => 
     }
     const runProcess: ProcessRunner = async (command) => {
       commands.push([...command])
-      await mkdir(staging, { recursive: true })
+      // No mkdir here: the adapter owns the staging folder, and a fake that
+      // pre-creates it would hide a missing mkdir in the adapter.
       await writeFile(join(staging, "uv"), "#!/bin/sh\n", "utf8")
       return { exitCode: 0, stdout: "", stderrTail: "" }
     }
