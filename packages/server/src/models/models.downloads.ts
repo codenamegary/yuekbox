@@ -117,6 +117,7 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
   const threshold = deps.confirmationThresholdBytes ?? downloadConfirmationThresholdBytes
   const jobs = new Map<ModelDownloadKey, Job>()
   const tasks = new Map<ModelDownloadKey, Promise<void>>()
+  const starts = new Map<ModelDownloadKey, Promise<unknown>>()
 
   const snapshotFor = async (
     key: ModelDownloadKey,
@@ -221,7 +222,7 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
     jobs.delete(key)
   }
 
-  const start: ModelDownloads["start"] = async (input) => {
+  const startOnce: ModelDownloads["start"] = async (input) => {
     const key = input.key
     const modelPaths = await deps.readModelPaths()
     const pin = pins[key]
@@ -233,7 +234,8 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
     }
     jobs.delete(key)
 
-    // Claim the model before the first await, so two starts cannot both fetch.
+    // The per-key start chain makes this claim exclusive; no other start
+    // can hold the key while these checks run.
     const job: Job = { state: "preparing", bytesDone: 0, currentFile: null }
     jobs.set(key, job)
 
@@ -271,6 +273,25 @@ export const makeModelDownloads = (deps: ModelDownloadsDeps): ModelDownloads => 
     tasks.set(key, task)
 
     return ok(jobSnapshot(key, target, pin.totalBytes, job))
+  }
+
+  const start: ModelDownloads["start"] = (input) => {
+    // Starts are serialized per model. A start queued behind another waits
+    // for the first to finish validating, so it never reports a job the
+    // first start is about to drop, and its own confirmation check always
+    // runs on fresh state.
+    const previous = starts.get(input.key) ?? Promise.resolve()
+    const next = previous.then(
+      () => startOnce(input),
+      () => startOnce(input),
+    )
+    starts.set(input.key, next)
+    void next
+      .catch(() => undefined)
+      .finally(() => {
+        if (starts.get(input.key) === next) starts.delete(input.key)
+      })
+    return next
   }
 
   return {

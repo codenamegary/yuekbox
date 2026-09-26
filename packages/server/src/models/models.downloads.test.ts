@@ -37,12 +37,11 @@ type Overrides = Partial<Deps> & Readonly<{ calls?: Calls }>
 
 const smallTree: readonly ModelTreeFile[] = [treeFile("a.bin", 2), treeFile("b.bin", 3)]
 
-const makeDeferred = () => {
-  const box: { resolve: (value: Result<readonly ModelTreeFile[], ModelDownloadFailure>) => void } =
-    {
-      resolve: () => {},
-    }
-  const promise = new Promise<Result<readonly ModelTreeFile[], ModelDownloadFailure>>((resolve) => {
+const makeDeferred = <T>() => {
+  const box: { resolve: (value: T) => void } = {
+    resolve: () => {},
+  }
+  const promise = new Promise<T>((resolve) => {
     box.resolve = resolve
   })
   return { promise, resolve: box.resolve }
@@ -165,7 +164,7 @@ test("a confirmed start downloads every file and moves the staged folder into pl
 })
 
 test("a second start while a download runs reports the same job and adds no fetch", async () => {
-  const deferred = makeDeferred()
+  const deferred = makeDeferred<Result<readonly ModelTreeFile[], ModelDownloadFailure>>()
   const { deps, calls } = makeDeps({
     readModelTree: async () => {
       calls.tree += 1
@@ -182,6 +181,49 @@ test("a second start while a download runs reports the same job and adds no fetc
   expect(second.value.state).toBe("preparing")
   expect(calls.tree).toBe(1)
   deferred.resolve(ok(smallTree))
+  await downloads.drain()
+})
+
+test("a start queued behind a refused start is refused too, never told preparing", async () => {
+  const gate = makeDeferred<boolean>()
+  const pathExists = async (): Promise<boolean> => gate.promise
+  const { deps } = makeDeps({ pathExists })
+  const downloads = makeModelDownloads(deps)
+
+  const first = downloads.start({ key: "yue2", confirm: false })
+  const second = downloads.start({ key: "yue2", confirm: false })
+  gate.resolve(false)
+
+  const firstResult = await first
+  const secondResult = await second
+
+  expect(firstResult).toEqual({
+    ok: false,
+    error: { kind: "confirmation_required", key: "yue2", expectedBytes: 5, thresholdBytes: 4 },
+  })
+  expect(secondResult).toEqual({
+    ok: false,
+    error: { kind: "confirmation_required", key: "yue2", expectedBytes: 5, thresholdBytes: 4 },
+  })
+})
+
+test("a start queued behind a confirmed start joins the live job", async () => {
+  const gate = makeDeferred<boolean>()
+  const pathExists = async (): Promise<boolean> => gate.promise
+  const { deps } = makeDeps({ pathExists })
+  const downloads = makeModelDownloads(deps)
+
+  const first = downloads.start({ key: "yue2", confirm: true })
+  const second = downloads.start({ key: "yue2", confirm: false })
+  gate.resolve(false)
+
+  const firstResult = await first
+  const secondResult = await second
+
+  expect(firstResult.ok).toBe(true)
+  expect(secondResult.ok).toBe(true)
+  if (!secondResult.ok) return
+  expect(["preparing", "downloading"]).toContain(secondResult.value.state)
   await downloads.drain()
 })
 
