@@ -258,8 +258,8 @@ Assumptions
 
 4) Get the five models (ask me first)
    Open http://127.0.0.1:3000, click the models sigil (▤) in the top-right cluster, and
-   for each row either download it or point it at a folder I already have. Downloads
-   over 128 MiB ask for confirmation first.
+   for each row either download it or point it at a folder I already have. A download
+   starts only when its button is pressed, so nothing downloads on its own.
    A freeform song needs YuE2-3B and YuE2-Vae. A reference cover also needs SheetSage2
    and MERT-v2-FullSong. Whisper large-v3-turbo never blocks a song, but download it to
    get lyric cues. Without it the song completes without them.
