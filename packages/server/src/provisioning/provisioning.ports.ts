@@ -29,8 +29,9 @@ export type InstallScripts = (
 ) => Promise<Result<InstalledScripts, InstallScriptsError>>
 
 /**
- * Finds `uv` on PATH, else fetches the pinned release into `<home>/tools/`.
- * Returns the managed copy on later runs without downloading again.
+ * Fetches the pinned uv release into `<home>/tools/`, deliberately ignoring
+ * any uv on PATH so provisioning always runs the version it was verified
+ * against. Returns the managed copy on later runs without downloading again.
  */
 export type EnsureUv = () => Promise<Result<UvTool, UvFailure>>
 

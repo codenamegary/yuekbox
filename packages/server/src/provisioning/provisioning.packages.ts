@@ -1,4 +1,5 @@
 import { yue2RuntimePin } from "../runtime/runtime.pins"
+import { IndexStrategy } from "./provisioning.models"
 
 /**
  * The uv release yuekbox downloads and manages itself. A uv found on PATH
@@ -19,7 +20,7 @@ export const uvPin = Object.freeze({
   sha256: "c2def3db178ade63933fa15ffc96e882c196ce53e06173dcee05b36c5f6f68f5",
 })
 
-/** PyPI, the primary index. uv falls back to it for anything the extra index lacks. */
+/** PyPI, the primary index (`--index-url`). */
 export const pypiIndexUrl = "https://pypi.org/simple"
 
 /**
@@ -34,7 +35,7 @@ export type VenvPin = Readonly<{
   name: string
   /** The managed Python version the venv is built with. */
   python: string
-  /** The primary index (`--index-url`). uv falls back to it. */
+  /** The primary index (`--index-url`). */
   indexUrl: string
   /**
    * The priority index (`--extra-index-url`). uv checks it first, so the
@@ -42,6 +43,8 @@ export type VenvPin = Readonly<{
    * the plain build on PyPI.
    */
   extraIndexUrl: string
+  /** How uv searches the two indexes. */
+  indexStrategy: IndexStrategy
   /** Exact pins (`name==version`) or direct references (`name @ url`). */
   packages: readonly string[]
 }>
@@ -59,6 +62,11 @@ export const venvPin: VenvPin = Object.freeze({
   python: "3.12.3",
   indexUrl: pypiIndexUrl,
   extraIndexUrl: torchWheelIndexUrl,
+  // uv's default first-index strategy stops at the first index that carries a
+  // package, and the CUDA index carries an older setuptools, so the pinned
+  // 78.1.1 would never reach PyPI. Both hosts are official and every pin is
+  // exact, so the cross-index best-match rule is safe here.
+  indexStrategy: "unsafe-best-match",
   packages: Object.freeze([
     `yue2-infer @ git+${yue2RuntimePin.repository}@${yue2RuntimePin.commit}`,
     "torch==2.10.0",
@@ -92,5 +100,6 @@ export const venvFingerprint = (pin: VenvPin): string =>
     python: pin.python,
     indexUrl: pin.indexUrl,
     extraIndexUrl: pin.extraIndexUrl,
+    indexStrategy: pin.indexStrategy,
     packages: pin.packages,
   })

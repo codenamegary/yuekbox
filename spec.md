@@ -790,10 +790,11 @@ database or listens, so provisioning never shares the server's life.
 
 Mechanism: `uv`.
 
-- Find `uv` on PATH first. Otherwise fetch the pinned release
-  `0.9.18` (`uv-x86_64-unknown-linux-gnu.tar.gz`) into
-  `<home>/tools/uv-0.9.18/` and verify its SHA-256 before extracting. The
-  version, URL, and checksum live in `provisioning.packages.ts`.
+- Fetch the pinned release `0.9.18` (`uv-x86_64-unknown-linux-gnu.tar.gz`)
+  into `<home>/tools/uv-0.9.18/` and verify its SHA-256 before extracting.
+  Any `uv` on PATH is ignored, so provisioning always runs the verified
+  pinned copy. The version, URL, and checksum live in
+  `provisioning.packages.ts`.
 - Install the managed interpreter into `<home>/tools/python`: `3.12.3`. uv's
   downloads cache under `<home>/tools/cache`, and no launchers land in the
   user's bin directory.
@@ -811,7 +812,12 @@ Mechanism: `uv`.
     `scipy==1.18.1`, `pretty-midi==0.2.10`, `mir-eval==0.8.2`,
     `mido==1.3.3`, `soundfile==0.13.1`, `setuptools==78.1.1`, and
     `demucs==4.1.0`.
-- Every other package resolves from PyPI (`pypi.org/simple`).
+- Resolve across both trusted indexes with uv's `unsafe-best-match` strategy:
+  PyPI (`pypi.org/simple`) as the primary index and PyTorch's CUDA 12.8 wheel
+  index (`download.pytorch.org/whl/cu128`) as the priority index. uv's default
+  first-index rule stops at the first index that carries a package, and the
+  CUDA index carries an older `setuptools`, so the pinned `78.1.1` would never
+  reach PyPI without it.
 
 Driver check. The pinned torch build is CUDA 12.x, which runs on any 12.x
 driver (NVIDIA minor version compatibility), so the floor is `525.60.13`.
@@ -878,13 +884,13 @@ Cover at least:
 - Generate args call `<home>/scripts/generate.py` with the resolved model and vae and no checkout path; `checkYue2` needs the python, script, model, and vae.
 - The script installer copies every tool flat into the scripts dir, reruns over its own files, leaves unrelated files alone, and reports a missing source with its path.
 - The runtime pin names one immutable git commit.
-- The package manifest pins one uv release archive with a SHA-256, one managed Python version, one cu128 torch index, and one shared dependency set carrying the runtime git pin and the tested union.
+- The package manifest pins one uv release archive with a SHA-256, one managed Python version, one cu128 torch index, one cross-index resolution strategy, and one shared dependency set carrying the runtime git pin and the tested union.
 - The driver check passes at the CUDA 12 floor, fails an older or unreadable driver with both versions named, and fails a missing card; a passing check reports the cu128 wheel index.
 - `--provision` steps run in order and stop at the first failure: uv, interpreter, driver, environment, entrypoints; each step reports `completed` or `skipped`, and a rerun through the same ports changes nothing.
 - The one boot-resolved interpreter is the one all three generation adapters run, and provisioning builds exactly one environment at `<home>/venvs/python`.
 - Provisioning output and failure messages never contain venv, pip, interpreter, package, or Python; each failure names the piece and offers a retry; the CLI exits `1` on failure and prints the mapped message, never raw error text.
-- The uv provider prefers PATH, reuses the fetched copy on a rerun, fetches the pinned URL with the pinned checksum, and fails cleanly when the download or extraction fails.
-- The interpreter provider installs only missing versions, stamps them, and retries a failed install; the environment provider builds with the pinned indexes and packages, skips on a matching fingerprint, rebuilds on a changed or corrupt one, and leaves no stamp when the package install fails.
+- The uv provider fetches the pinned release, ignores any uv on PATH, reuses the fetched copy on a rerun, fetches the pinned URL with the pinned checksum, and fails cleanly when the download or extraction fails.
+- The interpreter provider installs only missing versions, stamps them, and retries a failed install; the environment provider builds with the pinned indexes, index strategy, and packages, skips on a matching fingerprint, rebuilds on a changed or corrupt one, and leaves no stamp when the package install fails.
 - The download seam verifies SHA-256 before the file lands, and a mismatch or an HTTP failure leaves nothing behind.
 - Readiness reports ready and missing for each of the five models, with the resolved path, the bytes on disk when present, and the expected size when missing; the expected-size constants match the upstream repository totals.
 - The system preflight names ffmpeg and the NVIDIA driver; a failure carries a short message and a Linux and WSL2 install instruction, and an old driver names both versions. No runtime, venv, or helper-script data appears in the payload.

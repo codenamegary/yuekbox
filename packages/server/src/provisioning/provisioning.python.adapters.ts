@@ -179,6 +179,8 @@ export const makeEnsureVenv = (env: PythonAdapterEnv): EnsureVenv => {
       request.indexUrl,
       "--extra-index-url",
       request.extraIndexUrl,
+      "--index-strategy",
+      request.indexStrategy,
       ...request.packages,
     ])
     if (!install.ok) {

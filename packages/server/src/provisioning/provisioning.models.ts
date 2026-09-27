@@ -87,12 +87,20 @@ export type PythonFailure = Readonly<{
   detail: string
 }>
 
+/**
+ * How uv searches the package indexes. The one supported rule considers every
+ * version on both trusted indexes instead of stopping at the first index that
+ * carries a package.
+ */
+export type IndexStrategy = "unsafe-best-match"
+
 export type VenvRequest = Readonly<{
   name: string
   dir: string
   pythonVersion: string
   indexUrl: string
   extraIndexUrl: string
+  indexStrategy: IndexStrategy
   packages: readonly string[]
   /** Identity of the pinned set; a matching stamp means the venv is current. */
   fingerprint: string

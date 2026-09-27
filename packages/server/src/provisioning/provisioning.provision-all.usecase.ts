@@ -84,6 +84,7 @@ export const makeProvisionAll =
       pythonVersion: pin.python,
       indexUrl: pin.indexUrl,
       extraIndexUrl: pin.extraIndexUrl,
+      indexStrategy: pin.indexStrategy,
       packages: pin.packages,
       fingerprint: venvFingerprint(pin),
     })
