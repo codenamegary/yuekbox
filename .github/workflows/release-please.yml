@@ -18,11 +18,28 @@ concurrency:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v5
+        id: release
         with:
           # A PAT is required so CI starts on release PRs. PRs created with
           # GITHUB_TOKEN hold their runs for manual approval.
           token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # Immutable releases only accept assets while they are drafts, and a draft
+  # fires no `release` event, so the build is called directly instead of
+  # triggered. release-binaries.yml attaches the assets and publishes the
+  # draft; a failure leaves the draft for a retry.
+  binaries:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-binaries.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}

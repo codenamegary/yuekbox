@@ -1,15 +1,22 @@
 name: Release Binaries
 
-# Builds the prebuilt executable for a published GitHub release. Never runs on
-# pull requests. Manual dispatch rebuilds/re-uploads for an existing tag.
+# Builds the prebuilt executable for a GitHub release, called by the Release
+# Please workflow right after it creates the release as a draft. Immutable
+# releases only accept assets before publication, so this workflow attaches
+# everything to the draft and publishes it as the last step; a mid-run failure
+# leaves a resumable draft instead of a broken published release. Manual
+# dispatch retries a stuck draft. Never runs on pull requests.
 on:
-  release:
-    types:
-      - published
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to build and publish (for example v0.3.2)
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to build and upload (for example v0.3.0)
+        description: Release tag to build and publish (for example v0.3.2)
         required: true
         type: string
 
@@ -17,7 +24,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-binaries-${{ github.event.release.tag_name || inputs.tag }}
+  group: release-binaries-${{ inputs.tag }}
   cancel-in-progress: false
 
 jobs:
@@ -25,12 +32,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      TAG: ${{ inputs.tag }}
     steps:
       - name: Checkout the release tag
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          ref: ${{ inputs.tag }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -47,6 +54,8 @@ jobs:
       - name: Write the SHA-256 checksum
         run: sha256sum yuekbox-linux-x64 > yuekbox-linux-x64.sha256
 
+      # Drafts accept assets; published immutable releases do not. The tag
+      # already exists because release-please creates it with the draft.
       - name: Upload the binary, checksum, and installer
         env:
           GH_TOKEN: ${{ github.token }}
@@ -56,3 +65,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/release-notes-append.sh "$TAG"
+
+      # Publishing last locks the release and its tag to this run's assets.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$TAG" --draft=false

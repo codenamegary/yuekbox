@@ -16,12 +16,18 @@ app's model downloads.
 
 Asset names are stable. The installer reads them from
 `releases/latest/download/<asset>` or `releases/download/<tag>/<asset>`.
+Releases are immutable, so once published neither the assets nor the tag can
+change. Everything the installer needs is attached while the release is still
+a draft.
 
 ## How a release is cut
 
 1. release-please opens a release PR from merged conventional commits.
-2. Merging the PR tags `vX.Y.Z` and publishes the GitHub release.
-3. The published release starts `.github/workflows/release-binaries.yml`.
+2. Merging the PR tags `vX.Y.Z` and creates the GitHub release as a draft.
+   The release-please config sets `draft` and `force-tag-creation` for this.
+3. Creating the draft starts `.github/workflows/release-binaries.yml` from the
+   Release Please workflow. Draft releases fire no `release` event, so the
+   workflow is called directly.
 4. The workflow checks out the tag, runs `bun install --frozen-lockfile`,
    builds the binary, runs `scripts/smoke-binary.sh`, and writes
    `yuekbox-linux-x64.sha256`.
@@ -30,15 +36,21 @@ Asset names are stable. The installer reads them from
 6. It appends `.github/release-notes-packaging.md` to the release body. The
    `<!-- yuekbox-packaging -->` marker guards the append, so a second run
    leaves the body alone.
+7. It publishes the draft with `gh release edit --draft=false`. Publishing is
+   last on purpose: the assets and the tag lock together at that moment.
 
-The workflow runs on `release: published` and on manual dispatch only. It never
-runs on pull requests.
+The workflow runs from the Release Please workflow and on manual dispatch
+only. It never runs on pull requests.
 
-Rebuild the assets for an existing tag after a failed build or a bad upload:
+Retry a release whose build failed before it published:
 
 ```sh
-gh workflow run release-binaries.yml -f tag=v0.3.0
+gh workflow run release-binaries.yml -f tag=v0.3.2
 ```
+
+The draft is still unpublished, so the workflow can upload the assets and
+publish it. Once a release is published it cannot change. If the assets are
+wrong, cut a new patch release.
 
 ## Test the installer without a release
 
