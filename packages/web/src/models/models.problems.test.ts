@@ -41,19 +41,17 @@ test("only a model-required problem blocks a generation", () => {
   expect(blockedModelsFromError(new Error("plain"))).toBeNull()
 })
 
-test("a download refusal carries the bytes the user must confirm", () => {
-  const refusal = downloadRefusalFromError(
-    new Error("confirm", {
-      cause: {
-        type: PROBLEM_TYPES.confirmationRequired,
-        title: "Download Confirmation Required",
-        status: 409,
-        expectedBytes: 7_295_775_491,
-        thresholdBytes: 134_217_728,
-      },
-    }),
-  )
-  expect(refusal).toEqual({ kind: "confirmation-required", expectedBytes: 7_295_775_491 })
+test("a confirmation problem is not a download refusal", () => {
+  const error = new Error("confirm", {
+    cause: {
+      type: PROBLEM_TYPES.confirmationRequired,
+      title: "Download Confirmation Required",
+      status: 409,
+      expectedBytes: 7_295_775_491,
+      thresholdBytes: 134_217_728,
+    },
+  })
+  expect(downloadRefusalFromError(error)).toBeNull()
 })
 
 test("a refused external path points back at the path input", () => {

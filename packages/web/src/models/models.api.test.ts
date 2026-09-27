@@ -6,7 +6,6 @@ import {
   saveModelPath,
   startModelDownload,
 } from "./models.api"
-import { downloadRefusalFromError } from "./models.problems"
 
 type RecordedCall = Readonly<{ url: string; method: string; body: unknown }>
 
@@ -87,27 +86,6 @@ test("a download starts with the user's confirmation in the body", async () => {
   expect(stub.calls[0]?.method).toBe("POST")
   expect(stub.calls[0]?.body).toEqual({ confirm: true })
   expect(result.state).toBe("downloading")
-})
-
-test("a refused download arrives as its problem, bytes and all", async () => {
-  stubFetch(() =>
-    Response.json(
-      {
-        type: PROBLEM_TYPES.confirmationRequired,
-        title: "Download Confirmation Required",
-        status: 409,
-        expectedBytes: 7_295_775_491,
-        thresholdBytes: 134_217_728,
-      },
-      { status: 409 },
-    ),
-  )
-
-  const error = await startModelDownload("yue2", false).catch((thrown: unknown) => thrown)
-  expect(downloadRefusalFromError(error)).toEqual({
-    kind: "confirmation-required",
-    expectedBytes: 7_295_775_491,
-  })
 })
 
 test("a path is written through the config endpoint as a partial patch", async () => {

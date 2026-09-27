@@ -1,7 +1,6 @@
 import * as React from "react"
 import { errorMessage } from "@/lib/problems"
 import { ActionButton, DownloadBar, StateDot } from "./ModelControls"
-import { downloadConfirmations } from "./models.confirmations"
 import { useSaveModelPathMutation, useStartModelDownloadMutation } from "./models.mutations"
 import { downloadRefusalFromError } from "./models.problems"
 import { formatBytes, ModelRowView } from "./models.view"
@@ -29,7 +28,6 @@ export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) 
 
   const refusal =
     startDownload.error === null ? null : downloadRefusalFromError(startDownload.error)
-  const confirming = refusal?.kind === "confirmation-required" ? refusal.expectedBytes : null
   const refused = refusal?.kind === "external-path" ? refusal.path : (externalPath ?? null)
   const external = refused !== null && refused === row.path ? refused : null
   const rowError =
@@ -51,17 +49,10 @@ export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) 
     setEditing(true)
   }
 
-  const download = (confirm: boolean) => {
-    startDownload.mutate(
-      { key: row.key, confirm },
-      {
-        onSuccess: () => {
-          // The user confirmed this model's size once; the next generation
-          // starts without asking again.
-          if (confirm) downloadConfirmations.remember(row.key)
-        },
-      },
-    )
+  // The button itself is the confirmation: it names the size, so the click
+  // starts the download. The server threshold still guards direct API calls.
+  const download = () => {
+    startDownload.mutate({ key: row.key, confirm: true })
   }
 
   const save = () => {
@@ -80,18 +71,6 @@ export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) 
 
   const actions = () => {
     if (row.active || editing) return null
-    if (confirming !== null) {
-      return (
-        <>
-          <ActionButton tone="primary" onClick={() => download(true)}>
-            download {formatBytes(confirming)}
-          </ActionButton>
-          <ActionButton tone="ghost" onClick={() => startDownload.reset()}>
-            cancel
-          </ActionButton>
-        </>
-      )
-    }
     if (row.state === "ready") {
       return (
         <ActionButton tone="ghost" onClick={() => openEditor(row.path)}>
@@ -102,10 +81,7 @@ export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) 
     return (
       <>
         {external === null ? (
-          <ActionButton
-            tone="primary"
-            onClick={() => download(downloadConfirmations.confirmed(row.key))}
-          >
+          <ActionButton tone="primary" onClick={download}>
             download
             {row.sizeBytes > 0 ? ` · ${formatBytes(row.sizeBytes)}` : ""}
           </ActionButton>

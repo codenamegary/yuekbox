@@ -12,23 +12,17 @@ export const blockedModelsFromError = (error: unknown): readonly MissingModel[] 
 }
 
 /**
- * Why a download did not start: the user still has to confirm the bytes, or
- * the configured path is outside yuekbox's own folder and only a folder choice
- * can help.
+ * Why a download did not start: the configured path is outside yuekbox's own
+ * folder, where yuekbox refuses to write, so only a folder choice can help.
+ * The download button itself is the confirmation, so a confirmation problem
+ * is just an error.
  */
-export type DownloadRefusal =
-  | Readonly<{ kind: "confirmation-required"; expectedBytes: number }>
-  | Readonly<{ kind: "external-path"; key: ModelKey; path: string }>
+export type DownloadRefusal = Readonly<{ kind: "external-path"; key: ModelKey; path: string }>
 
 export const downloadRefusalFromError = (error: unknown): DownloadRefusal | null => {
   const problem = problemFromError(error)
   if (problem === null) return null
-  switch (problem.type) {
-    case PROBLEM_TYPES.confirmationRequired:
-      return { kind: "confirmation-required", expectedBytes: problem.expectedBytes }
-    case PROBLEM_TYPES.modelPathExternal:
-      return { kind: "external-path", key: problem.key, path: problem.path }
-    default:
-      return null
-  }
+  return problem.type === PROBLEM_TYPES.modelPathExternal
+    ? { kind: "external-path", key: problem.key, path: problem.path }
+    : null
 }
