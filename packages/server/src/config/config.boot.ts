@@ -9,7 +9,6 @@ import {
   sheetsage2ScriptPath,
   sqlitePath,
 } from "../shared/home"
-import { parseCliArgs } from "./config.argv"
 import { resolveModelPaths } from "./config.resolve"
 
 export type BootEnv = Readonly<{
@@ -37,7 +36,14 @@ export type BootEnv = Readonly<{
 }>
 
 export type BootEnvInput = Readonly<{
-  argv: readonly string[]
+  /** `--home`, already resolved; null means `<osHome>/.yuekbox`. */
+  home: string | null
+  /** `--config`, already resolved; null means `<home>/config.yaml`. */
+  configPath: string | null
+  /** CLI model overrides, the highest precedence. */
+  models: ModelPathOverrides
+  /** `--provision`: build the runtime into the home, print progress, exit. */
+  provision: boolean
   env: Readonly<Record<string, string | undefined>>
   /** The OS user home; yuekbox's home defaults to `<osHome>/.yuekbox`. */
   osHome: string
@@ -50,24 +56,27 @@ export type BootEnvInput = Readonly<{
  * five model paths, and the home-based defaults for everything the app manages.
  * Only the model paths are user-configurable; the env vars below are internal
  * escape hatches and never part of the user surface.
+ *
+ * The command line is parsed exactly once by the calling process root and its
+ * output is spread in here: the dev root uses `parseCliArgs`, the cli package
+ * uses commander. This function never sees raw argv.
  */
 export const resolveBootEnv = async (input: BootEnvInput): Promise<BootEnv> => {
-  const cli = parseCliArgs(input.argv)
-  const home = cli.home ?? defaultHome(input.osHome)
-  const configFilePath = cli.configPath ?? join(home, "config.yaml")
+  const home = input.home ?? defaultHome(input.osHome)
+  const configFilePath = input.configPath ?? join(home, "config.yaml")
   const modelPaths = resolveModelPaths({
     home,
     file: await input.loadModelOverrides(configFilePath),
-    flags: cli.models,
+    flags: input.models,
   })
   const env = input.env
 
   return Object.freeze({
     home,
     configFilePath,
-    flags: cli.models,
+    flags: input.models,
     modelPaths,
-    provision: cli.provision,
+    provision: input.provision,
     host: env.HOST ?? "127.0.0.1",
     port: Number(env.PORT ?? 8787),
     sqlitePath: env.SQLITE_PATH ?? sqlitePath(home),

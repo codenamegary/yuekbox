@@ -105,7 +105,7 @@ and `YUEKBOX_VERSION=v0.3.0` pins a release. Then:
 
 ```bash
 yuekbox --provision   # one time: builds the Python runtime under ~/.yuekbox
-yuekbox               # starts the app on http://127.0.0.1:3000
+yuekbox               # starts the app in the background and returns to the prompt
 ```
 
 The binary bundles the UI, the API, the SQLite schema, and the Python helper
@@ -144,15 +144,17 @@ the same file yourself:
 
 ```bash
 bun run build:binary
-./yuekbox
+./yuekbox start
 ```
 
 It serves the UI and the API on one port: <http://127.0.0.1:3000> (`WEB_PORT`
-moves it). The first start extracts the Python helpers into
-`~/.yuekbox/scripts`. `--home`, `--config`, `--yue2-model` and the other config
-flags behave exactly as they do in dev. `--provision` is still the full setup
-step (the Python environment and the helper scripts) and installs the same
-helpers. The binary needs no `node_modules`, no source tree, and no Bun.
+moves it). `start` detaches: the command returns to the prompt and the daemon
+keeps running (see [Managing yuekbox](#-managing-yuekbox-start-stop-status-uninstall)).
+The first start extracts the Python helpers into `~/.yuekbox/scripts`.
+`--home`, `--config`, `--yue2-model` and the other config flags behave exactly
+as they do in dev. `--provision` is still the full setup step (the Python
+environment and the helper scripts), runs attached, and exits when done. The
+binary needs no `node_modules`, no source tree, and no Bun.
 
 Cross-compile with `--target` and a local runtime:
 
@@ -185,6 +187,44 @@ Keys you leave out fall back to `~/.yuekbox/models/<name>`. A CLI flag beats the
 `yuekbox --yue2-model /mnt/audio/YuE2-3B` (or `bun packages/server/src/server.ts
 --yue2-model /mnt/audio/YuE2-3B` from a checkout). `YUE2_KIT` is gone. yuekbox never
 asks about a checkout.
+
+### 🕹️ Managing yuekbox (start, stop, status, uninstall)
+
+The binary manages its own life. One instance per home; `--home` selects which.
+Bare `yuekbox` means `start`.
+
+```bash
+yuekbox start     # detach: prints the pid, URL, and log path, then returns
+yuekbox status    # running? pid, url, uptime, and a one-line service summary
+yuekbox stop      # SIGTERM, wait up to 10 s, SIGKILL: when it returns, it is gone
+yuekbox uninstall # asks what to remove: the binary, the app data, the models
+```
+
+`status --json` prints the same verdict as machine-readable JSON
+(`{"state":"running","pid":...}`), exit code 0 running, 3 stopped. `start` is
+idempotent: starting twice reports the running pid and spawns nothing.
+`uninstall` prompts on a terminal — the binary defaults yes, app data and
+models default no — and `uninstall --purge` removes the binary and the whole
+home without asking. Model folders you point `config.yaml` at outside the home
+are never touched.
+
+Whether yuekbox is running is decided by an exclusive lock at
+`~/.yuekbox/run/yuekbox.lock`, so a crashed instance can never leave a stale
+"running" answer behind. The daemon writes `~/.yuekbox/run/yuekbox.json` (pid,
+URL, log) once it is actually serving, and appends its output to
+`~/.yuekbox/logs/yuekbox.log` — `tail -f` that file to watch a boot or a
+generation.
+
+```text
+yuekbox status
+yuekbox is running (pid 1234)
+  url       http://127.0.0.1:3000
+  home      /home/you/.yuekbox
+  version   0.4.0
+  uptime    12m 4s
+  log       /home/you/.yuekbox/logs/yuekbox.log
+  service   online · queue 2 · gpu busy · ffmpeg ok · yue2 ok
+```
 
 ### 🎼 Reference covers and the extra audio passes
 
@@ -250,11 +290,14 @@ Assumptions
 
 3) Start the app
      yuekbox
-   The web app and the API share http://127.0.0.1:3000.
-   Verify: `curl -s http://127.0.0.1:3000/v1/status` answers with "state":"online" and
+   The web app and the API share http://127.0.0.1:3000. The command detaches and
+   returns to the prompt; the daemon keeps running in the background.
+   Verify: `yuekbox status` says running, and
+   `curl -s http://127.0.0.1:3000/v1/status` answers with "state":"online" and
    "ffmpeg":"ok". The "yue2" field there is a boot-time check: it stays "missing" until
    the models exist and the app restarts. The models panel and
-   `curl -s http://127.0.0.1:3000/v1/readiness` are the live picture.
+   `curl -s http://127.0.0.1:3000/v1/readiness` are the live picture. The daemon
+   log is ~/.yuekbox/logs/yuekbox.log if anything looks wrong.
 
 4) Get the five models (ask me first)
    Open http://127.0.0.1:3000, click the models sigil (▤) in the top-right cluster, and
@@ -285,6 +328,9 @@ Source checkout (contributors only. Install Bun if it is missing with
 Notes
 - One Song runs on the GPU at a time. Extra Generate clicks queue behind it.
 - The server binds localhost only. Do not expose it.
+- The binary manages itself: `yuekbox status`, `yuekbox stop`,
+  `yuekbox uninstall --purge` when you want it gone. Its log is
+  ~/.yuekbox/logs/yuekbox.log.
 - Model locations come from ~/.yuekbox/config.yaml or CLI flags. There is no YUE2_KIT.
 - Do not commit anything. Report the /v1/status output, the song id, its duration, and
   any errors with stderr tails.

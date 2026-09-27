@@ -13,7 +13,7 @@ import {
   venvPath,
 } from "./home"
 
-test("layout keeps tools, models, venvs, scripts, and data under the home", () => {
+test("layout keeps tools, models, venvs, scripts, data, run, and logs under the home", () => {
   expect(homeLayout("/home/u/.yuekbox")).toEqual({
     home: "/home/u/.yuekbox",
     tools: "/home/u/.yuekbox/tools",
@@ -21,6 +21,8 @@ test("layout keeps tools, models, venvs, scripts, and data under the home", () =
     venvs: "/home/u/.yuekbox/venvs",
     scripts: "/home/u/.yuekbox/scripts",
     data: "/home/u/.yuekbox/data",
+    run: "/home/u/.yuekbox/run",
+    logs: "/home/u/.yuekbox/logs",
   })
 })
 

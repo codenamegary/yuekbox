@@ -16,7 +16,10 @@ test("the one shared interpreter turns on all three generation adapters", async 
   const home = await mkdtemp(join(tmpdir(), "yuekbox-shared-python-test-"))
   try {
     const boot = await resolveBootEnv({
-      argv: ["bun", "src/server.ts", "--home", home],
+      home,
+      configPath: null,
+      models: {},
+      provision: false,
       env: {},
       osHome: "/home/u",
       loadModelOverrides: async () => ({}),

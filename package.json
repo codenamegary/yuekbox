@@ -19,7 +19,7 @@
   "scripts": {
     "dev": "bun run --filter '*' dev",
     "lint": "bun run --filter '*' lint",
-    "lint:boundaries": "depcruise packages/server/src",
+    "lint:boundaries": "depcruise packages/server/src packages/cli/src",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun run --filter '*' test",
     "format": "oxfmt",
