@@ -119,6 +119,41 @@ test("emits a started event before each piece and a final status after it", asyn
   expect(state.progress[1]?.label).toBe("Setting up yuekbox tools")
 })
 
+test("installer output streams through the progress channel as it arrives", async () => {
+  let arrivedDuringCall = 0 // structure: allow-let
+  const state = harness({
+    ensurePython: async (_uv, _versions, onOutput) => {
+      onOutput?.("Downloading cpython-3.12.3+20240116")
+      return ok({ status: "installed" })
+    },
+    ensureVenv: async (_uv, _request, onOutput) => {
+      onOutput?.("Resolved 40 packages in 1.2s")
+      arrivedDuringCall = state.progress.filter((event) => event.detail !== undefined).length
+      return ok({ status: "installed" })
+    },
+  })
+
+  await run(state)
+
+  const activity = state.progress.filter((event) => event.detail !== undefined)
+  expect(activity).toEqual([
+    {
+      step: "python",
+      label: "Installing the song engine",
+      status: "started",
+      detail: "Downloading cpython-3.12.3+20240116",
+    },
+    {
+      step: "environment",
+      label: "Installing the song tools",
+      status: "started",
+      detail: "Resolved 40 packages in 1.2s",
+    },
+  ])
+  // Both events were on the channel before the second step resolved.
+  expect(arrivedDuringCall).toBe(2)
+})
+
 test("builds exactly one shared venv under <home>/venvs with the manifest pin", async () => {
   const state = harness()
 

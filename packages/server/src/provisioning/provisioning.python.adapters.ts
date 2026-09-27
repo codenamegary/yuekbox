@@ -50,9 +50,10 @@ const describeExit = (outcome: { exitCode: number; stderrTail: string }, what: s
 const runUv = async (
   env: PythonAdapterEnv,
   command: readonly string[],
+  onLine?: (line: string) => void,
 ): Promise<Result<ProcessOutcome, string>> => {
   try {
-    return ok(await env.runProcess(command, env.home, () => undefined, uvEnv(env.home)))
+    return ok(await env.runProcess(command, env.home, onLine ?? (() => undefined), uvEnv(env.home)))
   } catch (error: unknown) {
     return err(`could not run uv: ${describeError(error)}`)
   }
@@ -64,7 +65,7 @@ const runUv = async (
  * install and the user never chooses one.
  */
 export const makeEnsurePython = (env: PythonAdapterEnv): EnsurePython => {
-  return async (uv, versions) => {
+  return async (uv, versions, onOutput) => {
     const installDir = managedPythonDir(env.home)
     const installed: string[] = []
 
@@ -80,15 +81,11 @@ export const makeEnsurePython = (env: PythonAdapterEnv): EnsurePython => {
         })
       }
 
-      const outcome = await runUv(env, [
-        uv.path,
-        "python",
-        "install",
-        "--install-dir",
-        installDir,
-        "--no-bin",
-        version,
-      ])
+      const outcome = await runUv(
+        env,
+        [uv.path, "python", "install", "--install-dir", installDir, "--no-bin", version],
+        onOutput,
+      )
       if (!outcome.ok) {
         return err({ kind: "python_unavailable", detail: outcome.error })
       }
@@ -139,7 +136,7 @@ const readStamp = async (path: string): Promise<VenvStamp | null> => {
  * directory and starts over.
  */
 export const makeEnsureVenv = (env: PythonAdapterEnv): EnsureVenv => {
-  return async (uv, request) => {
+  return async (uv, request, onOutput) => {
     const stampPath = venvStampPath(request.dir)
     if (existsSync(stampPath)) {
       const stamp = await readStamp(stampPath)
@@ -158,7 +155,11 @@ export const makeEnsureVenv = (env: PythonAdapterEnv): EnsureVenv => {
       })
     }
 
-    const venv = await runUv(env, [uv.path, "venv", "--python", request.pythonVersion, request.dir])
+    const venv = await runUv(
+      env,
+      [uv.path, "venv", "--python", request.pythonVersion, request.dir],
+      onOutput,
+    )
     if (!venv.ok) {
       return err({ kind: "venv_failed", detail: venv.error })
     }
@@ -169,20 +170,24 @@ export const makeEnsureVenv = (env: PythonAdapterEnv): EnsureVenv => {
       })
     }
 
-    const install = await runUv(env, [
-      uv.path,
-      "pip",
-      "install",
-      "--python",
-      join(request.dir, "bin", "python"),
-      "--index-url",
-      request.indexUrl,
-      "--extra-index-url",
-      request.extraIndexUrl,
-      "--index-strategy",
-      request.indexStrategy,
-      ...request.packages,
-    ])
+    const install = await runUv(
+      env,
+      [
+        uv.path,
+        "pip",
+        "install",
+        "--python",
+        join(request.dir, "bin", "python"),
+        "--index-url",
+        request.indexUrl,
+        "--extra-index-url",
+        request.extraIndexUrl,
+        "--index-strategy",
+        request.indexStrategy,
+        ...request.packages,
+      ],
+      onOutput,
+    )
     if (!install.ok) {
       return err({ kind: "venv_failed", detail: install.error })
     }

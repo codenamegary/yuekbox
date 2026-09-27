@@ -44,6 +44,16 @@ export const makeProvisionAll =
       input.onProgress?.({ step, label: provisionStepLabels[step], status })
     }
 
+    /** Streams one raw installer line for the step that is running. */
+    const emitActivity = (step: ProvisionStepId) => (line: string) => {
+      input.onProgress?.({
+        step,
+        label: provisionStepLabels[step],
+        status: "started",
+        detail: line,
+      })
+    }
+
     const stop = (
       step: ProvisionStepId,
       failure: Omit<ProvisionFailure, "step" | "label">,
@@ -63,7 +73,7 @@ export const makeProvisionAll =
     finish("uv", "completed")
 
     emit("python", "started")
-    const python = await deps.ensurePython(uv.value, managedPythonVersions)
+    const python = await deps.ensurePython(uv.value, managedPythonVersions, emitActivity("python"))
     if (!python.ok) {
       return err(stop("python", { kind: python.error.kind, detail: python.error.detail }))
     }
@@ -78,16 +88,20 @@ export const makeProvisionAll =
     // The GPU check picks the CUDA wheel index; the stamp and the install
     // command both derive from this one pin so they can never disagree.
     const pin: VenvPin = { ...venvPin, extraIndexUrl: gpu.value.indexUrl }
-    const built = await deps.ensureVenv(uv.value, {
-      name: pin.name,
-      dir: venvPath(input.home),
-      pythonVersion: pin.python,
-      indexUrl: pin.indexUrl,
-      extraIndexUrl: pin.extraIndexUrl,
-      indexStrategy: pin.indexStrategy,
-      packages: pin.packages,
-      fingerprint: venvFingerprint(pin),
-    })
+    const built = await deps.ensureVenv(
+      uv.value,
+      {
+        name: pin.name,
+        dir: venvPath(input.home),
+        pythonVersion: pin.python,
+        indexUrl: pin.indexUrl,
+        extraIndexUrl: pin.extraIndexUrl,
+        indexStrategy: pin.indexStrategy,
+        packages: pin.packages,
+        fingerprint: venvFingerprint(pin),
+      },
+      emitActivity("environment"),
+    )
     if (!built.ok) {
       return err(stop("environment", { kind: built.error.kind, detail: built.error.detail }))
     }
