@@ -194,6 +194,7 @@ const requestFor = (dir: string, fingerprint = venvFingerprint(venvPin)): VenvRe
   pythonVersion: venvPin.python,
   indexUrl: venvPin.indexUrl,
   extraIndexUrl: venvPin.extraIndexUrl,
+  indexStrategy: venvPin.indexStrategy,
   packages: venvPin.packages,
   fingerprint,
 })
@@ -228,6 +229,8 @@ test("builds the venv then installs the pinned packages", async () => {
         "https://pypi.org/simple",
         "--extra-index-url",
         "https://download.pytorch.org/whl/cu128",
+        "--index-strategy",
+        "unsafe-best-match",
         ...venvPin.packages,
       ],
     ])

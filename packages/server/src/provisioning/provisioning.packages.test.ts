@@ -20,10 +20,13 @@ test("uv is pinned to one release archive with a checksum", () => {
 test("one shared environment pins the tested union on the CUDA 12.8 wheels", () => {
   expect(venvPin.name).toBe("python")
   expect(venvPin.python).toBe("3.12.3")
-  // uv prefers --extra-index-url over --index-url, so the CUDA wheel index
-  // must be the extra index or the pinned torch resolves plain from PyPI.
+  // uv gives --extra-index-url priority over --index-url, so the CUDA wheel
+  // index must be the extra index or the pinned torch resolves plain from
+  // PyPI. The CUDA index also carries an older setuptools, so the default
+  // first-index strategy never reaches PyPI for the pin; both are trusted.
   expect(venvPin.indexUrl).toBe(pypiIndexUrl)
   expect(venvPin.extraIndexUrl).toBe(torchWheelIndexUrl)
+  expect(venvPin.indexStrategy).toBe("unsafe-best-match")
   expect(venvPin.packages).toEqual([
     `yue2-infer @ git+${yue2RuntimePin.repository}@${yue2RuntimePin.commit}`,
     "torch==2.10.0",
@@ -64,6 +67,9 @@ test("the fingerprint is stable and changes with the pins", () => {
   const fingerprint = venvFingerprint(venvPin)
 
   expect(venvFingerprint(venvPin)).toBe(fingerprint)
+  // The strategy is part of the stamp, so an environment resolved with a
+  // different strategy rebuilds instead of looking current.
+  expect(JSON.parse(fingerprint)).toMatchObject({ indexStrategy: "unsafe-best-match" })
 
   const bumped = { ...venvPin, packages: [...venvPin.packages, "einops==0.8.2"] }
   expect(venvFingerprint(bumped)).not.toBe(fingerprint)
