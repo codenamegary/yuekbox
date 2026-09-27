@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/codenamegary/yuekbox/compare/v0.3.1...v0.3.2) (2026-09-27)
+
+
+### Bug Fixes
+
+* **ci:** publish release binaries through a draft release ([#81](https://github.com/codenamegary/yuekbox/issues/81)) ([22078c3](https://github.com/codenamegary/yuekbox/commit/22078c3d4d8f7b4734aaf8af11a738b8ce4d29d5))
+
 ## [0.3.1](https://github.com/codenamegary/yuekbox/compare/v0.3.0...v0.3.1) (2026-09-27)
 
 
