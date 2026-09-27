@@ -970,17 +970,21 @@ helper with `--help`, and stops it with SIGTERM. CI runs it on ubuntu-latest.
 
 ### Release packaging
 
-Merging the release-please PR tags `vX.Y.Z` and publishes the GitHub release.
-`.github/workflows/release-binaries.yml` runs on `release: published` (and on
-`workflow_dispatch` with a `tag` input) with `contents: write`, and never on
-pull requests. It checks out the tag, runs `bun install --frozen-lockfile`,
-builds `yuekbox-linux-x64`, smoke-tests it, writes
-`yuekbox-linux-x64.sha256`, and uploads the binary, the checksum, and
-`scripts/install.sh` to the release with `gh release upload --clobber`. The
-last step runs `scripts/release-notes-append.sh <tag>`, which appends
+Merging the release-please PR tags `vX.Y.Z` and creates the GitHub release as
+a draft (`draft` plus `force-tag-creation` in `release-please-config.json`),
+because immutable releases only accept assets before publication. The Release
+Please workflow then calls `.github/workflows/release-binaries.yml` directly
+when a release is created: drafts fire no `release` event. The workflow has
+`contents: write` and never runs on pull requests. It checks out the tag, runs
+`bun install --frozen-lockfile`, builds `yuekbox-linux-x64`, smoke-tests it,
+writes `yuekbox-linux-x64.sha256`, and uploads the binary, the checksum, and
+`scripts/install.sh` to the draft with `gh release upload --clobber`. Then it
+runs `scripts/release-notes-append.sh <tag>`, which appends
 `.github/release-notes-packaging.md` to the release body unless the
 `<!-- yuekbox-packaging -->` marker is already present, so a rerun never
-duplicates the section.
+duplicates the section. The last step publishes the draft
+(`gh release edit --draft=false`), so the tag and assets lock together with
+everything present; a failure leaves the draft for a retry.
 
 `scripts/install.sh` is the one-line installer:
 
