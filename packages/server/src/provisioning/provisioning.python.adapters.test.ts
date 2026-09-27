@@ -65,6 +65,27 @@ test("installs each missing python once and records it", async () => {
   })
 })
 
+test("interpreter install output streams to onOutput as it arrives", async () => {
+  await withTempDir(async (dir) => {
+    const lines: string[] = []
+    const runProcess: ProcessRunner = async (_command, _cwd, onLine) => {
+      onLine("Downloading cpython-3.12.3+20240116")
+      onLine("Installed Python 3.12.3 in 1.2s")
+      return { exitCode: 0, stdout: "", stderrTail: "" }
+    }
+
+    const result = await makeEnsurePython({ home: dir, runProcess })(uvTool, ["3.12.3"], (line) =>
+      lines.push(line),
+    )
+
+    expect(result.ok).toBe(true)
+    expect(lines).toEqual([
+      "Downloading cpython-3.12.3+20240116",
+      "Installed Python 3.12.3 in 1.2s",
+    ])
+  })
+})
+
 test("only installs the versions that are missing", async () => {
   await withTempDir(async (dir) => {
     await mkdir(dirname(pythonStampPath(dir, "3.12.3")), { recursive: true })
@@ -242,6 +263,36 @@ test("builds the venv then installs the pinned packages", async () => {
       fingerprint: string
     }
     expect(stamp.fingerprint).toBe(request.fingerprint)
+  })
+})
+
+test("uv output streams to onOutput across the build and the install", async () => {
+  await withTempDir(async (dir) => {
+    const venvDir = join(dir, "venvs", "python")
+    const lines: string[] = []
+    const runProcess: ProcessRunner = async (command, _cwd, onLine) => {
+      if (command[1] === "venv") {
+        await mkdir(join(venvDir, "bin"), { recursive: true })
+        onLine("Creating environment at: " + venvDir)
+      } else {
+        onLine("Resolved 40 packages in 1.2s")
+        onLine("Installed 40 packages in 3.5s")
+      }
+      return { exitCode: 0, stdout: "", stderrTail: "" }
+    }
+
+    const result = await makeEnsureVenv({ home: dir, runProcess })(
+      uvTool,
+      requestFor(venvDir),
+      (line) => lines.push(line),
+    )
+
+    expect(result.ok).toBe(true)
+    expect(lines).toEqual([
+      `Creating environment at: ${venvDir}`,
+      "Resolved 40 packages in 1.2s",
+      "Installed 40 packages in 3.5s",
+    ])
   })
 })
 

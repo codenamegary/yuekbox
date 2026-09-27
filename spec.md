@@ -838,6 +838,22 @@ paragraph that names the piece and offers the retry. Internal detail stays in
 logs and tests; the words venv, pip, interpreter, package, and Python never
 reach the user.
 
+Live activity. While `Installing the song tools` or `Installing the song
+engine` runs, uv's output streams through the progress channel (`detail` on
+`ProvisionProgress`, fed by an `onOutput` callback on the `EnsurePython` and
+`EnsureVenv` ports) and the CLI redraws the step's one line in place: the step
+label plus the latest activity ("downloading the song tools"). On a terminal
+(`isTTY`, not `TERM=dumb`) the line is erased and redrawn, throttled to a short
+gap so bursts coalesce, truncated to the terminal width, and stripped of ANSI
+and control sequences; it never scrolls, and the step still ends with its
+normal `done` line. Raw uv lines go to the diagnostic stream only, and the
+activity text comes from a small keyword map (`Downloading` → "downloading",
+`Resolved`/`Prepared`/`Installed`/... → "installing"), so no raw uv wording,
+version, size, or path reaches stdout, and an unmatched line keeps the last
+phrase. Piped output (CI, `| tee`) gets the durable step lines with no control
+characters. A failure or an unexpected throw clears the live line before the
+failure message.
+
 What later work does instead:
 
 - #52 (binary) calls the same `assembleProvisioningSlice` + `runProvisioningCommand`
