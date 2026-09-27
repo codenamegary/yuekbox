@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/codenamegary/yuekbox/compare/v0.3.0...v0.3.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* **server:** resolve pinned packages across both provisioning indexes ([#76](https://github.com/codenamegary/yuekbox/issues/76)) ([03d71c0](https://github.com/codenamegary/yuekbox/commit/03d71c0b690823ed81ab2db788dbbbfd986e6541))
+
 ## [0.3.0](https://github.com/codenamegary/yuekbox/compare/v0.2.0...v0.3.0) (2026-09-26)
 
 
