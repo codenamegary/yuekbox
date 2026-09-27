@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/codenamegary/yuekbox/compare/v0.3.2...v0.3.3) (2026-09-27)
+
+
+### Bug Fixes
+
+* **web:** start model downloads on the first click ([#86](https://github.com/codenamegary/yuekbox/issues/86)) ([74e74ba](https://github.com/codenamegary/yuekbox/commit/74e74ba490bcded890f05ea6084c2c58f081d52c))
+
 ## [0.3.2](https://github.com/codenamegary/yuekbox/compare/v0.3.1...v0.3.2) (2026-09-27)
 
 
