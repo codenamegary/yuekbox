@@ -25,6 +25,10 @@ export type Yue2ArgsEnv = Readonly<{
   model: string
   vae: string
   gpuBudget: number
+  /** `torch` is the CUDA runtime; `mlx` is the Apple Silicon runtime. */
+  backend: "torch" | "mlx"
+  /** The MLX quantization to load when the backend is `mlx`. */
+  mlxPrecision: string
 }>
 
 export type Yue2AdapterEnv = Readonly<{
@@ -33,6 +37,9 @@ export type Yue2AdapterEnv = Readonly<{
   scriptPath: string
   gpuBudget: number
   cwd: string
+  /** Set once at boot from the host platform. */
+  backend: "torch" | "mlx"
+  mlxPrecision: string
   /** Resolved at call time, so a path saved before the next run is used. */
   readModelPaths: ReadCurrentModelPaths
 }>
@@ -99,8 +106,9 @@ export const generateArgs = (
   "--budget",
   String(env.gpuBudget),
   "--offline",
-  "--device",
-  "cuda",
+  "--backend",
+  env.backend,
+  ...(env.backend === "mlx" ? ["--precision", env.mlxPrecision] : ["--device", "cuda"]),
 ]
 
 export const makeRunYue2Generate =

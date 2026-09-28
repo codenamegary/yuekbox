@@ -31,7 +31,7 @@ test("reuses the managed uv on a rerun without downloading", async () => {
     await mkdir(dirname(managed), { recursive: true })
     await writeFile(managed, "#!/bin/sh\n", "utf8")
     await writeFile(uvStampPath(dir), "{}\n", "utf8")
-    const ensureUv = makeEnsureUv({ home: dir, downloadFile: neverDownload, runProcess: neverRun })
+    const ensureUv = makeEnsureUv({ home: dir, downloadFile: neverDownload, runProcess: neverRun, platform: "linux" })
 
     const result = await ensureUv()
 
@@ -46,6 +46,7 @@ test("rebuilds when the binary is gone even with a stamp", async () => {
     await writeFile(uvStampPath(dir), "{}\n", "utf8")
     const ensureUv = makeEnsureUv({
       home: dir,
+      platform: "linux",
       downloadFile: async (request) => {
         downloads.push(request.destPath)
         await mkdir(dirname(request.destPath), { recursive: true })
@@ -77,6 +78,7 @@ test("a half-extracted copy without a stamp is not treated as installed", async 
     const commands: string[][] = []
     const ensureUv = makeEnsureUv({
       home: dir,
+      platform: "linux",
       downloadFile: async (request) => {
         await mkdir(dirname(request.destPath), { recursive: true })
         await writeFile(request.destPath, "archive bytes", "utf8")
@@ -120,7 +122,7 @@ test("fetches the pinned archive, stages the extract, then stamps", async () => 
       await writeFile(join(staging, "uv"), "#!/bin/sh\n", "utf8")
       return { exitCode: 0, stdout: "", stderrTail: "" }
     }
-    const ensureUv = makeEnsureUv({ home: dir, downloadFile, runProcess })
+    const ensureUv = makeEnsureUv({ home: dir, downloadFile, runProcess, platform: "linux" })
 
     const result = await ensureUv()
 
@@ -135,10 +137,40 @@ test("fetches the pinned archive, stages the extract, then stamps", async () => 
   })
 })
 
+test("a Mac fetches the Apple Silicon archive of the same release", async () => {
+  await withTempDir(async (dir) => {
+    const downloads: string[] = []
+    const ensureUv = makeEnsureUv({
+      home: dir,
+      platform: "macos",
+      downloadFile: async (request) => {
+        downloads.push(request.url)
+        await mkdir(dirname(request.destPath), { recursive: true })
+        await writeFile(request.destPath, "archive bytes", "utf8")
+        return ok({ path: request.destPath, bytes: 13 })
+      },
+      runProcess: async (command) => {
+        const target = command[command.indexOf("-C") + 1]
+        if (typeof target !== "string") throw new Error("no -C target")
+        await writeFile(join(target, "uv"), "#!/bin/sh\n", "utf8")
+        return { exitCode: 0, stdout: "", stderrTail: "" }
+      },
+    })
+
+    const result = await ensureUv()
+
+    expect(result.ok).toBe(true)
+    expect(downloads).toEqual([
+      "https://github.com/astral-sh/uv/releases/download/0.9.18/uv-aarch64-apple-darwin.tar.gz",
+    ])
+  })
+})
+
 test("a download failure fails with a uv_unavailable error", async () => {
   await withTempDir(async (dir) => {
     const ensureUv = makeEnsureUv({
       home: dir,
+      platform: "linux",
       downloadFile: async () => err({ kind: "download_failed", detail: "HTTP 500" }),
       runProcess: neverRun,
     })
@@ -153,6 +185,7 @@ test("an extraction failure fails with the exit detail and leaves no staging dir
   await withTempDir(async (dir) => {
     const ensureUv = makeEnsureUv({
       home: dir,
+      platform: "linux",
       downloadFile: async (request) => {
         await mkdir(dirname(request.destPath), { recursive: true })
         await writeFile(request.destPath, "not really a tar", "utf8")
@@ -175,6 +208,7 @@ test("an extract that does not produce the binary fails and stamps nothing", asy
   await withTempDir(async (dir) => {
     const ensureUv = makeEnsureUv({
       home: dir,
+      platform: "linux",
       downloadFile: async (request) => ok({ path: request.destPath, bytes: 0 }),
       runProcess: async () => ({ exitCode: 0, stdout: "", stderrTail: "" }),
     })
@@ -194,6 +228,7 @@ test("an extractor that cannot start fails cleanly", async () => {
   await withTempDir(async (dir) => {
     const ensureUv = makeEnsureUv({
       home: dir,
+      platform: "linux",
       downloadFile: async (request) => {
         await mkdir(dirname(request.destPath), { recursive: true })
         await writeFile(request.destPath, "archive bytes", "utf8")

@@ -14,7 +14,10 @@ const everyKind: readonly ProvisionFailure[] = [
   failure("gpu", "gpu_missing"),
   failure("gpu", "gpu_driver_too_old"),
   failure("gpu", "gpu_unreadable"),
+  failure("gpu", "gpu_memory_low"),
+  failure("gpu", "macos_too_old"),
   failure("environment", "venv_failed"),
+  failure("align", "venv_failed"),
   failure("scripts", "scripts_failed"),
 ]
 
@@ -76,4 +79,34 @@ test("a missing GPU message says what to install", () => {
 
   expect(message.toLowerCase()).toContain("nvidia")
   expect(message.toLowerCase()).toContain("install")
+})
+
+test("a missing GPU message covers both platforms", () => {
+  const message = provisionFailureMessage(failure("gpu", "gpu_missing"))
+
+  expect(message.toLowerCase()).toContain("apple silicon")
+  expect(message.toLowerCase()).toContain("macos")
+})
+
+test("a low-memory Mac message names both amounts", () => {
+  const message = provisionFailureMessage({
+    ...failure("gpu", "gpu_memory_low"),
+    foundAmount: "8 GiB",
+    minimumAmount: "16 GiB",
+  })
+
+  expect(message).toContain("8 GiB")
+  expect(message).toContain("16 GiB")
+  expect(message).toContain("memory")
+})
+
+test("an old macOS message names both versions", () => {
+  const message = provisionFailureMessage({
+    ...failure("gpu", "macos_too_old"),
+    foundAmount: "13.6",
+    minimumAmount: "14.2",
+  })
+
+  expect(message).toContain("13.6")
+  expect(message).toContain("14.2")
 })

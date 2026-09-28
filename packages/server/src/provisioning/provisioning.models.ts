@@ -10,19 +10,21 @@ export type InstallScriptsError = Readonly<{
 }>
 
 /** The pieces provisioning installs, in the order it installs them. */
-export type ProvisionStepId = "uv" | "python" | "gpu" | "environment" | "scripts"
+export type ProvisionStepId = "uv" | "python" | "gpu" | "environment" | "align" | "scripts"
 
 /**
  * Plain-English names for each step. They surface in progress output and in
  * failure messages, so they never name implementation details. The one
- * `environment` step carries the song generator, reference transcription,
- * and lyric timing, so its label covers all three.
+ * `environment` step carries the song generator and reference transcription,
+ * so its label covers both. `align` is the lyric-timing environment; Linux
+ * shares its one environment, so there the step reports skipped.
  */
 export const provisionStepLabels: Readonly<Record<ProvisionStepId, string>> = Object.freeze({
   uv: "Setting up yuekbox tools",
   python: "Installing the song engine",
   gpu: "Checking the graphics card",
   environment: "Installing the song tools",
+  align: "Installing the lyric timing tools",
   scripts: "Installing helper programs",
 })
 
@@ -46,6 +48,8 @@ export type ProvisionFailureKind =
   | "gpu_missing"
   | "gpu_driver_too_old"
   | "gpu_unreadable"
+  | "gpu_memory_low"
+  | "macos_too_old"
   | "venv_failed"
   | "scripts_failed"
 
@@ -61,6 +65,9 @@ export type ProvisionFailure = Readonly<{
   /** Present on `gpu_driver_too_old`, for the plain-English message. */
   foundDriverVersion?: string
   minimumDriverVersion?: string
+  /** Present on `gpu_memory_low` and `macos_too_old`, for the message. */
+  foundAmount?: string
+  minimumAmount?: string
 }>
 
 export type ProvisionReport = Readonly<{
@@ -99,7 +106,8 @@ export type VenvRequest = Readonly<{
   dir: string
   pythonVersion: string
   indexUrl: string
-  extraIndexUrl: string
+  /** The priority index, or null when the one index is all the pin needs. */
+  extraIndexUrl: string | null
   indexStrategy: IndexStrategy
   packages: readonly string[]
   /** Identity of the pinned set; a matching stamp means the venv is current. */
@@ -116,26 +124,46 @@ export type VenvFailure = Readonly<{
 }>
 
 /**
- * What the driver probe found. `nvidia` means nvidia-smi answered with a
- * driver version; `absent` folds in "no GPU", "no driver", and "no nvidia-smi".
+ * What the machine probe found. `nvidia` means nvidia-smi answered with a
+ * driver version (the Linux path); `apple-silicon` means the Mac probe read
+ * its unified memory and macOS version; `absent` folds in "no usable GPU",
+ * a wrong architecture, and a failed probe alike.
  */
 export type GpuFacts =
   | Readonly<{ kind: "nvidia"; driverVersion: string }>
+  | Readonly<{ kind: "apple-silicon"; memoryBytes: number; macosVersion: string }>
   | Readonly<{ kind: "absent"; detail: string }>
 
 export type GpuError = Readonly<{
-  kind: "gpu_missing" | "gpu_driver_too_old" | "gpu_unreadable"
+  kind: "gpu_missing" | "gpu_driver_too_old" | "gpu_unreadable" | "gpu_memory_low" | "macos_too_old"
   detail: string
   foundDriverVersion?: string
   minimumDriverVersion?: string
+  foundAmount?: string
+  minimumAmount?: string
 }>
 
-/** The CUDA 12 build the pins need, and the driver floor that runs it. */
+/** The CUDA 12 build the Linux pins need, and the driver floor that runs it. */
 export type TorchRequirement = Readonly<{
   cudaFamily: "12.x"
   indexUrl: string
   minimumDriverVersion: string
 }>
+
+/** The Apple Silicon envelope the macOS runtime runs inside. */
+export type MacRequirement = Readonly<{
+  /** The sampled memory budget the MLX runtime enforces while generating. */
+  memoryBudgetGiB: number
+}>
+
+/**
+ * What the machine check decided. `cuda` carries the wheel index the Linux
+ * environment installs against; `mlx` says the Mac satisfies the runtime's
+ * floor and its environments need no extra index.
+ */
+export type MachineRequirement =
+  | Readonly<{ kind: "cuda"; indexUrl: string }>
+  | Readonly<{ kind: "mlx"; memoryBudgetGiB: number }>
 
 export type DownloadRequest = Readonly<{
   url: string

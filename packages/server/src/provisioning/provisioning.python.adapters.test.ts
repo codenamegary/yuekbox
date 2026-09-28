@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { ProcessRunner } from "../shared/process"
 import { UvTool, VenvRequest } from "./provisioning.models"
-import { venvFingerprint, venvPin } from "./provisioning.packages"
+import { venvFingerprint, venvPinsFor } from "./provisioning.packages"
 import {
   makeEnsurePython,
   makeEnsureVenv,
@@ -187,6 +187,10 @@ test("a stamp that cannot be written fails loudly instead of half-succeeding", a
     }
   })
 })
+
+const linuxPin = venvPinsFor("linux", "https://download.pytorch.org/whl/cu128")[0]
+if (linuxPin === undefined) throw new Error("the linux pin set is never empty")
+const venvPin = linuxPin
 
 const requestFor = (dir: string, fingerprint = venvFingerprint(venvPin)): VenvRequest => ({
   name: venvPin.name,

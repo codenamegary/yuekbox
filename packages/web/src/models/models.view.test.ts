@@ -31,7 +31,7 @@ const readiness: Readiness = {
   },
   system: {
     ffmpeg: { state: "ready" },
-    nvidia: { state: "ready" },
+    gpu: { state: "ready" },
   },
 }
 
@@ -169,7 +169,7 @@ test("a missing prerequisite carries its message and both fixes verbatim", () =>
         wsl2: "sudo apt update && sudo apt install ffmpeg",
       },
     },
-    nvidia: { state: "ready" },
+    gpu: { state: "ready" },
   })
 
   expect(issues).toEqual([

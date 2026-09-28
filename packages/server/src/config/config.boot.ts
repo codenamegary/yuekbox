@@ -1,6 +1,7 @@
 import { join } from "node:path"
 import { ModelPathOverrides, ModelPaths } from "contracts/http/config"
 import {
+  alignPythonPath,
   defaultHome,
   generateScriptPath,
   lyricAlignScriptPath,
@@ -9,10 +10,12 @@ import {
   sheetsage2ScriptPath,
   sqlitePath,
 } from "../shared/home"
+import { HostPlatform, hostPlatform } from "../shared/platform"
 import { parseCliArgs } from "./config.argv"
 import { resolveModelPaths } from "./config.resolve"
 
 export type BootEnv = Readonly<{
+  platform: HostPlatform
   home: string
   configFilePath: string
   flags: ModelPathOverrides
@@ -23,8 +26,10 @@ export type BootEnv = Readonly<{
   port: number
   sqlitePath: string
   mediaDir: string
-  /** The one shared interpreter every Python pass runs. */
+  /** The shared interpreter: every Linux pass, and the macOS generation pass. */
   python: string
+  /** The lyric aligner's interpreter: the same one on Linux, the align venv on macOS. */
+  alignPython: string
   generateScript: string
   gpuBudget: number
   ffmpegBin: string
@@ -33,6 +38,8 @@ export type BootEnv = Readonly<{
   sheetsage2Offline: boolean
   lyricAlignScript: string
   lyricAlignDevice: string
+  /** The MLX quantization the macOS generation runtime loads. */
+  mlxPrecision: string
   referenceMaxBytes: number
 }>
 
@@ -41,6 +48,8 @@ export type BootEnvInput = Readonly<{
   env: Readonly<Record<string, string | undefined>>
   /** The OS user home; yuekbox's home defaults to `<osHome>/.yuekbox`. */
   osHome: string
+  /** Defaults to the machine the process runs on; tests pass one explicitly. */
+  platform?: HostPlatform
   /** Loads config.yaml once from the resolved path. */
   loadModelOverrides: (configFilePath: string) => Promise<ModelPathOverrides>
 }>
@@ -50,8 +59,13 @@ export type BootEnvInput = Readonly<{
  * five model paths, and the home-based defaults for everything the app manages.
  * Only the model paths are user-configurable; the env vars below are internal
  * escape hatches and never part of the user surface.
+ *
+ * The platform only moves the defaults: macOS points the aligner at its own
+ * torch-based environment, defaults both transcription devices away from
+ * CUDA, and records the MLX quantization to load.
  */
 export const resolveBootEnv = async (input: BootEnvInput): Promise<BootEnv> => {
+  const platform = input.platform ?? hostPlatform()
   const cli = parseCliArgs(input.argv)
   const home = cli.home ?? defaultHome(input.osHome)
   const configFilePath = cli.configPath ?? join(home, "config.yaml")
@@ -63,6 +77,7 @@ export const resolveBootEnv = async (input: BootEnvInput): Promise<BootEnv> => {
   const env = input.env
 
   return Object.freeze({
+    platform,
     home,
     configFilePath,
     flags: cli.models,
@@ -73,14 +88,18 @@ export const resolveBootEnv = async (input: BootEnvInput): Promise<BootEnv> => {
     sqlitePath: env.SQLITE_PATH ?? sqlitePath(home),
     mediaDir: env.MEDIA_DIR ?? mediaDir(home),
     python: env.YUEKBOX_PYTHON ?? pythonPath(home),
+    alignPython:
+      env.YUEKBOX_ALIGN_PYTHON ??
+      (platform === "macos" ? alignPythonPath(home) : pythonPath(home)),
     generateScript: generateScriptPath(home),
     gpuBudget: Number(env.YUE2_GPU_BUDGET ?? 16),
     ffmpegBin: env.FFMPEG_BIN ?? "ffmpeg",
     sheetsage2Script: env.SHEETSAGE2_SCRIPT ?? sheetsage2ScriptPath(home),
-    sheetsage2Device: env.SHEETSAGE2_DEVICE ?? "cuda",
+    sheetsage2Device: env.SHEETSAGE2_DEVICE ?? (platform === "macos" ? "cpu" : "cuda"),
     sheetsage2Offline: env.SHEETSAGE2_OFFLINE !== "0",
     lyricAlignScript: env.LYRIC_ALIGN_SCRIPT ?? lyricAlignScriptPath(home),
-    lyricAlignDevice: env.LYRIC_ALIGN_DEVICE ?? "cuda:0",
+    lyricAlignDevice: env.LYRIC_ALIGN_DEVICE ?? (platform === "macos" ? "cpu" : "cuda:0"),
+    mlxPrecision: env.YUEKBOX_MLX_PRECISION ?? "8bit",
     referenceMaxBytes: Number(env.REFERENCE_MAX_BYTES ?? 26214400),
   })
 }

@@ -73,6 +73,8 @@ const env: Yue2ArgsEnv = {
   model: modelPaths.yue2,
   vae: modelPaths.yue2Vae,
   gpuBudget: 16,
+  backend: "torch",
+  mlxPrecision: "8bit",
 }
 
 test("generate args call our script with the resolved model and vae, not a kit", () => {
@@ -106,9 +108,34 @@ test("generate args call our script with the resolved model and vae, not a kit",
     "--budget",
     "16",
     "--offline",
+    "--backend",
+    "torch",
     "--device",
     "cuda",
   ])
+})
+
+test("the mlx backend asks for its quantization instead of a CUDA device", () => {
+  const args = generateArgs(
+    { ...env, backend: "mlx", mlxPrecision: "8bit" },
+    {
+      songId: "song-1",
+      lyrics: "hello",
+      style: "pop",
+      seed: 7,
+      cot: "full",
+      abc: null,
+      outputDir: "/tmp/output",
+      onStage: () => {},
+      onProgress: () => {},
+    },
+    "/tmp/output/request.json",
+  )
+
+  expect(args).toContain("--backend")
+  expect(args).toContain("mlx")
+  expect(args.slice(args.indexOf("--precision"))).toEqual(["--precision", "8bit"])
+  expect(args).not.toContain("--device")
 })
 
 test("checkYue2 needs the python, the script, the model, and the vae", () => {
@@ -147,6 +174,8 @@ test("the model and vae are resolved when the run starts, not at construction", 
         scriptPath: import.meta.path,
         gpuBudget: 16,
         cwd: "/tmp",
+        backend: "torch",
+        mlxPrecision: "8bit",
         readModelPaths: async () => paths.value,
       },
       run,

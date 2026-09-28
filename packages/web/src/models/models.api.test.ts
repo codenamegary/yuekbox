@@ -53,7 +53,7 @@ const readiness = {
       size: 1_622_466_054,
     },
   },
-  system: { ffmpeg: { state: "ready" }, nvidia: { state: "ready" } },
+  system: { ffmpeg: { state: "ready" }, gpu: { state: "ready" } },
 }
 
 const snapshot = {
@@ -70,7 +70,7 @@ test("readiness is read from the server and parsed with the contract", async () 
   const report = await fetchReadiness()
   expect(stub.calls).toEqual([{ url: "/v1/readiness", method: "GET", body: null }])
   expect(report.models.yue2.state).toBe("missing")
-  expect(report.system.nvidia.state).toBe("ready")
+  expect(report.system.gpu.state).toBe("ready")
 })
 
 test("the downloads poll reads all five snapshots", async () => {
