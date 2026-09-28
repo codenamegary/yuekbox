@@ -37,12 +37,26 @@ const flockSymbols = { flock: { args: [FFIType.int, FFIType.int], returns: FFITy
 
 type Flock = (fd: number, operation: number) => number
 
+/**
+ * Loads `flock` from the C library of the host. glibc and musl name it
+ * `libc.so.6` / `libc.musl-x86_64.so.1`; macOS ships the BSD `flock` inside
+ * libSystem, reachable as `libc.dylib`. The operation constants above are
+ * the same on every platform.
+ */
 const loadFlock = (): Flock => {
-  try {
-    return dlopen("libc.so.6", flockSymbols).symbols.flock as unknown as Flock
-  } catch {
-    return dlopen("libc.musl-x86_64.so.1", flockSymbols).symbols.flock as unknown as Flock
+  const libraries =
+    process.platform === "darwin"
+      ? ["libc.dylib", "libSystem.B.dylib"]
+      : ["libc.so.6", "libc.musl-x86_64.so.1"]
+  for (const library of libraries) {
+    try {
+      return dlopen(library, flockSymbols).symbols.flock as unknown as Flock
+    } catch {
+      // The next library is tried; if none loads, the load failure is the
+      // machine's to report, exactly as the old two-library chain did.
+    }
   }
+  throw new Error("could not load flock from the C library")
 }
 
 const flock = loadFlock()

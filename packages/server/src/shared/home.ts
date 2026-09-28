@@ -54,8 +54,7 @@ export const modelDirectoryNames = Object.freeze({
  */
 export const alignVenvPath = (home: string): string => join(homeLayout(home).venvs, "align")
 
-export const alignPythonPath = (home: string): string =>
-  join(alignVenvPath(home), "bin", "python")
+export const alignPythonPath = (home: string): string => join(alignVenvPath(home), "bin", "python")
 
 /** Our generate entrypoint, installed by the script installer. */
 export const generateScriptPath = (home: string): string =>

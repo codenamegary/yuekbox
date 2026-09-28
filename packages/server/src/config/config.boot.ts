@@ -98,8 +98,7 @@ export const resolveBootEnv = async (input: BootEnvInput): Promise<BootEnv> => {
     mediaDir: env.MEDIA_DIR ?? mediaDir(home),
     python: env.YUEKBOX_PYTHON ?? pythonPath(home),
     alignPython:
-      env.YUEKBOX_ALIGN_PYTHON ??
-      (platform === "macos" ? alignPythonPath(home) : pythonPath(home)),
+      env.YUEKBOX_ALIGN_PYTHON ?? (platform === "macos" ? alignPythonPath(home) : pythonPath(home)),
     generateScript: generateScriptPath(home),
     gpuBudget: Number(env.YUE2_GPU_BUDGET ?? 16),
     ffmpegBin: env.FFMPEG_BIN ?? "ffmpeg",

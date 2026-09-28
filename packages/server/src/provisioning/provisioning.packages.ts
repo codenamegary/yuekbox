@@ -162,7 +162,9 @@ export const venvPinsFor = (
 ): readonly VenvPin[] => {
   switch (platform) {
     case "linux":
-      return [torchIndexUrl === null ? linuxVenvPin : { ...linuxVenvPin, extraIndexUrl: torchIndexUrl }]
+      return [
+        torchIndexUrl === null ? linuxVenvPin : { ...linuxVenvPin, extraIndexUrl: torchIndexUrl },
+      ]
     case "macos":
       return [macosGenerationVenvPin, macosAlignVenvPin]
   }

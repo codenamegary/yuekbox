@@ -158,13 +158,13 @@ export const evaluateMacHardware = (facts: {
  * variant for its platform; this decides what the machine can run. The
  * failure kinds and details are platform-neutral enough for one message map.
  */
-export const evaluateMachine = (
-  facts: GpuFacts,
-): Result<MachineRequirement, GpuError> => {
+export const evaluateMachine = (facts: GpuFacts): Result<MachineRequirement, GpuError> => {
   switch (facts.kind) {
     case "nvidia": {
       const torch = evaluateGpu(facts)
-      return torch.ok ? { ok: true, value: { kind: "cuda", indexUrl: torch.value.indexUrl } } : torch
+      return torch.ok
+        ? { ok: true, value: { kind: "cuda", indexUrl: torch.value.indexUrl } }
+        : torch
     }
     case "apple-silicon": {
       const mac = evaluateMacHardware(facts)

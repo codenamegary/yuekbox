@@ -31,7 +31,12 @@ test("reuses the managed uv on a rerun without downloading", async () => {
     await mkdir(dirname(managed), { recursive: true })
     await writeFile(managed, "#!/bin/sh\n", "utf8")
     await writeFile(uvStampPath(dir), "{}\n", "utf8")
-    const ensureUv = makeEnsureUv({ home: dir, downloadFile: neverDownload, runProcess: neverRun, platform: "linux" })
+    const ensureUv = makeEnsureUv({
+      home: dir,
+      downloadFile: neverDownload,
+      runProcess: neverRun,
+      platform: "linux",
+    })
 
     const result = await ensureUv()
 

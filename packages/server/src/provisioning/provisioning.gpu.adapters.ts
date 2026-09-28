@@ -114,7 +114,8 @@ const readMacFacts = async (env: GpuAdapterEnv): Promise<GpuFacts> => {
   if (machine.value.exitCode !== 0) {
     return {
       kind: "absent",
-      detail: machine.value.stderrTail.trim() || `sysctl exited with code ${machine.value.exitCode}`,
+      detail:
+        machine.value.stderrTail.trim() || `sysctl exited with code ${machine.value.exitCode}`,
     }
   }
   const architecture = parseMacMachine(machine.value.stdout)
@@ -147,7 +148,10 @@ const readMacFacts = async (env: GpuAdapterEnv): Promise<GpuFacts> => {
   }
   const macosVersion = parseMacosVersion(swVers.value.stdout)
   if (macosVersion === null) {
-    return { kind: "absent", detail: `sw_vers reported ${firstLine(swVers.value.stdout) ?? "no version"}` }
+    return {
+      kind: "absent",
+      detail: `sw_vers reported ${firstLine(swVers.value.stdout) ?? "no version"}`,
+    }
   }
 
   return { kind: "apple-silicon", memoryBytes, macosVersion }

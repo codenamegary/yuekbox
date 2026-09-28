@@ -84,7 +84,12 @@ test("prints every step and ends ready", async () => {
     progressEvent("scripts", "completed"),
   ])
 
-  const code = await runProvisioningCommand({ home: "/home/u/.yuekbox", platform: "linux", provisionAll, log })
+  const code = await runProvisioningCommand({
+    home: "/home/u/.yuekbox",
+    platform: "linux",
+    provisionAll,
+    log,
+  })
 
   expect(code).toBe(0)
   const output = lines.join("\n")
@@ -331,7 +336,12 @@ test("an unexpected throw still prints a plain-English failure, not a stack trac
     throw new Error("boom: adapter invariant broke at provisioning.cli.ts:1")
   }
 
-  const code = await runProvisioningCommand({ home: "/home/u/.yuekbox", platform: "linux", provisionAll, log })
+  const code = await runProvisioningCommand({
+    home: "/home/u/.yuekbox",
+    platform: "linux",
+    provisionAll,
+    log,
+  })
 
   expect(code).toBe(1)
   const output = lines.join("\n")

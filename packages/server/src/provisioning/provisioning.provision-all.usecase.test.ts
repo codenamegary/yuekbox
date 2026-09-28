@@ -183,9 +183,7 @@ test("builds exactly one shared venv under <home>/venvs with the manifest pin", 
   expect(request.extraIndexUrl).toBe(torchWheelIndexUrl)
   expect(request.indexStrategy).toBe(pin.indexStrategy)
   expect(request.fingerprint.length).toBeGreaterThan(0)
-  expect(request.fingerprint).toBe(
-    venvFingerprint({ ...pin, extraIndexUrl: torchWheelIndexUrl }),
-  )
+  expect(request.fingerprint).toBe(venvFingerprint({ ...pin, extraIndexUrl: torchWheelIndexUrl }))
   expect(state.scriptDirs).toEqual([join(home, "scripts")])
 })
 

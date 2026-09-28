@@ -180,9 +180,7 @@ export const makeEnsureVenv = (env: PythonAdapterEnv): EnsureVenv => {
         join(request.dir, "bin", "python"),
         "--index-url",
         request.indexUrl,
-        ...(request.extraIndexUrl === null
-          ? []
-          : ["--extra-index-url", request.extraIndexUrl]),
+        ...(request.extraIndexUrl === null ? [] : ["--extra-index-url", request.extraIndexUrl]),
         "--index-strategy",
         request.indexStrategy,
         ...request.packages,

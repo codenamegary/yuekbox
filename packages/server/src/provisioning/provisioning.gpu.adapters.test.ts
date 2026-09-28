@@ -78,7 +78,11 @@ test("mac probes read the architecture, memory, and macOS version", async () => 
   const runProcess: ProcessRunner = async (command) => {
     commands.push([...command])
     const stdout =
-      command[2] === "hw.memsize" ? "68719476736\n" : command[0] === "sw_vers" ? "15.5\n" : "arm64\n"
+      command[2] === "hw.memsize"
+        ? "68719476736\n"
+        : command[0] === "sw_vers"
+          ? "15.5\n"
+          : "arm64\n"
     return { exitCode: 0, stdout, stderrTail: "" }
   }
 

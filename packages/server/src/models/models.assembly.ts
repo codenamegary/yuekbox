@@ -12,11 +12,7 @@ import {
 } from "./models.fs.adapters"
 import { FetchLike, makeDownloadModelFile, makeReadModelTree } from "./models.hf.adapters"
 import { modelsRequiredForGeneration } from "./models.needs"
-import {
-  expectedModelSizesFor,
-  modelDownloadPinsFor,
-  ModelDownloadPins,
-} from "./models.pins"
+import { expectedModelSizesFor, modelDownloadPinsFor, ModelDownloadPins } from "./models.pins"
 
 export type AssembleModelsDeps = Readonly<{
   home: string

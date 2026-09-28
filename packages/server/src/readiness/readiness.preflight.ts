@@ -15,7 +15,8 @@ const nvidiaFix: SystemFix = Object.freeze({
 })
 
 const appleSiliconFix: SystemFix = Object.freeze({
-  macos: "Use an Apple Silicon Mac (M1 or newer) with macOS 14.2 or newer and at least 16 GB of unified memory",
+  macos:
+    "Use an Apple Silicon Mac (M1 or newer) with macOS 14.2 or newer and at least 16 GB of unified memory",
 })
 
 /**
