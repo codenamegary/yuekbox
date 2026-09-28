@@ -48,10 +48,16 @@ jobs:
       - name: Smoke-test the compiled binary
         run: ./scripts/smoke-binary.sh ./yuekbox
 
+      # Generation post-processes audio through ffmpeg with libmp3lame; the
+      # runner image ships without it, and the app only reports the absence.
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+
       # From here on the bench exercises the real machine path: an empty
       # home, the machine check, two environments, and the model downloads.
       - name: Provision the pinned runtimes
         run: |
+          set -euo pipefail
           set -x
           ./yuekbox --provision 2>&1 | tee provision.log
 
