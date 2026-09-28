@@ -92,7 +92,9 @@ jobs:
               snaps = json.load(sys.stdin)
               busy = [s for s in snaps if s["state"] in ("preparing", "downloading")]
               for s in snaps:
-                  print(f"  {s[\"key\"]}: {s[\"state\"]} {s[\"bytesDone\"]}/{s[\"totalBytes\"]}")
+                  key, state = s["key"], s["state"]
+                  done, total = s["bytesDone"], s["totalBytes"]
+                  print(f"  {key}: {state} {done}/{total}")
               print(len(busy))
             ' | tee /dev/stderr | tail -1)"
             [ "$pending" = "0" ] && break
@@ -148,7 +150,9 @@ jobs:
             assert song.get("durationSeconds", 0) > 0, "no duration"
             calibration = song.get("calibration")
             assert calibration and calibration.get("cues"), f"no lyric calibration: {calibration}"
-            print(f"song {song[\"id\"]}: {song[\"durationSeconds\"]}s, {len(calibration[\"cues\"])} lyric cues")
+            song_id, duration = song["id"], song.get("durationSeconds", 0)
+            cues = calibration["cues"]
+            print(f"song {song_id}: {duration}s, {len(cues)} lyric cues")
           '
           curl -fsS -o song.mp3 "http://127.0.0.1:3000/v1/songs/$SONG_ID/audio"
           ls -la song.mp3
