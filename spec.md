@@ -1047,13 +1047,14 @@ five files the manifest owns.
 `packages/web/src/serve.ts` on 3000, two processes. Cross-compile with
 `bun run build:binary <outfile> --target <bun-target> --executable
 <local-bun-runtime>`; `--target` alone downloads the runtime from npm.
-linux-x64 is the ship target; macos-arm64 is not supported because the app
-needs a local NVIDIA GPU. `scripts/smoke-binary.sh` is the compiled-artifact
+The ship targets are linux-x64 (NVIDIA/CUDA) and darwin-arm64 (Apple
+Silicon, where generation runs through the pinned MLX runtime).
+`scripts/smoke-binary.sh` is the compiled-artifact
 proof: it runs a copy of the binary from an empty directory against a scratch
 home, starts it detached, checks `status --json`, an idempotent second start,
 `/`, `/v1/status`, `/v1/config` precedence, runs an extracted helper with
 `--help`, stops it, and removes it again with `uninstall --purge`. CI runs it
-on ubuntu-latest.
+on ubuntu-latest and on a macOS arm64 runner.
 
 ### Release packaging
 

@@ -13,6 +13,8 @@ export type LyricAlignAdapterEnv = Readonly<{
   scriptPath: string
   device: string
   cwd: string
+  /** `torch` transcribes with transformers; `mlx` with mlx-whisper. */
+  backend: "torch" | "mlx"
   /** Resolved at call time, so a path saved before the next run is used. */
   readModelPaths: ReadCurrentModelPaths
 }>
@@ -23,6 +25,7 @@ export type LyricAlignArgsEnv = Readonly<{
   scriptPath: string
   device: string
   whisperModel: string
+  backend: "torch" | "mlx"
 }>
 
 export const checkLyricAlign = (
@@ -52,6 +55,8 @@ export const lyricAlignArgs = (env: LyricAlignArgsEnv, input: LyricAlignArgsInpu
   env.whisperModel,
   "--device",
   env.device,
+  "--backend",
+  env.backend,
 ]
 
 const parseCalibration = (text: string): Calibration | null => {
@@ -91,6 +96,7 @@ export const makeRunLyricAlign =
           scriptPath: env.scriptPath,
           device: env.device,
           whisperModel: modelPaths.whisper,
+          backend: env.backend,
         },
         input,
       ),

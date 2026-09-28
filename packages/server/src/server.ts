@@ -155,6 +155,7 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
     device: boot.sheetsage2Device,
     offline: boot.sheetsage2Offline,
     cwd: boot.home,
+    backend: boot.platform === "macos" ? "mlx" : "torch",
     readModelPaths,
   }
 
@@ -163,6 +164,7 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
     scriptPath: boot.lyricAlignScript,
     device: boot.lyricAlignDevice,
     cwd: boot.home,
+    backend: boot.platform === "macos" ? "mlx" : "torch",
     readModelPaths,
   }
 

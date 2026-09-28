@@ -24,6 +24,7 @@ const argsEnv: LyricAlignArgsEnv = {
   scriptPath: import.meta.path,
   device: "cuda:0",
   whisperModel: "/kit/models/whisper-large-v3-turbo",
+  backend: "torch",
 }
 
 const env: LyricAlignAdapterEnv = {

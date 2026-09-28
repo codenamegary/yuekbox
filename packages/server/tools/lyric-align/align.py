@@ -12,6 +12,13 @@ Lyric calibration from a Whisper transcript stream.
 Writes a rich alignment.json for inspection and the app-shaped calibration.json
 the server reads: a list of display cues, nothing else. Everything stays next
 to the song.
+
+Backends (--backend):
+
+    torch  transformers' Whisper pipeline in this environment. Default.
+    mlx    mlx-whisper on Apple Silicon, reading the same local weights
+           folder (the community MLX conversion). The Demucs half still runs
+           on torch in this environment, so `--device` selects its device.
 """
 
 from __future__ import annotations
@@ -43,6 +50,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--whisper-model", default=DEFAULT_WHISPER_MODEL)
     parser.add_argument("--demucs-model", default="htdemucs")
     parser.add_argument("--device", default="cuda:0")
+    parser.add_argument("--backend", choices=("torch", "mlx"), default="torch")
     parser.add_argument("--skip-demucs", action="store_true")
     return parser.parse_args()
 
@@ -54,7 +62,7 @@ def read_duration_seconds(audio_path: Path) -> float:
     return info.frames / info.samplerate
 
 
-def separate_vocals(audio_path: Path, out_dir: Path, model: str) -> Path:
+def separate_vocals(audio_path: Path, out_dir: Path, model: str, device: str) -> Path:
     """Run demucs unless a cached stem is already there and fresh."""
     vocals_path = out_dir / model / audio_path.stem / "vocals.wav"
     if vocals_path.exists() and vocals_path.stat().st_mtime >= audio_path.stat().st_mtime:
@@ -68,6 +76,8 @@ def separate_vocals(audio_path: Path, out_dir: Path, model: str) -> Path:
         "--two-stems=vocals",
         "-n",
         model,
+        "-d",
+        device,
         "-o",
         str(out_dir),
         str(audio_path),
@@ -79,7 +89,7 @@ def separate_vocals(audio_path: Path, out_dir: Path, model: str) -> Path:
     return vocals_path
 
 
-def transcribe_whisper(audio_path: Path, model_id: str, device: str) -> list[dict]:
+def transcribe_torch(audio_path: Path, model_id: str, device: str) -> list[dict]:
     """Word timestamps from a Whisper transcription of the vocal stem."""
     import torch
     from transformers import pipeline
@@ -97,8 +107,35 @@ def transcribe_whisper(audio_path: Path, model_id: str, device: str) -> list[dic
         chunk_length_s=30,
         stride_length_s=5,
     )
+    return collect_units(result.get("chunks", []))
+
+
+def transcribe_mlx(audio_path: Path, model_id: str) -> list[dict]:
+    """Word timestamps from mlx-whisper reading the same weights folder."""
+    import mlx_whisper
+
+    result = mlx_whisper.transcribe(
+        str(audio_path),
+        path_or_hf_repo=model_id,
+        word_timestamps=True,
+        chunk_timestamps=True,
+    )
+    chunks: list[dict] = []
+    for segment in result.get("segments", []):
+        for word in segment.get("words", []):
+            text = str(word.get("word", "")).strip()
+            start = word.get("start")
+            end = word.get("end")
+            if text == "" or start is None:
+                continue
+            chunks.append({"text": text, "timestamp": (start, end)})
+    return collect_units(chunks)
+
+
+def collect_units(chunks: list[dict]) -> list[dict]:
+    """Normalizes one transcript stream into deduplicated word units."""
     units: list[dict] = []
-    for chunk in result.get("chunks", []):
+    for chunk in chunks:
         text = str(chunk.get("text", "")).strip()
         timestamp = chunk.get("timestamp")
         if text == "" or timestamp is None:
@@ -218,16 +255,19 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     duration_seconds = read_duration_seconds(audio_path)
-    print(f"[align] {duration_seconds:.1f}s, model {args.whisper_model}")
+    print(f"[align] {duration_seconds:.1f}s, model {args.whisper_model}, backend {args.backend}")
 
     started = time.time()
     vocals_path = audio_path
     if not args.skip_demucs:
-        vocals_path = separate_vocals(audio_path, out_dir / "demucs", args.demucs_model)
+        vocals_path = separate_vocals(audio_path, out_dir / "demucs", args.demucs_model, args.device)
     separation_seconds = time.time() - started
 
     transcribe_started = time.time()
-    units = transcribe_whisper(vocals_path, args.whisper_model, args.device)
+    if args.backend == "mlx":
+        units = transcribe_mlx(vocals_path, args.whisper_model)
+    else:
+        units = transcribe_torch(vocals_path, args.whisper_model, args.device)
     transcribe_seconds = time.time() - transcribe_started
     print(f"[align] whisper produced {len(units)} word timestamps")
 
@@ -244,7 +284,7 @@ def main() -> int:
 
     report = {
         "version": 1,
-        "backend": "whisper",
+        "backend": args.backend,
         "model": args.whisper_model,
         "demucs": None if args.skip_demucs else args.demucs_model,
         "audio": audio_path.name,

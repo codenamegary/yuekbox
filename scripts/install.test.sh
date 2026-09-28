@@ -52,9 +52,21 @@ serve_dir="$work/serve"
 mkdir -p "$serve_dir" "$work/tmp" "$work/tmp-v" "$work/bin"
 cat > "$serve_dir/yuekbox-linux-x64" <<'FAKE'
 #!/bin/sh
-printf 'fake yuekbox\n'
+printf 'fake yuekbox linux\n'
+FAKE
+cat > "$serve_dir/yuekbox-darwin-arm64" <<'FAKE'
+#!/bin/sh
+printf 'fake yuekbox darwin\n'
 FAKE
 make_checksum "$serve_dir"
+make_darwin_checksum() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    (cd "$1" && sha256sum yuekbox-darwin-arm64 > yuekbox-darwin-arm64.sha256)
+  else
+    (cd "$1" && shasum -a 256 yuekbox-darwin-arm64 > yuekbox-darwin-arm64.sha256)
+  fi
+}
+make_darwin_checksum "$serve_dir"
 
 # ---- throwaway HTTP server ----------------------------------------------------
 
@@ -88,7 +100,7 @@ if ! YUEKBOX_BASE_URL="$base" YUEKBOX_INSTALL_DIR="$install_dir" TMPDIR="$work/t
   fail "the installer exited non-zero"
 fi
 [ -x "$install_dir/yuekbox" ] || fail "yuekbox was not installed executable"
-[ "$("$install_dir/yuekbox")" = "fake yuekbox" ] || fail "the installed file is not the served binary"
+[ "$("$install_dir/yuekbox")" = "fake yuekbox linux" ] || fail "the installed file is not the served binary"
 grep -q "yuekbox --provision" "$log" || fail "the next-step hint for --provision is missing"
 [ -z "$(ls -A "$work/tmp")" ] || fail "the installer left temp files behind: $(ls -A "$work/tmp")"
 pass "downloads, verifies, installs, and cleans up"
@@ -123,9 +135,9 @@ grep -q "could not download" "$work/404.log" || fail "the download failure was n
 [ -z "$(ls -A "$work/tmp")" ] || fail "a failed download left temp files behind"
 pass "fails loudly when an asset is missing"
 
-# ---- platform refusal ---------------------------------------------------------
+# ---- platform selection and refusals -------------------------------------------
 
-printf '\n== platform refusal ==\n'
+printf '\n== platform selection and refusals ==\n'
 shim="$work/shim"
 mkdir -p "$shim"
 cat > "$shim/uname" <<'SHIM'
@@ -137,18 +149,38 @@ esac
 SHIM
 chmod +x "$shim/uname"
 
-if PATH="$shim:$PATH" FAKE_UNAME_S=Darwin YUEKBOX_INSTALL_DIR="$work/bin-mac" \
-  sh "$installer" >"$work/mac.log" 2>&1; then
-  fail "the installer accepted macOS"
+# An Intel Mac is refused: the MLX runtime needs Apple Silicon.
+if PATH="$shim:$PATH" FAKE_UNAME_S=Darwin FAKE_UNAME_M=x86_64 \
+  YUEKBOX_INSTALL_DIR="$work/bin-intel" TMPDIR="$work/tmp" \
+  sh "$installer" >"$work/intel.log" 2>&1; then
+  fail "the installer accepted an Intel Mac"
 fi
-grep -qi "macOS" "$work/mac.log" || fail "the macOS refusal does not say macOS: $(cat "$work/mac.log")"
+grep -qi "Apple Silicon" "$work/intel.log" ||
+  fail "the Intel refusal does not name Apple Silicon: $(cat "$work/intel.log")"
+[ ! -e "$work/bin-intel/yuekbox" ] || fail "a refused platform installed a binary"
 
+# A Linux ARM machine is refused.
 if PATH="$shim:$PATH" FAKE_UNAME_M=aarch64 YUEKBOX_INSTALL_DIR="$work/bin-arm" \
   sh "$installer" >"$work/arm.log" 2>&1; then
   fail "the installer accepted aarch64"
 fi
 grep -q "x86_64" "$work/arm.log" || fail "the arm64 refusal does not name x86_64: $(cat "$work/arm.log")"
-pass "refuses macOS and non-x86_64 with a clear message"
+[ ! -e "$work/bin-arm/yuekbox" ] || fail "a refused architecture installed a binary"
+
+# A Mac with Apple Silicon gets the darwin-arm64 asset.
+install_dir="$work/bin-darwin"
+if ! PATH="$shim:$PATH" FAKE_UNAME_S=Darwin FAKE_UNAME_M=arm64 \
+  YUEKBOX_BASE_URL="$base" YUEKBOX_INSTALL_DIR="$install_dir" TMPDIR="$work/tmp" \
+  sh "$installer" >"$work/darwin.log" 2>&1; then
+  cat "$work/darwin.log" >&2
+  fail "the darwin-arm64 install failed"
+fi
+[ -x "$install_dir/yuekbox" ] || fail "darwin-arm64 was not installed executable"
+[ "$("$install_dir/yuekbox")" = "fake yuekbox darwin" ] ||
+  fail "the darwin install did not land the darwin-arm64 asset"
+grep -q "Still required on this Mac" "$work/darwin.log" ||
+  fail "the darwin next steps do not mention macOS prerequisites: $(cat "$work/darwin.log")"
+pass "installs darwin-arm64 on Apple Silicon and refuses Intel Macs and Linux ARM"
 
 # ---- release URLs -------------------------------------------------------------
 

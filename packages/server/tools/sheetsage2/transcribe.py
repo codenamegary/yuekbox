@@ -3,7 +3,17 @@
 # bd90e4ccae671d869b3ecaca6d7e893927d29442, skills/yue2-music/scripts/transcribe.py.
 # Apache-2.0; see the upstream LICENSE. Vendored verbatim: yuekbox owns this copy
 # and its contract. Installed flat beside abc_tools.py and common.py.
-"""Transcribe audio to native ABC using SheetSage2's Transformers interface."""
+"""Transcribe audio to native ABC using SheetSage2.
+
+Backends (--backend):
+
+    torch  SheetSage2's Transformers interface on CUDA (Linux, WSL2). Default.
+           The model and its remote code load straight from the model folder.
+    mlx    the native MLX SheetSage2/MERT2 engine from the pinned mlx-yue
+           runtime (Apple Silicon). Same task names, same window presets,
+           and the same exported artifacts (score.abc plus the .lab files);
+           only the engine and the loader differ. `--device` does not apply.
+"""
 
 import argparse
 import importlib.metadata
@@ -13,6 +23,36 @@ from pathlib import Path
 
 from abc_tools import parse_abc, report
 from common import fresh_directory, sha256, write_json
+
+
+def transcribe_mlx(args, output, prompts, melody_only):
+    """The Apple Silicon path: the pinned lyra engine, local weights only."""
+    from lyra.transcription import transcribe
+
+    result = transcribe(
+        args.audio,
+        output,
+        model_path=args.model,
+        base_model=args.base_model,
+        offline=args.offline,
+        task=args.task,
+        preset=args.preset,
+        max_seconds=args.max_seconds,
+    )
+    if result.get("abc_error") or not result.get("abc"):
+        raise ValueError(f"Transcription produced no usable ABC: {result.get('abc_error')}")
+    score = parse_abc(result["abc"])
+    if melody_only and any(v.chords for v in score.voices.values()):
+        raise ValueError("Melody transcription contains unexpected chord symbols")
+    write_json(output / "abc_check.json", {"status": "passed", "score": report(score),
+               "scope": "symbolic format; transcription accuracy still needs review"})
+    write_json(output / "transcription_manifest.json", {
+        "status": "complete", "warnings": result.get("warnings", []),
+        "backend": "mlx", "model": result.get("model"),
+        "source_audio_sha256": result.get("source_audio_sha256"),
+        "truncated": result.get("truncated", False),
+    })
+    print(f"Saved {output / 'score.abc'}; warnings: {result.get('warnings', [])}")
 
 
 def run(args):
@@ -32,9 +72,12 @@ def run(args):
         "model": args.model, "revision": args.revision, "offline": args.offline,
         "base_model_path": args.base_model, "prompts": prompts, "melody_only": melody_only,
         "preset": args.preset, "max_seconds": args.max_seconds,
-        "device": args.device, "dtype": args.dtype,
+        "device": args.device, "dtype": args.dtype, "backend": args.backend,
     })
     try:
+        if args.backend == "mlx":
+            transcribe_mlx(args, output, prompts, melody_only)
+            return
         import torch
         from transformers import AutoModel
 
@@ -106,6 +149,7 @@ def main():
     parser.add_argument("--preset", choices=("default", "paper"), default="default")
     parser.add_argument("--max-seconds", type=float, help="Explicitly crop audio; omitted means process the whole input")
     parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument("--backend", choices=("torch", "mlx"), default="torch")
     args = parser.parse_args()
     try:
         run(args)

@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test"
 import { join } from "node:path"
 import {
+  alignPythonPath,
+  alignVenvPath,
   defaultHome,
   generateScriptPath,
   homeLayout,
@@ -51,6 +53,13 @@ test("data defaults resolve under the home", () => {
 
   expect(sqlitePath(home)).toBe(join(home, "data/yuekbox.sqlite"))
   expect(mediaDir(home)).toBe(join(home, "data/media"))
+})
+
+test("the macOS align environment lives beside the shared one", () => {
+  const home = "/home/u/.yuekbox"
+
+  expect(alignVenvPath(home)).toBe(join(home, "venvs/align"))
+  expect(alignPythonPath(home)).toBe(join(home, "venvs/align/bin/python"))
 })
 
 test("the default home is ~/.yuekbox", () => {

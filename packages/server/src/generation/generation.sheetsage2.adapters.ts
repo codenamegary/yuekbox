@@ -19,6 +19,8 @@ export type Sheetsage2AdapterEnv = Readonly<{
   device: string
   offline: boolean
   cwd: string
+  /** `torch` is the CUDA/transformers stack; `mlx` is the Apple Silicon one. */
+  backend: "torch" | "mlx"
   /** Resolved at call time, so a path saved before the next run is used. */
   readModelPaths: ReadCurrentModelPaths
 }>
@@ -31,6 +33,7 @@ export type Sheetsage2ArgsEnv = Readonly<{
   baseModel: string | null
   device: string
   offline: boolean
+  backend: "torch" | "mlx"
 }>
 
 export const checkSheetsage2 = (
@@ -47,6 +50,7 @@ const argsEnvFor = async (env: Sheetsage2AdapterEnv): Promise<Sheetsage2ArgsEnv>
     baseModel: modelPaths.sheetsage2Base,
     device: env.device,
     offline: env.offline,
+    backend: env.backend,
   }
 }
 
@@ -67,6 +71,8 @@ const sheetsageArgs = (
   input.outputDir,
   "--task",
   task,
+  "--backend",
+  env.backend,
   "--device",
   env.device,
   "--model",

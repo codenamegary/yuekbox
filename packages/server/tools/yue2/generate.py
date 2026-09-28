@@ -10,15 +10,26 @@ Usage:
     generate.py --request request.json --output DIR
                 --model MODELS_YUE2 --vae MODELS_YUE2_VAE
                 --budget GIB [--offline] [--device DEVICE]
+                [--backend {torch,mlx}] [--precision PRECISION]
 
 `request.json` carries the yue2 `SongRequest` fields yuekbox sets: `id`,
 `style`, `lyrics`, `cot`, `seed`, and optional `abc`. Artifacts land in
 `<output>/<id>/`: `audio.flac`, `result.json`, and `score.abc`.
 
-This calls the yue2 library directly instead of forwarding to
-`python -m yue2 generate`, so the flag names, the request surface, and the
-output layout stay ours. A runtime bump that changes its CLI cannot change
-our contract silently, and a changed library API fails loudly here.
+This calls the runtime library directly instead of forwarding to a CLI, so the
+flag names, the request surface, and the output layout stay ours. A runtime
+bump that changes its CLI cannot change our contract silently, and a changed
+library API fails loudly here.
+
+Backends:
+
+    torch  the pinned yue2-infer runtime on CUDA (Linux, WSL2). Default.
+    mlx    the pinned mlx-yue runtime on Apple Silicon. Its `lyra` pipeline
+           subclasses the same upstream implementation, so the request
+           surface, the progress lines, and the artifact layout are identical;
+           only the import and the constructor arguments differ. `--device`
+           does not apply (MLX always runs on the Metal GPU); the weights are
+           selected with `--precision` (bf16, 8bit, 4bit).
 """
 
 from __future__ import annotations
@@ -41,7 +52,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vae", required=True, help="YuE2-Vae model directory or repository")
     parser.add_argument("--budget", type=float, default=16, help="GPU memory budget in GiB")
     parser.add_argument("--offline", action="store_true", help="resolve only local model files")
-    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--device", default="cuda", help="torch backend device")
+    parser.add_argument("--backend", choices=("torch", "mlx"), default="torch")
+    parser.add_argument("--precision", default="8bit", help="mlx AR weights: bf16, 8bit or 4bit")
     return parser.parse_args()
 
 
@@ -63,9 +76,19 @@ def write_failure(directory: Path, error: BaseException) -> None:
         pass
 
 
+def load_pipeline(backend: str):
+    """One import site per runtime; both subclasses share the upstream API."""
+    if backend == "mlx":
+        from lyra import YuE2Pipeline
+    else:
+        from yue2 import YuE2Pipeline
+    return YuE2Pipeline
+
+
 def run(args: argparse.Namespace) -> int:
-    from yue2 import YuE2Pipeline
     from yue2.protocol import SongRequest
+
+    YuE2Pipeline = load_pipeline(args.backend)
 
     request = SongRequest(**read_request(args.request))
     directory = Path(args.output) / request.id
@@ -73,13 +96,24 @@ def run(args: argparse.Namespace) -> int:
         raise FileExistsError(f"output directory is not empty: {directory}")
     directory.mkdir(parents=True, exist_ok=True)
     try:
-        with YuE2Pipeline.from_pretrained(
-            args.model,
-            vae=args.vae,
-            device=args.device,
-            memory_budget_gib=args.budget,
-            local_files_only=args.offline,
-        ) as pipe:
+        if args.backend == "mlx":
+            pipeline = YuE2Pipeline.from_pretrained(
+                args.model,
+                vae=args.vae,
+                precision=args.precision,
+                memory_budget_gib=args.budget,
+                local_files_only=args.offline,
+                progress=True,
+            )
+        else:
+            pipeline = YuE2Pipeline.from_pretrained(
+                args.model,
+                vae=args.vae,
+                device=args.device,
+                memory_budget_gib=args.budget,
+                local_files_only=args.offline,
+            )
+        with pipeline as pipe:
             result = pipe(**request.to_dict())
         receipt = result.save_artifacts(directory)
     except BaseException as error:
