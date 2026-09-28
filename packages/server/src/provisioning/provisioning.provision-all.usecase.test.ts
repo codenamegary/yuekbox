@@ -33,6 +33,7 @@ type Stubs = Readonly<{
   readGpuFacts?: ReadGpuFacts
   ensureVenv?: EnsureVenv
   installScripts?: InstallScripts
+  unifiedMemoryFloorBytes?: number
 }>
 
 type Harness = Readonly<{
@@ -82,6 +83,7 @@ const harness = (stubs: Stubs = {}): Harness => {
         scriptDirs.push(dir)
         return ok({ scriptsDir: dir, files: Object.freeze(["generate.py"]) })
       }),
+    unifiedMemoryFloorBytes: stubs.unifiedMemoryFloorBytes,
   })
 
   return { calls, venvs, scriptDirs, progress, provisionAll }
@@ -279,6 +281,31 @@ test("a Mac below the memory floor stops before any venv is built", async () => 
   expect(result.error.foundAmount).toBe("8 GiB")
   expect(result.error.minimumAmount).toBe("16 GiB")
   expect(state.venvs).toHaveLength(0)
+})
+
+test("a lowered memory floor lets a small hosted Mac provision", async () => {
+  const state = harness({
+    readGpuFacts: async () => ({
+      kind: "apple-silicon",
+      memoryBytes: 7 * 1024 ** 3,
+      macosVersion: "14.6",
+    }),
+    unifiedMemoryFloorBytes: 4 * 1024 ** 3,
+  })
+
+  const result = await run(state, "macos")
+
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.value.steps.map((step) => `${step.step}:${step.status}`)).toEqual([
+    "uv:completed",
+    "python:completed",
+    "gpu:completed",
+    "environment:completed",
+    "align:completed",
+    "scripts:completed",
+  ])
+  expect(state.venvs.map((venv) => venv.name)).toEqual(["python", "align"])
 })
 
 test("a venv failure names the shared environment and stops the later pieces", async () => {

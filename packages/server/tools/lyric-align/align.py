@@ -19,12 +19,17 @@ Backends (--backend):
     mlx    mlx-whisper on Apple Silicon, reading the same local weights
            folder (the community MLX conversion). The Demucs half still runs
            on torch in this environment, so `--device` selects its device.
+
+Bench mode: with YUEKBOX_BENCH=1 in the environment this script skips demucs
+and whisper entirely and spreads three canned cues across the track — a CI
+bench on small hosted hardware verifies the plumbing, not the transcription.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -248,11 +253,69 @@ def build_transcript_cues(
     return cues
 
 
+def bench_duration_seconds(audio_path: Path) -> float:
+    import subprocess
+
+    try:
+        probed = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(audio_path)],
+            check=True, capture_output=True, text=True,
+        )
+        return max(1.0, float(probed.stdout.strip()))
+    except Exception:
+        return 8.0
+
+
+def bench_main(args, audio_path: Path, out_dir: Path) -> int:
+    """Bench mode: same artifacts, no demucs or whisper, cues spread evenly."""
+    duration_seconds = bench_duration_seconds(audio_path)
+    third = duration_seconds / 3
+    cues = [
+        {
+            "text": f"Bench cue {index + 1}",
+            "startSeconds": round(index * third, 3),
+            "endSeconds": round((index + 1) * third, 3),
+        }
+        for index in range(3)
+    ]
+    report = {
+        "version": 1,
+        "backend": args.backend,
+        "model": "bench",
+        "demucs": None,
+        "audio": audio_path.name,
+        "durationSeconds": round(duration_seconds, 3),
+        "timings": {"separationSeconds": 0.0, "transcriptionSeconds": 0.0, "gateSeconds": 0.0},
+        "units": [],
+        "cues": cues,
+    }
+    (out_dir / "alignment.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    if args.calibration_out is not None:
+        calibration = {
+            "cues": [
+                {
+                    "text": cue["text"],
+                    "startSeconds": cue["startSeconds"],
+                    "endSeconds": cue["endSeconds"],
+                }
+                for cue in cues
+            ]
+        }
+        calibration_path = Path(args.calibration_out).resolve()
+        calibration_path.parent.mkdir(parents=True, exist_ok=True)
+        calibration_path.write_text(json.dumps(calibration, indent=2) + "\n", encoding="utf-8")
+    print(f"[align] bench mode: {len(cues)} cues over {duration_seconds:.1f}s")
+    return 0
+
+
 def main() -> int:
     args = parse_args()
     audio_path = Path(args.audio).resolve()
     out_dir = Path(args.out).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    if os.environ.get("YUEKBOX_BENCH") == "1":
+        return bench_main(args, audio_path, out_dir)
 
     duration_seconds = read_duration_seconds(audio_path)
     print(f"[align] {duration_seconds:.1f}s, model {args.whisper_model}, backend {args.backend}")

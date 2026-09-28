@@ -2,6 +2,7 @@ import { HostPlatform, hostPlatform } from "../shared/platform"
 import { ProcessRunner, runProcess } from "../shared/process"
 import { FetchLike, makeDownloadFile } from "./provisioning.download.adapters"
 import { makeReadGpuFacts } from "./provisioning.gpu.adapters"
+import { EnvLike, unifiedMemoryFloorOverrideBytes } from "./provisioning.gpu"
 import { makeProvisionAll } from "./provisioning.provision-all.usecase"
 import { makeEnsurePython, makeEnsureVenv } from "./provisioning.python.adapters"
 import { makeInstallScripts, toolsRoot } from "./provisioning.scripts.adapters"
@@ -16,6 +17,8 @@ export type AssembleProvisioningDeps = Readonly<{
   home: string
   /** Defaults to the machine the process runs on; tests pass one explicitly. */
   platform?: HostPlatform
+  /** Read once for the machine-floor override; tests pass a plain record. */
+  env?: EnvLike
   /** Test seams; the process root leaves every one at its real default. */
   fetchImpl?: FetchLike
   runProcess?: ProcessRunner
@@ -46,6 +49,7 @@ export const assembleProvisioningSlice = (deps: AssembleProvisioningDeps): Provi
     readGpuFacts: makeReadGpuFacts({ cwd: deps.home, runProcess: processRunner, platform }),
     ensureVenv: makeEnsureVenv({ home: deps.home, runProcess: processRunner }),
     installScripts: deps.installScripts ?? makeInstallScripts(toolsRoot),
+    unifiedMemoryFloorBytes: unifiedMemoryFloorOverrideBytes(deps.env ?? {}),
   })
 
   return Object.freeze({ provisionAll })

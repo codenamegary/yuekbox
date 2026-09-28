@@ -29,6 +29,23 @@ export const minimumMacosVersion = "14.2"
 export const minimumUnifiedMemoryBytes = 16 * 1024 ** 3
 export const memoryBudgetGiB = 16
 
+/** The process-env slice the floor override reads; tests pass a plain record. */
+export type EnvLike = Readonly<Record<string, string | undefined>>
+
+/**
+ * CI and bench runs on small hosted Macs can lower the unified-memory floor
+ * through `YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB`. Anything unset, non-numeric, or
+ * below one GiB is ignored, so a typo can never silently disable the machine
+ * check; the documented 16 GiB floor stays the default.
+ */
+export const unifiedMemoryFloorOverrideBytes = (env: EnvLike): number | undefined => {
+  const raw = env.YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB
+  if (raw === undefined || raw.trim() === "") return undefined
+  const gib = Number.parseFloat(raw)
+  if (!Number.isFinite(gib) || gib < 1) return undefined
+  return Math.round(gib * 1024 ** 3)
+}
+
 export const torchRequirement: TorchRequirement = Object.freeze({
   cudaFamily: "12.x",
   indexUrl: torchWheelIndexUrl,
@@ -106,11 +123,14 @@ const describeBytes = (bytes: number): string => `${Math.round(bytes / 1024 ** 3
  * assumes. An Intel Mac, a Hackintosh, or a failed probe never reaches this
  * evaluator as Apple Silicon facts — the adapter reports those as `absent`.
  */
-export const evaluateMacHardware = (facts: {
-  kind: "apple-silicon"
-  memoryBytes: number
-  macosVersion: string
-}): Result<MacRequirement, GpuError> => {
+export const evaluateMacHardware = (
+  facts: {
+    kind: "apple-silicon"
+    memoryBytes: number
+    macosVersion: string
+  },
+  floorBytes: number = minimumUnifiedMemoryBytes,
+): Result<MacRequirement, GpuError> => {
   if (!Number.isFinite(facts.memoryBytes) || facts.memoryBytes <= 0) {
     return {
       ok: false,
@@ -138,14 +158,14 @@ export const evaluateMacHardware = (facts: {
     }
   }
 
-  if (facts.memoryBytes < minimumUnifiedMemoryBytes) {
+  if (facts.memoryBytes < floorBytes) {
     return {
       ok: false,
       error: {
         kind: "gpu_memory_low",
-        detail: `unified memory ${describeBytes(facts.memoryBytes)} is below the required ${describeBytes(minimumUnifiedMemoryBytes)}`,
+        detail: `unified memory ${describeBytes(facts.memoryBytes)} is below the required ${describeBytes(floorBytes)}`,
         foundAmount: describeBytes(facts.memoryBytes),
-        minimumAmount: describeBytes(minimumUnifiedMemoryBytes),
+        minimumAmount: describeBytes(floorBytes),
       },
     }
   }
@@ -158,7 +178,10 @@ export const evaluateMacHardware = (facts: {
  * variant for its platform; this decides what the machine can run. The
  * failure kinds and details are platform-neutral enough for one message map.
  */
-export const evaluateMachine = (facts: GpuFacts): Result<MachineRequirement, GpuError> => {
+export const evaluateMachine = (
+  facts: GpuFacts,
+  floorBytes: number = minimumUnifiedMemoryBytes,
+): Result<MachineRequirement, GpuError> => {
   switch (facts.kind) {
     case "nvidia": {
       const torch = evaluateGpu(facts)
@@ -167,7 +190,7 @@ export const evaluateMachine = (facts: GpuFacts): Result<MachineRequirement, Gpu
         : torch
     }
     case "apple-silicon": {
-      const mac = evaluateMacHardware(facts)
+      const mac = evaluateMacHardware(facts, floorBytes)
       return mac.ok
         ? { ok: true, value: { kind: "mlx", memoryBudgetGiB: mac.value.memoryBudgetGiB } }
         : mac

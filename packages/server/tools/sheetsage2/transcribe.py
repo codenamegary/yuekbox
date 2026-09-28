@@ -13,11 +13,16 @@ Backends (--backend):
            runtime (Apple Silicon). Same task names, same window presets,
            and the same exported artifacts (score.abc plus the .lab files);
            only the engine and the loader differ. `--device` does not apply.
+
+Bench mode: with YUEKBOX_BENCH=1 in the environment this script skips every
+model import and writes the same artifacts from canned rows — a CI bench on
+small hosted hardware verifies the plumbing, not the transcription.
 """
 
 import argparse
 import importlib.metadata
 import inspect
+import os
 import sys
 from pathlib import Path
 
@@ -55,7 +60,57 @@ def transcribe_mlx(args, output, prompts, melody_only):
     print(f"Saved {output / 'score.abc'}; warnings: {result.get('warnings', [])}")
 
 
+BENCH_ABC = """X:1
+T:yuekbox bench reference
+C:yuekbox bench mode
+M:4/4
+L:1/8
+Q:1/4=100
+K:C
+"C"CDEF "G"G2zz | "Am"A2B2 "F"c2zz |
+"""
+
+
+def bench_duration_seconds(audio: Path) -> float:
+    import subprocess
+
+    try:
+        probed = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(audio)],
+            check=True, capture_output=True, text=True,
+        )
+        return max(1.0, float(probed.stdout.strip()))
+    except Exception:
+        return 8.0
+
+
+def bench_run(args) -> int:
+    output = fresh_directory(args.output)
+    duration = bench_duration_seconds(Path(args.audio))
+    if args.task == "melody-vocal":
+        notes, beats = [], []
+        pitches = (60, 64, 67, 65)
+        second, position = 0.0, 1
+        while second + 1.0 <= duration:
+            notes.append(f"{second:.3f} {second + 0.75:.3f} {pitches[len(notes) % 4]}")
+            beats.append(f"{second:.3f} {position} 4 4")
+            second += 1.0
+            position = position % 4 + 1
+        (output / "melody_vocal.lab").write_text("\n".join(notes) + "\n", encoding="utf-8")
+        (output / "beat.lab").write_text("\n".join(beats) + "\n", encoding="utf-8")
+        (output / "structure.lab").write_text(
+            f"0.000 {duration / 2:.3f} verse\n{duration / 2:.3f} {duration:.3f} chorus\n",
+            encoding="utf-8",
+        )
+    else:
+        (output / "score.abc").write_text(BENCH_ABC, encoding="utf-8")
+    print(f"[bench] wrote {args.task} artifacts to {output}")
+    return 0
+
+
 def run(args):
+    if os.environ.get("YUEKBOX_BENCH") == "1":
+        return bench_run(args)
     if not args.audio.is_file():
         raise FileNotFoundError(args.audio)
     if args.max_seconds is not None and args.max_seconds <= 0:

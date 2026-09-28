@@ -6,6 +6,7 @@ import {
   minimumMacosVersion,
   minimumTorchDriverVersion,
   minimumUnifiedMemoryBytes,
+  unifiedMemoryFloorOverrideBytes,
 } from "./provisioning.gpu"
 
 test("a driver at the CUDA 12 floor passes and chooses the CUDA 12.8 wheels", () => {
@@ -143,4 +144,45 @@ test("the machine check dispatches each platform's facts to its own evaluator", 
 
   const absent = evaluateMachine({ kind: "absent", detail: "no probe" })
   expect(absent).toEqual({ ok: false, error: { kind: "gpu_missing", detail: "no probe" } })
+})
+
+test("a lowered memory floor lets a small Mac pass and forwards through the dispatch", () => {
+  const floor = unifiedMemoryFloorOverrideBytes({ YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB: "4" })
+  if (floor === undefined) throw new Error("the parser should accept a plain 4")
+
+  const result = evaluateMacHardware(macFacts({ memoryBytes: 7 * 1024 ** 3 }), floor)
+
+  expect(result).toEqual({ ok: true, value: { memoryBudgetGiB: 16 } })
+  expect(evaluateMachine(macFacts({ memoryBytes: 7 * 1024 ** 3 }), 4 * 1024 ** 3)).toEqual({
+    ok: true,
+    value: { kind: "mlx", memoryBudgetGiB: 16 },
+  })
+})
+
+test("a lowered floor still refuses a Mac below it, naming the effective floor", () => {
+  const result = evaluateMacHardware(macFacts({ memoryBytes: 3 * 1024 ** 3 }), 4 * 1024 ** 3)
+
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error.kind).toBe("gpu_memory_low")
+  expect(result.error.foundAmount).toBe("3 GiB")
+  expect(result.error.minimumAmount).toBe("4 GiB")
+})
+
+test("the floor override parses a plain integer GiB value and ignores everything else", () => {
+  expect(unifiedMemoryFloorOverrideBytes({ YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB: "4" })).toBe(
+    4 * 1024 ** 3,
+  )
+  expect(unifiedMemoryFloorOverrideBytes({ YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB: " 8 " })).toBe(
+    8 * 1024 ** 3,
+  )
+  expect(unifiedMemoryFloorOverrideBytes({})).toBeUndefined()
+  expect(unifiedMemoryFloorOverrideBytes({ YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB: "" })).toBeUndefined()
+  expect(
+    unifiedMemoryFloorOverrideBytes({ YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB: "abc" }),
+  ).toBeUndefined()
+  expect(unifiedMemoryFloorOverrideBytes({ YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB: "0" })).toBeUndefined()
+  expect(
+    unifiedMemoryFloorOverrideBytes({ YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB: "-2" }),
+  ).toBeUndefined()
 })

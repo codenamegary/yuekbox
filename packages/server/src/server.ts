@@ -25,6 +25,7 @@ import { checkYue2, makeRunYue2Generate } from "./generation/generation.yue2.ada
 import { assembleProvisioningSlice } from "./provisioning/provisioning.assembly"
 import { runProvisioningCommand } from "./provisioning/provisioning.cli"
 import { makeReadGpuFacts } from "./provisioning/provisioning.gpu.adapters"
+import { unifiedMemoryFloorOverrideBytes } from "./provisioning/provisioning.gpu"
 import { runProcess } from "./shared/process"
 import { version } from "./version"
 
@@ -83,7 +84,11 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
   })
 
   if (boot.provision) {
-    const provisioning = assembleProvisioningSlice({ home: boot.home, platform: boot.platform })
+    const provisioning = assembleProvisioningSlice({
+      home: boot.home,
+      platform: boot.platform,
+      env: input.env,
+    })
     process.exit(
       await runProvisioningCommand({
         home: boot.home,
@@ -209,6 +214,7 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
       readModelPaths,
       checkFfmpeg: async () => (await checkFfmpeg(boot.ffmpegBin)) === "ok",
       readGpuFacts,
+      unifiedMemoryFloorBytes: unifiedMemoryFloorOverrideBytes(input.env ?? {}),
     },
     models: {
       home: boot.home,

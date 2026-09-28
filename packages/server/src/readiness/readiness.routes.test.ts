@@ -42,3 +42,14 @@ test("GET /v1/readiness answers the contract payload with fixes on failed checks
   )
   await app.close()
 })
+
+test("the GPU check honors a lowered unified-memory floor for CI benches", () => {
+  const smallMac = {
+    kind: "apple-silicon" as const,
+    memoryBytes: 7 * 1024 ** 3,
+    macosVersion: "14.6",
+  }
+
+  expect(gpuCheck(smallMac).state).toBe("missing")
+  expect(gpuCheck(smallMac, 4 * 1024 ** 3).state).toBe("ready")
+})

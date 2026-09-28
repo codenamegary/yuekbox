@@ -12,6 +12,8 @@ export type ReadReadinessDeps = Readonly<{
   measureModelSize: MeasureModelSize
   checkFfmpeg: CheckFfmpeg
   readGpuFacts: ReadGpuFacts
+  /** CI and bench runs lower the 16 GiB Mac floor; unset means the documented floor. */
+  unifiedMemoryFloorBytes?: number
 }>
 
 /**
@@ -43,7 +45,7 @@ export const makeReadReadiness = (deps: ReadReadinessDeps) => async (): Promise<
     models: { yue2, yue2Vae, sheetsage2, sheetsage2Base, whisper },
     system: {
       ffmpeg: ffmpegCheck(ffmpegAvailable),
-      gpu: gpuCheck(gpuFacts),
+      gpu: gpuCheck(gpuFacts, deps.unifiedMemoryFloorBytes),
     },
   }
 }

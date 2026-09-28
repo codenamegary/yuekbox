@@ -25,6 +25,8 @@ export type ProvisioningDeps = Readonly<{
   readGpuFacts: ReadGpuFacts
   ensureVenv: EnsureVenv
   installScripts: InstallScripts
+  /** CI and bench runs lower the 16 GiB Mac floor; unset means the documented floor. */
+  unifiedMemoryFloorBytes?: number
 }>
 
 /**
@@ -87,7 +89,7 @@ export const makeProvisionAll =
     finish("python", python.value.status === "installed" ? "completed" : "skipped")
 
     emit("gpu", "started")
-    const machine = evaluateMachine(await deps.readGpuFacts())
+    const machine = evaluateMachine(await deps.readGpuFacts(), deps.unifiedMemoryFloorBytes)
     if (!machine.ok) return err(stop("gpu", machine.error))
     finish("gpu", "completed")
 

@@ -1,5 +1,9 @@
 import { SystemCheck, SystemFix } from "contracts/http/readiness"
-import { evaluateGpu, evaluateMacHardware } from "../provisioning/provisioning.gpu"
+import {
+  evaluateGpu,
+  evaluateMacHardware,
+  minimumUnifiedMemoryBytes,
+} from "../provisioning/provisioning.gpu"
 import { GpuFacts } from "../provisioning/provisioning.models"
 
 /** Copy-paste fix instructions; the same text surfaces for Linux and WSL2. */
@@ -39,7 +43,10 @@ export const ffmpegCheck = (available: boolean): SystemCheck =>
  * the provisioning evaluators, so the CUDA floor, the macOS floor, the
  * memory floor, and the version parsing live in exactly one place.
  */
-export const gpuCheck = (facts: GpuFacts): SystemCheck => {
+export const gpuCheck = (
+  facts: GpuFacts,
+  floorBytes: number = minimumUnifiedMemoryBytes,
+): SystemCheck => {
   switch (facts.kind) {
     case "nvidia": {
       const requirement = evaluateGpu(facts)
@@ -69,7 +76,7 @@ export const gpuCheck = (facts: GpuFacts): SystemCheck => {
       }
     }
     case "apple-silicon": {
-      const requirement = evaluateMacHardware(facts)
+      const requirement = evaluateMacHardware(facts, floorBytes)
       if (requirement.ok) return { state: "ready" }
 
       switch (requirement.error.kind) {

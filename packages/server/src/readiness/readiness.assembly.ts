@@ -22,6 +22,8 @@ export type AssembleReadinessDeps = Readonly<{
   expectedModelSizes: Readonly<Record<ModelReadinessKey, number>>
   checkFfmpeg: CheckFfmpeg
   readGpuFacts: ReadGpuFacts
+  /** CI and bench runs lower the 16 GiB Mac floor; unset means the documented floor. */
+  unifiedMemoryFloorBytes?: number
   /** Test seam; the process root leaves it at `Date.now`. */
   now?: () => number
 }>
@@ -46,6 +48,7 @@ export const assembleReadinessSlice = (deps: AssembleReadinessDeps): ReadinessSl
     }),
     checkFfmpeg: makeCachedProbe(deps.checkFfmpeg, { ttlMs: systemProbeTtlMs, now }),
     readGpuFacts: makeCachedProbe(deps.readGpuFacts, { ttlMs: systemProbeTtlMs, now }),
+    unifiedMemoryFloorBytes: deps.unifiedMemoryFloorBytes,
   })
 
   return { readReadiness }

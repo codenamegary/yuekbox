@@ -744,6 +744,8 @@ SHEETSAGE2_OFFLINE      default 1; set 0 to allow the Hugging Face cache to reso
 LYRIC_ALIGN_SCRIPT      default <home>/scripts/align.py
 LYRIC_ALIGN_DEVICE      default cuda:0
 REFERENCE_MAX_BYTES     default 26214400 (25 MiB)
+YUEKBOX_BENCH           unset; set 1 and the three Python helpers render the same artifacts from canned output instead of loading models. CI bench mode.
+YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB  default 16; the Apple Silicon memory floor. CI benches on small hosted Macs lower it; values under 1 are ignored.
 ```
 
 The yue2 adapter runs `<home>/venvs/python/bin/python <home>/scripts/generate.py`. The shared environment's `yue2-infer` comes from the pin in `runtime.pins.ts`; the app never falls back to a checkout's module or console script.
