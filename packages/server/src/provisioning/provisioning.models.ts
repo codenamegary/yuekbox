@@ -34,6 +34,12 @@ export type ProvisionProgress = Readonly<{
   step: ProvisionStepId
   label: string
   status: ProvisionStepStatus
+  /**
+   * Raw installer output for live activity, present only while a step runs.
+   * It never reaches stdout: the CLI maps it to plain English and keeps the
+   * raw line on the diagnostic stream.
+   */
+  detail?: string
 }>
 
 export type ProvisionStepOutcome = Readonly<{

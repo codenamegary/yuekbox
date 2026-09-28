@@ -4,13 +4,19 @@ import { ModelPathOverrides } from "contracts/http/config"
 import { resolveBootEnv } from "./config.boot"
 
 const withInput = (input: {
-  argv?: readonly string[]
+  home?: string | null
+  configPath?: string | null
+  models?: ModelPathOverrides
+  provision?: boolean
   env?: Readonly<Record<string, string | undefined>>
   osHome?: string
   platform?: "linux" | "macos"
   file?: ModelPathOverrides
 }) => ({
-  argv: input.argv ?? ["bun", "src/server.ts"],
+  home: input.home ?? null,
+  configPath: input.configPath ?? null,
+  models: input.models ?? {},
+  provision: input.provision ?? false,
   env: input.env ?? {},
   osHome: input.osHome ?? "/home/u",
   ...(input.platform === undefined ? {} : { platform: input.platform }),
@@ -62,9 +68,7 @@ test("macOS points the aligner at its own environment and defaults away from CUD
 })
 
 test("--provision reaches the boot env", async () => {
-  const boot = await resolveBootEnv(
-    withInput({ argv: ["bun", "src/server.ts", "--provision", "--home", "/srv/yuekbox"] }),
-  )
+  const boot = await resolveBootEnv(withInput({ provision: true, home: "/srv/yuekbox" }))
 
   expect(boot.provision).toBe(true)
   expect(boot.home).toBe("/srv/yuekbox")
@@ -121,9 +125,7 @@ test("explicit env overrides win over the home defaults", async () => {
 })
 
 test("--home moves the whole layout and the config file", async () => {
-  const boot = await resolveBootEnv(
-    withInput({ argv: ["bun", "src/server.ts", "--home", "/srv/yuekbox"] }),
-  )
+  const boot = await resolveBootEnv(withInput({ home: "/srv/yuekbox" }))
 
   expect(boot.home).toBe("/srv/yuekbox")
   expect(boot.configFilePath).toBe("/srv/yuekbox/config.yaml")
@@ -133,9 +135,7 @@ test("--home moves the whole layout and the config file", async () => {
 })
 
 test("--config points at another config file and leaves the layout alone", async () => {
-  const boot = await resolveBootEnv(
-    withInput({ argv: ["bun", "src/server.ts", "--config", "/etc/yuekbox.yaml"] }),
-  )
+  const boot = await resolveBootEnv(withInput({ configPath: "/etc/yuekbox.yaml" }))
 
   expect(boot.configFilePath).toBe("/etc/yuekbox.yaml")
   expect(boot.home).toBe("/home/u/.yuekbox")
@@ -145,7 +145,10 @@ test("loads the config file from the resolved path", async () => {
   const seenPaths: string[] = []
 
   const boot = await resolveBootEnv({
-    argv: ["bun", "src/server.ts", "--home", "/srv/yuekbox"],
+    home: "/srv/yuekbox",
+    configPath: null,
+    models: {},
+    provision: false,
     env: {},
     osHome: "/home/u",
     loadModelOverrides: async (configFilePath) => {
@@ -162,7 +165,7 @@ test("loads the config file from the resolved path", async () => {
 test("model flags beat the config file and the home default", async () => {
   const boot = await resolveBootEnv(
     withInput({
-      argv: ["bun", "src/server.ts", "--whisper", "/flag/whisper"],
+      models: { whisper: "/flag/whisper" },
       file: { yue2: "/file/YuE2-3B", whisper: "/file/whisper" },
     }),
   )

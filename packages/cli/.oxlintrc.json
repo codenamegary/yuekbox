@@ -7,24 +7,16 @@
   },
   "overrides": [
     {
-      "files": ["src/ai/ai.visualization.code.ts"],
-      "rules": {
-        "typescript/no-implied-eval": "off"
-      }
-    },
-    {
-      "files": ["src/provisioning/provisioning.live.ts"],
-      "rules": {
-        "eslint/no-control-regex": "off"
-      }
-    },
-    {
       "files": ["**/*.usecase.ts"],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "paths": [
+              {
+                "name": "commander",
+                "message": "backend skill: use cases depend on ports, not the command line"
+              },
               {
                 "name": "fastify",
                 "message": "backend skill: use cases depend on ports, not transport"
@@ -42,6 +34,10 @@
               {
                 "regex": "^node:",
                 "message": "backend skill: use cases depend on ports, not the filesystem"
+              },
+              {
+                "regex": "^server/src/",
+                "message": "backend skill: use cases depend on ports, not the server package"
               },
               {
                 "group": ["**/db/*"],
@@ -72,6 +68,10 @@
           {
             "paths": [
               {
+                "name": "commander",
+                "message": "backend skill: models and ports depend inward only"
+              },
+              {
                 "name": "fastify",
                 "message": "backend skill: models and ports depend inward only"
               },
@@ -87,6 +87,10 @@
             "patterns": [
               {
                 "regex": "^node:",
+                "message": "backend skill: models and ports depend inward only"
+              },
+              {
+                "regex": "^server/src/",
                 "message": "backend skill: models and ports depend inward only"
               },
               {

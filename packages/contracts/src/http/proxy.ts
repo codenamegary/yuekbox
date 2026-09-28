@@ -1,7 +1,7 @@
 /**
  * One proxy hop from a public web listener to the API listener, so streaming
  * and error responses behave the same in dev (web/src/serve.ts) and in the
- * compiled binary (server/src/binary.ts). The upstream body is buffered and
+ * compiled binary (packages/cli/src/main.ts). The upstream body is buffered and
  * content-encoding is dropped, because the response is re-created with the
  * original status and headers. `fetch(target, request)` is the Request-as-init
  * form: it behaves identically to `new Request(target, request)` and

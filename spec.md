@@ -97,6 +97,7 @@ ui/
 ├── packages/
 │   ├── contracts/            # Zod wire schemas and paths
 │   ├── server/               # Fastify API, SQLite, worker, Python entrypoints
+│   ├── cli/                  # the yuekbox executable: command line and lifecycle
 │   └── web/                  # React SPA
 ```
 
@@ -320,7 +321,6 @@ Layout:
 packages/server/src/
 ├── app.ts
 ├── server.ts                 # boot env, real vendor adapters, boot recovery, listen, signals
-├── binary.ts                 # compiled-binary root: helper install, Fastify on :0, SPA listener
 ├── compose.ts                # media -> songs -> generation -> app wiring
 ├── config/                   # home layout and the five user-configurable model paths
 │   ├── config.models.ts
@@ -418,9 +418,29 @@ packages/server/src/
     └── visualizations.assembly.ts
 ```
 
-`server.ts` resolves the boot env (home, config.yaml, CLI flags), builds the real vendor adapters, calls `composeServer`, runs boot recovery, listens, and handles SIGTERM. `binary.ts` (the compiled binary's root) calls the same `startServer` and fronts it with the SPA listener; see [Packaging](#packaging-single-binary). `compose.ts` builds media, then songs, then generation, then the app and the AI slice; the process-root wiring test calls the same function.
+`server.ts` resolves the boot env (home, config.yaml, CLI flags), builds the real vendor adapters, calls `composeServer`, runs boot recovery, listens, and handles SIGTERM. `packages/cli`'s `main.ts` (the compiled binary's root) calls the same `startServer` and fronts it with the SPA listener; see [Packaging](#packaging-single-binary). `compose.ts` builds media, then songs, then generation, then the app and the AI slice; the process-root wiring test calls the same function.
 
 Use cases are single-shot. The worker loop lives in `generation.worker.ts`. Routes enqueue then return. The worker claims work.
+
+The `packages/cli` tree mirrors the same slice shape:
+
+```text
+packages/cli/src/
+├── main.ts                       # the process root: parse once, dispatch, or boot the daemon child
+├── lifecycle/
+│   ├── lifecycle.models.ts       # the state file shape, constants, output helpers
+│   ├── lifecycle.ports.ts        # atomic ports: lock, state, spawn, signal, probe, prompt
+│   ├── lifecycle.parse.ts        # the commander program: start, stop, status, uninstall
+│   ├── lifecycle.paths.ts        # run/ and logs/ paths built on the home layout
+│   ├── lifecycle.start.usecase.ts
+│   ├── lifecycle.stop.usecase.ts
+│   ├── lifecycle.status.usecase.ts
+│   ├── lifecycle.uninstall.usecase.ts
+│   ├── lifecycle.adapters.ts     # node:fs lock/state/log, child_process, fetch, readline
+│   └── lifecycle.*.test.ts       # zero-mock use case and parser tests
+└── checks/
+    └── tree.test.ts              # the structure check over the cli tree
+```
 
 ### Slices and dependency direction
 
@@ -674,6 +694,8 @@ yuekbox owns `~/.yuekbox` (override with `--home`). Everything the app manages l
 ├── models/<name>/        # the five model directories
 ├── venvs/python/         # the one shared environment every Python pass runs in
 ├── scripts/              # generate.py, transcribe.py, abc_tools.py, common.py, align.py
+├── run/                  # the daemon's lock and state file (see Lifecycle)
+├── logs/                 # the daemon's append-only yuekbox.log
 └── data/                 # yuekbox.sqlite and per-Song media
 ```
 
@@ -838,6 +860,22 @@ paragraph that names the piece and offers the retry. Internal detail stays in
 logs and tests; the words venv, pip, interpreter, package, and Python never
 reach the user.
 
+Live activity. While `Installing the song tools` or `Installing the song
+engine` runs, uv's output streams through the progress channel (`detail` on
+`ProvisionProgress`, fed by an `onOutput` callback on the `EnsurePython` and
+`EnsureVenv` ports) and the CLI redraws the step's one line in place: the step
+label plus the latest activity ("downloading the song tools"). On a terminal
+(`isTTY`, not `TERM=dumb`) the line is erased and redrawn, throttled to a short
+gap so bursts coalesce, truncated to the terminal width, and stripped of ANSI
+and control sequences; it never scrolls, and the step still ends with its
+normal `done` line. Raw uv lines go to the diagnostic stream only, and the
+activity text comes from a small keyword map (`Downloading` → "downloading",
+`Resolved`/`Prepared`/`Installed`/... → "installing"), so no raw uv wording,
+version, size, or path reaches stdout, and an unmatched line keeps the last
+phrase. Piped output (CI, `| tee`) gets the durable step lines with no control
+characters. A failure or an unexpected throw clears the live line before the
+failure message.
+
 What later work does instead:
 
 - #52 (binary) calls the same `assembleProvisioningSlice` + `runProvisioningCommand`
@@ -856,6 +894,48 @@ Bind localhost by default. This app talks to a local GPU.
 
 In the compiled binary the API port is an OS-assigned loopback port, so
 `HOST`/`PORT` do not apply there; the public listener is `WEB_HOST`/`WEB_PORT`.
+
+### Lifecycle (start, stop, status, uninstall)
+
+The compiled binary is a small process manager for itself, owned by
+`packages/cli`. One instance per home; `--home` selects which. Bare `yuekbox`
+means `start`. No systemd, no supervision, no autostart, no `restart` command:
+when the daemon dies, the user starts it again.
+
+The verdict on "is yuekbox running" is an exclusive kernel `flock` on
+`<home>/run/yuekbox.lock`. The lock lives in the kernel for the process's
+lifetime, so a crash or a `kill -9` can never leave a stale lock behind; a
+free lock beats any state file on disk. `<home>/run/yuekbox.json` carries
+`{ pid, host, port, version, startedAt, logPath }` and is written once, only
+after both listeners are up, which makes it the "actually serving" signal. The
+daemon's stdout and stderr append to `<home>/logs/yuekbox.log`, rotated to
+`yuekbox.log.1` at 5 MB when a start begins (the old `.1` is replaced).
+
+- `start` re-execs itself with a hidden `--daemon-child` flag as a detached
+  child in its own session (stdin ignored, output to the log), then polls for
+  a state file carrying the child's pid for up to 15 s. Success prints the
+  pid, URL, and log path; early child death or timeout prints
+  `yuekbox failed to start`, the log tail, and exits 1. When the lock is
+  already held, start prints the running pid and URL and exits 0 without
+  spawning anything.
+- `stop` sends SIGTERM and waits up to 10 s for the lock to free, then
+  SIGKILL with a short final grace. It is synchronous: exit 0 means the
+  process is gone (or was not running), 1 means it would not die. A state
+  file with a free lock is stale and gets cleaned up.
+- `status` reports the lock verdict plus the state file's details, human or
+  `--json`. Exit 0 running, 3 stopped, 1 when the state file cannot be read.
+  A best-effort `GET /v1/status` probe enriches the report (the `service`
+  line and field) and its failure never changes the verdict.
+- `uninstall` asks three questions on a TTY (executable, app data, models;
+  binary defaults yes, the rest no), then stops the instance, then removes,
+  then summarizes. `--purge` removes the binary and the whole home without
+  prompts; without a TTY and without `--purge` it refuses with exit 1. Model
+  directories outside the home are never touched.
+
+`--provision` is the one attached path: it runs in the foreground and exits
+before any server starts, exactly as it always has. The daemon child handles
+SIGTERM/SIGINT by closing both listeners, removing the state file, and
+releasing the lock, so a clean stop is observable from the lock alone.
 
 ### Tests
 
@@ -943,15 +1023,20 @@ so the packaged binary does not use `packages/web/dist` and ships no sidecar
 sourcemaps (`minify: true`, `sourcemap: "none"`). Dotenv files are not read
 (`compile.autoloadDotenv: false`); configuration lives in the home.
 
-The packaged process root is `packages/server/src/binary.ts`. In one pid it:
+The packaged process root is `packages/cli/src/main.ts`. In one pid it:
 
+- takes the exclusive home lock (`<home>/run/yuekbox.lock`), so two instances
+  of the same home can never serve at once and `status`/`stop` always find the
+  right process;
 - starts Fastify on `127.0.0.1:0` (an OS-assigned loopback port that cannot
   collide with anything), through the same `startServer` the dev root uses;
 - installs the embedded Python helpers into `<home>/scripts` with the
   provisioning byte-copy installer, so a fresh binary can exec them;
 - puts `Bun.serve` on `WEB_HOST`/`WEB_PORT` (default `127.0.0.1:3000`) as the
   only public listener: `/*` serves the embedded SPA and `/v1/*` proxies to the
-  Fastify port, mirroring `packages/web/src/serve.ts`.
+  Fastify port, mirroring `packages/web/src/serve.ts`;
+- writes `<home>/run/yuekbox.json` once both listeners are up, which is what
+  `yuekbox start`'s parent waits for (see [Lifecycle](#lifecycle-start-stop-status-uninstall)).
 
 `HOST`/`PORT` stay dev-only knobs; the binary ignores them for the API. Full
 setup (the environment, models) still requires `--provision`, which exits before the
@@ -965,8 +1050,10 @@ five files the manifest owns.
 linux-x64 is the ship target; macos-arm64 is not supported because the app
 needs a local NVIDIA GPU. `scripts/smoke-binary.sh` is the compiled-artifact
 proof: it runs a copy of the binary from an empty directory against a scratch
-home, checks `/`, `/v1/status`, `/v1/config` precedence, runs an extracted
-helper with `--help`, and stops it with SIGTERM. CI runs it on ubuntu-latest.
+home, starts it detached, checks `status --json`, an idempotent second start,
+`/`, `/v1/status`, `/v1/config` precedence, runs an extracted helper with
+`--help`, stops it, and removes it again with `uninstall --purge`. CI runs it
+on ubuntu-latest.
 
 ### Release packaging
 

@@ -36,10 +36,14 @@ export type InstallScripts = (
  */
 export type EnsureUv = () => Promise<Result<UvTool, UvFailure>>
 
+/** Receives one raw line of installer output as it arrives. */
+export type OutputSink = (line: string) => void
+
 /** Installs every managed Python version that is not installed yet. */
 export type EnsurePython = (
   uv: UvTool,
   versions: readonly string[],
+  onOutput?: OutputSink,
 ) => Promise<Result<PythonState, PythonFailure>>
 
 /**
@@ -49,6 +53,7 @@ export type EnsurePython = (
 export type EnsureVenv = (
   uv: UvTool,
   request: VenvRequest,
+  onOutput?: OutputSink,
 ) => Promise<Result<VenvState, VenvFailure>>
 
 /** Probes the machine for the GPU facts its platform carries. Never throws. */

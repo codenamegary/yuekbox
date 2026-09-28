@@ -12,6 +12,10 @@ export type HomeLayout = Readonly<{
   venvs: string
   scripts: string
   data: string
+  /** Lock and state file for the running instance; owned by the cli package. */
+  run: string
+  /** Append-only server log; owned by the cli package. */
+  logs: string
 }>
 
 export const homeLayout = (home: string): HomeLayout =>
@@ -22,6 +26,8 @@ export const homeLayout = (home: string): HomeLayout =>
     venvs: join(home, "venvs"),
     scripts: join(home, "scripts"),
     data: join(home, "data"),
+    run: join(home, "run"),
+    logs: join(home, "logs"),
   })
 
 /** The one shared environment every Python pass runs in. */

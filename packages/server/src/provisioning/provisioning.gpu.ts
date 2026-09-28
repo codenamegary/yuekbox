@@ -61,6 +61,15 @@ export const evaluateGpu = (facts: GpuFacts): Result<TorchRequirement, GpuError>
   if (facts.kind === "absent") {
     return { ok: false, error: { kind: "gpu_missing", detail: facts.detail } }
   }
+  if (facts.kind === "apple-silicon") {
+    return {
+      ok: false,
+      error: {
+        kind: "gpu_missing",
+        detail: "this machine reports Apple Silicon, not an NVIDIA driver",
+      },
+    }
+  }
 
   const found = parseVersion(facts.driverVersion)
   const minimum = parseVersion(minimumTorchDriverVersion)

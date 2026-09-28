@@ -124,6 +124,8 @@ export const makeRunYue2Generate =
         model: modelPaths.yue2,
         vae: modelPaths.yue2Vae,
         gpuBudget: env.gpuBudget,
+        backend: env.backend,
+        mlxPrecision: env.mlxPrecision,
       },
       input,
       requestPath,

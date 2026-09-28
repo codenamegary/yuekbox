@@ -51,6 +51,16 @@ export const makeProvisionAll =
       input.onProgress?.({ step, label: provisionStepLabels[step], status })
     }
 
+    /** Streams one raw installer line for the step that is running. */
+    const emitActivity = (step: ProvisionStepId) => (line: string) => {
+      input.onProgress?.({
+        step,
+        label: provisionStepLabels[step],
+        status: "started",
+        detail: line,
+      })
+    }
+
     const stop = (
       step: ProvisionStepId,
       failure: Omit<ProvisionFailure, "step" | "label">,
@@ -70,7 +80,7 @@ export const makeProvisionAll =
     finish("uv", "completed")
 
     emit("python", "started")
-    const python = await deps.ensurePython(uv.value, managedPythonVersions)
+    const python = await deps.ensurePython(uv.value, managedPythonVersions, emitActivity("python"))
     if (!python.ok) {
       return err(stop("python", { kind: python.error.kind, detail: python.error.detail }))
     }
@@ -88,17 +98,23 @@ export const makeProvisionAll =
     const [environmentPin, alignPin] = venvPinsFor(platform, torchIndexUrl)
 
     emit("environment", "started")
-    if (environmentPin === undefined) return err(stop("environment", { kind: "venv_failed", detail: "no environment pin" }))
-    const built = await deps.ensureVenv(uv.value, {
-      name: environmentPin.name,
-      dir: venvPath(input.home),
-      pythonVersion: environmentPin.python,
-      indexUrl: environmentPin.indexUrl,
-      extraIndexUrl: environmentPin.extraIndexUrl,
-      indexStrategy: environmentPin.indexStrategy,
-      packages: environmentPin.packages,
-      fingerprint: venvFingerprint(environmentPin),
-    })
+    if (environmentPin === undefined) {
+      return err(stop("environment", { kind: "venv_failed", detail: "no environment pin" }))
+    }
+    const built = await deps.ensureVenv(
+      uv.value,
+      {
+        name: environmentPin.name,
+        dir: venvPath(input.home),
+        pythonVersion: environmentPin.python,
+        indexUrl: environmentPin.indexUrl,
+        extraIndexUrl: environmentPin.extraIndexUrl,
+        indexStrategy: environmentPin.indexStrategy,
+        packages: environmentPin.packages,
+        fingerprint: venvFingerprint(environmentPin),
+      },
+      emitActivity("environment"),
+    )
     if (!built.ok) {
       return err(stop("environment", { kind: built.error.kind, detail: built.error.detail }))
     }
@@ -110,16 +126,20 @@ export const makeProvisionAll =
       finish("align", "skipped")
     } else {
       const alignDir = alignVenvPath(input.home)
-      const alignBuilt = await deps.ensureVenv(uv.value, {
-        name: alignPin.name,
-        dir: alignDir,
-        pythonVersion: alignPin.python,
-        indexUrl: alignPin.indexUrl,
-        extraIndexUrl: alignPin.extraIndexUrl,
-        indexStrategy: alignPin.indexStrategy,
-        packages: alignPin.packages,
-        fingerprint: venvFingerprint(alignPin),
-      })
+      const alignBuilt = await deps.ensureVenv(
+        uv.value,
+        {
+          name: alignPin.name,
+          dir: alignDir,
+          pythonVersion: alignPin.python,
+          indexUrl: alignPin.indexUrl,
+          extraIndexUrl: alignPin.extraIndexUrl,
+          indexStrategy: alignPin.indexStrategy,
+          packages: alignPin.packages,
+          fingerprint: venvFingerprint(alignPin),
+        },
+        emitActivity("align"),
+      )
       if (!alignBuilt.ok) {
         return err(stop("align", { kind: alignBuilt.error.kind, detail: alignBuilt.error.detail }))
       }

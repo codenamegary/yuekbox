@@ -24,7 +24,7 @@ test("parses a fixture where every model and check is ready", () => {
     },
     system: {
       ffmpeg: { state: "ready" },
-      nvidia: { state: "ready" },
+      gpu: { state: "ready" },
     },
   }
   expect(ReadinessSchema.parse(fixture)).toEqual(fixture)
@@ -42,7 +42,7 @@ test("parses missing models and failed checks with a Linux and WSL2 fix", () => 
           wsl2: "sudo apt update && sudo apt install ffmpeg",
         },
       },
-      nvidia: {
+      gpu: {
         state: "missing",
         message: "No NVIDIA graphics driver was found.",
         fix: {
@@ -60,7 +60,7 @@ test("rejects a failed check without a fix", () => {
     models: missingModels,
     system: {
       ffmpeg: { state: "missing", message: "ffmpeg with MP3 support is not installed." },
-      nvidia: { state: "ready" },
+      gpu: { state: "ready" },
     },
   })
   expect(result.success).toBe(false)
@@ -86,4 +86,21 @@ test("rejects runtime and venv fields anywhere in the payload", () => {
     scripts: "installed",
   })
   expect(result.success).toBe(false)
+})
+
+test("parses a macOS-only fix with no Linux or WSL2 fields", () => {
+  const fixture: Readiness = {
+    models: missingModels,
+    system: {
+      ffmpeg: { state: "ready" },
+      gpu: {
+        state: "missing",
+        message: "This Mac has 8 GiB of unified memory and yuekbox needs 16 GiB to make songs.",
+        fix: {
+          macos: "Use an Apple Silicon Mac (M1 or newer) with at least 16 GB of unified memory",
+        },
+      },
+    },
+  }
+  expect(ReadinessSchema.parse(fixture)).toEqual(fixture)
 })
