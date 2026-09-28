@@ -96,7 +96,7 @@ const build = async (): Promise<void> => {
   await rm(args.outfile, { force: true })
 
   const result = await Bun.build({
-    entrypoints: [path.join(repoRoot, "packages/server/src/binary.ts")],
+    entrypoints: [path.join(repoRoot, "packages/cli/src/main.ts")],
     compile: {
       outfile: args.outfile,
       // yuekbox reads no .env; configuration lives in the home.

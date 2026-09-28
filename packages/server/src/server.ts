@@ -1,9 +1,11 @@
 import { existsSync } from "node:fs"
 import { AddressInfo } from "node:net"
 import { homedir } from "node:os"
+import { ModelPathOverrides } from "contracts/http/config"
 import { ServiceState } from "contracts/http/status"
 import { composeServer } from "./compose"
 import { BootEnv, resolveBootEnv } from "./config/config.boot"
+import { parseCliArgs } from "./config/config.argv"
 import { makeCurrentModelPaths } from "./config/config.current"
 import { makeLoadModelOverrides } from "./config/config.yaml.adapters"
 import { openDatabase } from "./db/client"
@@ -27,7 +29,14 @@ import { runProcess } from "./shared/process"
 import { version } from "./version"
 
 export type StartServerInput = Readonly<{
-  argv: readonly string[]
+  /** `--home`, already resolved; null means `<osHome>/.yuekbox`. */
+  home: string | null
+  /** `--config`, already resolved; null means `<home>/config.yaml`. */
+  configPath: string | null
+  /** CLI model overrides, the highest precedence. */
+  models: ModelPathOverrides
+  /** `--provision`: build the runtime into the home, then exit. */
+  provision: boolean
   env: Readonly<Record<string, string | undefined>>
   /** The OS user home; yuekbox's home defaults to `<osHome>/.yuekbox`. */
   osHome: string
@@ -58,11 +67,16 @@ const readAssignedPort = (address: AddressInfo | string | null, fallback: number
  * Resolves the boot env, runs the `--provision` CLI or the boot-time script
  * install, composes the app, and listens. Shared by both process roots:
  * `bun --hot src/server.ts` (dev, Fastify + packages/web/src/serve.ts) and the
- * compiled binary (`binary.ts`, one process).
+ * compiled binary (`packages/cli`, one process). Each process root parses the
+ * command line exactly once — the dev root with `parseCliArgs`, the cli
+ * package with commander — and spreads the parsed fields in here.
  */
 export const startServer = async (input: StartServerInput): Promise<RunningServer> => {
   const boot = await resolveBootEnv({
-    argv: input.argv,
+    home: input.home,
+    configPath: input.configPath,
+    models: input.models,
+    provision: input.provision,
     env: input.env,
     osHome: input.osHome,
     loadModelOverrides: (configFilePath) => makeLoadModelOverrides(configFilePath)(),
@@ -224,7 +238,14 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
 }
 
 if (import.meta.main) {
-  const running = await startServer({ argv: Bun.argv, env: process.env, osHome: homedir() })
+  // The dev process root parses the same command line the cli package does;
+  // parseCliArgs output spreads straight into startServer's fields.
+  const cli = parseCliArgs(Bun.argv.slice(2))
+  const running = await startServer({
+    ...cli,
+    env: process.env,
+    osHome: homedir(),
+  })
 
   // A re-entrancy latch mutated only by the signal handlers below.
   let stopping = false // structure: allow-let

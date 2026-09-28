@@ -1,0 +1,24 @@
+{
+  "name": "cli",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint --deny-warnings",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "chalk": "6.0.1",
+    "commander": "15.0.0",
+    "contracts": "workspace:*",
+    "server": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "oxc-parser": "^0.150.0",
+    "oxlint": "catalog:",
+    "typescript": "catalog:"
+  }
+}
