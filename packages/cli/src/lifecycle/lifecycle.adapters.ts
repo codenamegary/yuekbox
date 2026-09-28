@@ -5,7 +5,7 @@ import { dirname } from "node:path"
 import { spawn } from "node:child_process"
 import { createInterface } from "node:readline/promises"
 import { StatusSchema } from "contracts/http/status"
-import { probeTimeoutMs, RunState } from "./lifecycle.models"
+import { probeTimeoutMs, RunStateSchema } from "./lifecycle.models"
 import {
   AcquireLock,
   ListEntries,
@@ -96,19 +96,6 @@ export const probeLock: ProbeLock = async (path) => {
   return free
 }
 
-const isRunState = (value: unknown): value is RunState => {
-  if (typeof value !== "object" || value === null) return false
-  const record = value as Record<string, unknown>
-  return (
-    typeof record.pid === "number" &&
-    typeof record.host === "string" &&
-    typeof record.port === "number" &&
-    typeof record.version === "string" &&
-    typeof record.startedAt === "string" &&
-    typeof record.logPath === "string"
-  )
-}
-
 const readFileOrNull = async (path: string): Promise<string | null> => {
   try {
     return await readFile(path, "utf8")
@@ -121,9 +108,9 @@ const readFileOrNull = async (path: string): Promise<string | null> => {
 export const readRunState: ReadRunState = async (path) => {
   const raw = await readFileOrNull(path)
   if (raw === null) return null
-  const parsed: unknown = JSON.parse(raw)
-  if (!isRunState(parsed)) throw new Error(`${path} is not a yuekbox state file`)
-  return parsed
+  const parsed = RunStateSchema.safeParse(JSON.parse(raw))
+  if (!parsed.success) throw new Error(`${path} is not a yuekbox state file`)
+  return parsed.data
 }
 
 export const writeRunState: WriteRunState = async (path, state) => {
@@ -180,13 +167,16 @@ export const probeService: ProbeService = async (origin) => {
   }
 }
 
-export const readLogTail: ReadLogTail = async (path, maxBytes) => {
-  const size = await stat(path)
+const fileSizeOrNull = async (path: string): Promise<number | null> =>
+  stat(path)
     .then((info) => info.size)
     .catch((error: unknown) => {
       if (isErrorCode(error, "ENOENT")) return null
       throw error
     })
+
+export const readLogTail: ReadLogTail = async (path, maxBytes) => {
+  const size = await fileSizeOrNull(path)
   if (size === null || size === 0) return ""
   const start = Math.max(0, size - maxBytes)
   const handle = await open(path, "r")
@@ -203,12 +193,7 @@ export const readLogTail: ReadLogTail = async (path, maxBytes) => {
 export const makeRotateLog =
   (limitBytes: number): RotateLog =>
   async (path) => {
-    const size = await stat(path)
-      .then((info) => info.size)
-      .catch((error: unknown) => {
-        if (isErrorCode(error, "ENOENT")) return null
-        throw error
-      })
+    const size = await fileSizeOrNull(path)
     if (size === null || size < limitBytes) return false
     // POSIX rename replaces the old `.1` in one step.
     await rename(path, `${path}.1`)

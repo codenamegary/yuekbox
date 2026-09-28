@@ -72,24 +72,25 @@ const runningPayload = (
 })
 
 /**
- * Reports whether yuekbox runs, keyed on the exclusive home lock. The HTTP
- * probe is best-effort enrichment only: a failed probe leaves `service` null
- * and the verdict alone decides the exit code. 0 running, 3 stopped, 1 when
- * the state file cannot be read.
+ * Reports whether yuekbox runs, keyed on the exclusive home lock — a free
+ * lock beats any file on disk, so a stale state file can never fool status.
+ * The HTTP probe is best-effort enrichment only: a failed probe leaves
+ * `service` null and the verdict alone decides the exit code. 0 running,
+ * 3 stopped, 1 when the state file cannot be read while running.
  */
 export const makeStatus =
   (deps: StatusDeps) =>
   async (input: StatusInput): Promise<number> => {
-    const state = await readStateExact(deps.readState, input.statePath)
-    if (state === "corrupt") {
-      deps.out(chalk.red(`yuekbox could not read its state file (${input.statePath})`))
-      return 1
-    }
-
     if (await deps.probeLock(input.lockPath)) {
       if (input.json) deps.out(JSON.stringify(basePayload(input, "stopped"), null, 2))
       else deps.out(`yuekbox is not running (home: ${input.home})`)
       return 3
+    }
+
+    const state = await readStateExact(deps.readState, input.statePath)
+    if (state === "corrupt") {
+      deps.out(chalk.red(`yuekbox could not read its state file (${input.statePath})`))
+      return 1
     }
 
     if (state === null) {

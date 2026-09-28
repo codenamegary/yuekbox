@@ -139,13 +139,22 @@ test("a failed probe leaves service null and still reports running", async () =>
   expect(payload.service).toBeNull()
 })
 
-test("a corrupt state file is an error, exit 1", async () => {
+test("a corrupt state file while running is an error, exit 1", async () => {
   const h = harness({ lockHeld: true, stateOnDisk: "corrupt" })
 
   const exitCode = await makeStatus(h.deps)(input)
 
   expect(exitCode).toBe(1)
   expect(h.lines[0]).toContain("could not read its state file")
+})
+
+test("a corrupt or stale state file with a free lock is just stopped", async () => {
+  const h = harness({ stateOnDisk: "corrupt" })
+
+  const exitCode = await makeStatus(h.deps)(input)
+
+  expect(exitCode).toBe(3)
+  expect(h.lines).toEqual(["yuekbox is not running (home: /home/you/.yuekbox)"])
 })
 
 test("the poll interval keeps its pinned cadence", () => {

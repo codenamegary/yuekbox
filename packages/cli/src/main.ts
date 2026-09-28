@@ -19,6 +19,7 @@ import { makeApiProxy } from "contracts/http/proxy"
 import {
   acquireLock,
   listEntries,
+  makeRotateLog,
   now,
   out,
   probeLock,
@@ -41,7 +42,6 @@ import { makeStart } from "./lifecycle/lifecycle.start.usecase"
 import { makeStatus } from "./lifecycle/lifecycle.status.usecase"
 import { makeStop, StopInput } from "./lifecycle/lifecycle.stop.usecase"
 import { makeUninstall } from "./lifecycle/lifecycle.uninstall.usecase"
-import { makeRotateLog } from "./lifecycle/lifecycle.adapters"
 import {
   makeInstallScripts,
   toolsRoot,

@@ -1,9 +1,7 @@
 import { CommanderError, Command, Option } from "commander"
 import { resolve } from "node:path"
 import { ModelPathOverrides } from "contracts/http/config"
-
-/** The four lifecycle commands the yuekbox binary answers to. */
-export type LifecycleCommand = "start" | "stop" | "status" | "uninstall"
+import { LifecycleCommand } from "./lifecycle.models"
 
 /**
  * One parsed invocation. The four boot fields have the same shape as the

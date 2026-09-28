@@ -1,4 +1,9 @@
+import { z } from "zod"
+import { TimestampSchema } from "contracts/http/primitives"
 import { Status } from "contracts/http/status"
+
+/** The four lifecycle commands the yuekbox binary answers to. */
+export type LifecycleCommand = "start" | "stop" | "status" | "uninstall"
 
 /**
  * The running instance's on-disk state: `<home>/run/yuekbox.json`. The child
@@ -6,14 +11,16 @@ import { Status } from "contracts/http/status"
  * "actually serving" signal. The lock, never this file, is the verdict on
  * whether yuekbox is running.
  */
-export type RunState = Readonly<{
-  pid: number
-  host: string
-  port: number
-  version: string
-  startedAt: string
-  logPath: string
-}>
+export const RunStateSchema = z.strictObject({
+  pid: z.number().int().positive(),
+  host: z.string().min(1),
+  port: z.number().int().positive(),
+  version: z.string().min(1),
+  startedAt: TimestampSchema,
+  logPath: z.string().min(1),
+})
+
+export type RunState = z.infer<typeof RunStateSchema>
 
 export const stateFileName = "yuekbox.json"
 export const lockFileName = "yuekbox.lock"

@@ -22,6 +22,7 @@
         "commander": "15.0.0",
         "contracts": "workspace:*",
         "server": "workspace:*",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@types/bun": "^1.4.2",

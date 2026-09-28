@@ -1,15 +1,17 @@
 import { join } from "node:path"
+import { lockFileName, logFileName, stateFileName } from "./lifecycle.models"
 
 /**
- * The run-state and log paths, built on the server's home layout so the
- * lifecycle and everything else in the home can never disagree about where
- * they live. `<home>/run` and `<home>/logs` are part of `homeLayout`.
+ * The run-state and log paths, built on the server's home layout and the
+ * models' file names so the lifecycle and everything else in the home can
+ * never disagree about where they live. `<home>/run` and `<home>/logs` are
+ * part of `homeLayout`.
  */
-export const runStatePath = (home: string): string => join(home, "run", "yuekbox.json")
+export const runStatePath = (home: string): string => join(home, "run", stateFileName)
 
-export const runLockPath = (home: string): string => join(home, "run", "yuekbox.lock")
+export const runLockPath = (home: string): string => join(home, "run", lockFileName)
 
-export const logFilePath = (home: string): string => join(home, "logs", "yuekbox.log")
+export const logFilePath = (home: string): string => join(home, "logs", logFileName)
 
 /**
  * The home buckets `uninstall` may remove, models included so callers can
