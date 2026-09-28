@@ -1,0 +1,220 @@
+name: Darwin Verify
+
+# The Apple Silicon bench (#79). Manual dispatch only: it provisions the
+# pinned runtimes from scratch on a macOS arm64 runner, downloads the pinned
+# macOS model set, and drives one freeform Song end to end — generation on
+# the MLX runtime, the vocal transcript on the MLX transcriber, and the
+# lyric alignment through demucs plus mlx-whisper — then transcribes one
+# uploaded reference cover. Run it before publishing any release draft that
+# touched the darwin paths or a runtime pin; a release is not supported
+# macOS until this is green.
+#
+# The runner is throwaway, so every step prints exhaustive diagnostics: the
+# provisioning transcript, the readiness report, the worker log tail, and
+# every artifact the runs produced are uploaded for inspection.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: darwin-verify
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: macos-14
+    timeout-minutes: 150
+    env:
+      HOME: /Users/runner
+      YUEKBOX_SMOKE_PORT: "3391"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build the darwin-arm64 binary
+        run: bun run build:binary ./yuekbox
+
+      - name: Ad-hoc codesign the binary
+        run: codesign --sign - --force ./yuekbox
+
+      - name: Smoke-test the compiled binary
+        run: ./scripts/smoke-binary.sh ./yuekbox
+
+      # From here on the bench exercises the real machine path: an empty
+      # home, the machine check, two environments, and the model downloads.
+      - name: Provision the pinned runtimes
+        run: |
+          set -x
+          ./yuekbox --provision 2>&1 | tee provision.log
+
+      - name: Report what provisioning built
+        run: |
+          echo "== venvs =="
+          ls -la ~/.yuekbox/venvs || true
+          echo "== python (generation) =="
+          ~/.yuekbox/venvs/python/bin/python --version || true
+          ~/.yuekbox/venvs/python/bin/python -c "import lyra; print('lyra OK')" || true
+          echo "== align =="
+          ~/.yuekbox/venvs/align/bin/python --version || true
+          ~/.yuekbox/venvs/align/bin/python -c "import mlx_whisper, demucs; print('align stack OK')" || true
+          echo "== scripts =="
+          ls ~/.yuekbox/scripts || true
+
+      - name: Start the server
+        run: |
+          ./yuekbox --home ~/.yuekbox start
+          sleep 2
+          curl -fsS http://127.0.0.1:3000/v1/status | tee status.json
+          curl -fsS http://127.0.0.1:3000/v1/readiness | tee readiness.json
+
+      # The macOS pins total ~15 GB. A few quiet polls between checks keeps
+      # the log readable while the downloads run.
+      - name: Download the pinned macOS model set
+        run: |
+          for key in yue2 yue2Vae sheetsage2 sheetsage2Base whisper; do
+            echo "== downloading $key =="
+            curl -fsS -X POST "http://127.0.0.1:3000/v1/models/$key/download" \
+              -H 'content-type: application/json' -d '{"confirm":true}' | head -c 400
+            echo
+          done
+          for i in $(seq 1 240); do
+            sleep 15
+            pending="$(curl -fsS http://127.0.0.1:3000/v1/models/downloads | python3 -c '
+              import json, sys
+              snaps = json.load(sys.stdin)
+              busy = [s for s in snaps if s["state"] in ("preparing", "downloading")]
+              for s in snaps:
+                  print(f"  {s[\"key\"]}: {s[\"state\"]} {s[\"bytesDone\"]}/{s[\"totalBytes\"]}")
+              print(len(busy))
+            ' | tee /dev/stderr | tail -1)"
+            [ "$pending" = "0" ] && break
+          done
+          curl -fsS http://127.0.0.1:3000/v1/models/downloads | python3 -c '
+            import json, sys
+            snaps = json.load(sys.stdin)
+            failed = [s for s in snaps if s["state"] not in ("present",)]
+            if failed:
+                print(json.dumps(failed, indent=2))
+                sys.exit(1)
+            print("all five models present")
+          '
+
+      - name: Generate one freeform Song
+        run: |
+          cat > song-request.json <<JSON
+          {
+            "style": "bedroom pop, warm rhodes piano, soft brushed drums, female vocal",
+            "lyrics": "[verse]\nShort bench song for the darwin bench\nTwo lines only\n[chorus]\nGreen means the port works\n",
+            "seed": 79
+          }
+          JSON
+          song="$(curl -fsS -X POST http://127.0.0.1:3000/v1/songs \
+            -H 'content-type: application/json' \
+            --data @song-request.json)"
+          echo "$song" | tee song.json
+          id="$(echo "$song" | python3 -c 'import json, sys; print(json.load(sys.stdin)["id"])')"
+          echo "SONG_ID=$id" >> "$GITHUB_ENV"
+
+      - name: Wait for the Song to finish
+        run: |
+          for i in $(seq 1 120); do
+            sleep 15
+            state="$(curl -fsS "http://127.0.0.1:3000/v1/songs/$SONG_ID" | python3 -c 'import json, sys; print(json.load(sys.stdin)["status"])')"
+            echo "poll $i: $state"
+            case "$state" in
+              complete|failed) break ;;
+            esac
+          done
+          curl -fsS "http://127.0.0.1:3000/v1/songs/$SONG_ID" | tee song-final.json
+          [ "$(python3 -c 'import json; print(json.load(open("song-final.json"))["status"])')" = "complete" ] || {
+            echo "== worker diagnostics =="
+            tail -100 ~/.yuekbox/logs/yuekbox.log || true
+            exit 1
+          }
+
+      - name: Check the Song's calibration and audio
+        run: |
+          curl -fsS "http://127.0.0.1:3000/v1/songs/$SONG_ID" | python3 -c '
+            import json, sys
+            song = json.load(sys.stdin)
+            assert song.get("durationSeconds", 0) > 0, "no duration"
+            calibration = song.get("calibration")
+            assert calibration and calibration.get("cues"), f"no lyric calibration: {calibration}"
+            print(f"song {song[\"id\"]}: {song[\"durationSeconds\"]}s, {len(calibration[\"cues\"])} lyric cues")
+          '
+          curl -fsS -o song.mp3 "http://127.0.0.1:3000/v1/songs/$SONG_ID/audio"
+          ls -la song.mp3
+          afinfo song.mp3 2>/dev/null | head -8 || true
+
+      - name: Cover the Song through the MLX transcriber
+        run: |
+          # A cover runs the full reference chain: SheetSage2 on the source,
+          # then generation conditioned on the transcribed score. The
+          # reference upload is a raw audio body with a filename query.
+          reference="$(curl -fsS -X POST \
+            "http://127.0.0.1:3000/v1/references?filename=darwin-bench.mp3" \
+            -H 'content-type: audio/mpeg' \
+            --data-binary @song.mp3)"
+          echo "$reference" | tee reference.json
+          ref_id="$(echo "$reference" | python3 -c 'import json, sys; print(json.load(sys.stdin)["id"])')"
+          python3 - "$ref_id" > cover-request.json <<'PY'
+          import json, sys
+          print(json.dumps({
+              "style": "synthwave, analog arpeggios, male vocal",
+              "lyrics": "[verse]\nCover bench line\nOne more line\n",
+              "seed": 80,
+              "referenceId": sys.argv[1],
+          }))
+          PY
+          cover="$(curl -fsS -X POST http://127.0.0.1:3000/v1/songs \
+            -H 'content-type: application/json' \
+            --data @cover-request.json)"
+          echo "$cover" | tee cover.json
+          cover_id="$(echo "$cover" | python3 -c 'import json, sys; print(json.load(sys.stdin)["id"])')"
+          echo "COVER_ID=$cover_id" >> "$GITHUB_ENV"
+
+      - name: Wait for the cover to finish
+        run: |
+          for i in $(seq 1 120); do
+            sleep 15
+            state="$(curl -fsS "http://127.0.0.1:3000/v1/songs/$COVER_ID" | python3 -c 'import json, sys; print(json.load(sys.stdin)["status"])')"
+            echo "poll $i: $state"
+            case "$state" in
+              complete|failed) break ;;
+            esac
+          done
+          curl -fsS "http://127.0.0.1:3000/v1/songs/$COVER_ID" | tee cover-final.json
+          [ "$(python3 -c 'import json; print(json.load(open("cover-final.json"))["status"])')" = "complete" ] || {
+            echo "== worker diagnostics =="
+            tail -150 ~/.yuekbox/logs/yuekbox.log || true
+            exit 1
+          }
+
+      - name: Stop the server
+        if: always()
+        run: ./yuekbox --home ~/.yuekbox stop || true
+
+      - name: Upload the artifacts and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: darwin-verify-${{ github.run_id }}
+          path: |
+            provision.log
+            status.json
+            readiness.json
+            song.json
+            song-final.json
+            song.mp3
+            cover.json
+            cover-final.json
+            ~/.yuekbox/logs/yuekbox.log
+          if-no-files-found: warn
