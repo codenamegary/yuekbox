@@ -1,5 +1,11 @@
 import { Result } from "../shared/result"
-import { GpuFacts, GpuError, TorchRequirement } from "./provisioning.models"
+import {
+  GpuFacts,
+  GpuError,
+  MacRequirement,
+  MachineRequirement,
+  TorchRequirement,
+} from "./provisioning.models"
 import { torchWheelIndexUrl } from "./provisioning.packages"
 
 /**
@@ -12,6 +18,33 @@ import { torchWheelIndexUrl } from "./provisioning.packages"
  * reference), so the requirement names the cu128 index.
  */
 export const minimumTorchDriverVersion = "525.60.13"
+
+/**
+ * The Apple Silicon floor the MLX runtime documents: macOS 14.2 or newer,
+ * and at least 16 GiB of unified memory, which is also the sampled budget
+ * the runtime enforces while generating. The floor is the total memory
+ * `sysctl hw.memsize` reports.
+ */
+export const minimumMacosVersion = "14.2"
+export const minimumUnifiedMemoryBytes = 16 * 1024 ** 3
+export const memoryBudgetGiB = 16
+
+/** The process-env slice the floor override reads; tests pass a plain record. */
+export type EnvLike = Readonly<Record<string, string | undefined>>
+
+/**
+ * CI and bench runs on small hosted Macs can lower the unified-memory floor
+ * through `YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB`. Anything unset, non-numeric, or
+ * below one GiB is ignored, so a typo can never silently disable the machine
+ * check; the documented 16 GiB floor stays the default.
+ */
+export const unifiedMemoryFloorOverrideBytes = (env: EnvLike): number | undefined => {
+  const raw = env.YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB
+  if (raw === undefined || raw.trim() === "") return undefined
+  const gib = Number.parseFloat(raw)
+  if (!Number.isFinite(gib) || gib < 1) return undefined
+  return Math.round(gib * 1024 ** 3)
+}
 
 export const torchRequirement: TorchRequirement = Object.freeze({
   cudaFamily: "12.x",
@@ -45,6 +78,15 @@ export const evaluateGpu = (facts: GpuFacts): Result<TorchRequirement, GpuError>
   if (facts.kind === "absent") {
     return { ok: false, error: { kind: "gpu_missing", detail: facts.detail } }
   }
+  if (facts.kind === "apple-silicon") {
+    return {
+      ok: false,
+      error: {
+        kind: "gpu_missing",
+        detail: "this machine reports Apple Silicon, not an NVIDIA driver",
+      },
+    }
+  }
 
   const found = parseVersion(facts.driverVersion)
   const minimum = parseVersion(minimumTorchDriverVersion)
@@ -71,4 +113,89 @@ export const evaluateGpu = (facts: GpuFacts): Result<TorchRequirement, GpuError>
   }
 
   return { ok: true, value: torchRequirement }
+}
+
+const describeBytes = (bytes: number): string => `${Math.round(bytes / 1024 ** 3)} GiB`
+
+/**
+ * Decides whether a Mac can run the MLX runtime: Apple Silicon under the
+ * macOS floor, with at least the unified memory the generation budget
+ * assumes. An Intel Mac, a Hackintosh, or a failed probe never reaches this
+ * evaluator as Apple Silicon facts — the adapter reports those as `absent`.
+ */
+export const evaluateMacHardware = (
+  facts: {
+    kind: "apple-silicon"
+    memoryBytes: number
+    macosVersion: string
+  },
+  floorBytes: number = minimumUnifiedMemoryBytes,
+): Result<MacRequirement, GpuError> => {
+  if (!Number.isFinite(facts.memoryBytes) || facts.memoryBytes <= 0) {
+    return {
+      ok: false,
+      error: { kind: "gpu_unreadable", detail: "could not read the unified memory size" },
+    }
+  }
+
+  const macos = parseVersion(facts.macosVersion)
+  const macosFloor = parseVersion(minimumMacosVersion)
+  if (macos === null || macosFloor === null) {
+    return {
+      ok: false,
+      error: { kind: "gpu_unreadable", detail: `unreadable macOS version: ${facts.macosVersion}` },
+    }
+  }
+  if (!isAtLeast(macos, macosFloor)) {
+    return {
+      ok: false,
+      error: {
+        kind: "macos_too_old",
+        detail: `macOS ${facts.macosVersion} is older than the required ${minimumMacosVersion}`,
+        foundAmount: facts.macosVersion,
+        minimumAmount: minimumMacosVersion,
+      },
+    }
+  }
+
+  if (facts.memoryBytes < floorBytes) {
+    return {
+      ok: false,
+      error: {
+        kind: "gpu_memory_low",
+        detail: `unified memory ${describeBytes(facts.memoryBytes)} is below the required ${describeBytes(floorBytes)}`,
+        foundAmount: describeBytes(facts.memoryBytes),
+        minimumAmount: describeBytes(floorBytes),
+      },
+    }
+  }
+
+  return { ok: true, value: { memoryBudgetGiB } }
+}
+
+/**
+ * The one machine check both platforms answer. The probe produces the facts
+ * variant for its platform; this decides what the machine can run. The
+ * failure kinds and details are platform-neutral enough for one message map.
+ */
+export const evaluateMachine = (
+  facts: GpuFacts,
+  floorBytes: number = minimumUnifiedMemoryBytes,
+): Result<MachineRequirement, GpuError> => {
+  switch (facts.kind) {
+    case "nvidia": {
+      const torch = evaluateGpu(facts)
+      return torch.ok
+        ? { ok: true, value: { kind: "cuda", indexUrl: torch.value.indexUrl } }
+        : torch
+    }
+    case "apple-silicon": {
+      const mac = evaluateMacHardware(facts, floorBytes)
+      return mac.ok
+        ? { ok: true, value: { kind: "mlx", memoryBudgetGiB: mac.value.memoryBudgetGiB } }
+        : mac
+    }
+    case "absent":
+      return { ok: false, error: { kind: "gpu_missing", detail: facts.detail } }
+  }
 }

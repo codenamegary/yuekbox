@@ -44,7 +44,7 @@ test("reports every model missing with its resolved path and expected size", asy
   }
   expect(report.system).toEqual({
     ffmpeg: { state: "ready" },
-    nvidia: { state: "ready" },
+    gpu: { state: "ready" },
   })
 })
 
@@ -94,6 +94,8 @@ const missingGpuFacts: readonly GpuFacts[] = [
   { kind: "absent", detail: "nvidia-smi could not run" },
   { kind: "nvidia", driverVersion: "470.10" },
   { kind: "nvidia", driverVersion: "not-a-version" },
+  { kind: "apple-silicon", memoryBytes: 8 * 1024 ** 3, macosVersion: "15.5" },
+  { kind: "apple-silicon", memoryBytes: 36 * 1024 ** 3, macosVersion: "13.6" },
 ]
 
 test("a failed driver check comes with the Linux and WSL2 fix instruction", async () => {
@@ -105,13 +107,12 @@ test("a failed driver check comes with the Linux and WSL2 fix instruction", asyn
       readGpuFacts: async () => facts,
     })
 
-    const check = (await readReadiness()).system.nvidia
+    const check = (await readReadiness()).system.gpu
 
     expect(check.state).toBe("missing")
     if (check.state !== "missing") continue
     expect(check.message.length).toBeGreaterThan(0)
-    expect(check.fix.linux.length).toBeGreaterThan(0)
-    expect(check.fix.wsl2.length).toBeGreaterThan(0)
+    expect(Object.values(check.fix).some((line) => line.length > 0)).toBe(true)
   }
 })
 
@@ -123,7 +124,7 @@ test("an old driver message names both versions", async () => {
     readGpuFacts: async () => ({ kind: "nvidia", driverVersion: "470.10" }),
   })
 
-  const check = (await readReadiness()).system.nvidia
+  const check = (await readReadiness()).system.gpu
 
   expect(check.state).toBe("missing")
   if (check.state !== "missing") return

@@ -48,7 +48,7 @@ test("a stubbed bare-home run reaches ready, and the second run skips the built 
       runProcess: firstRun,
     })
 
-    const firstResult = await first.provisionAll({ home })
+    const firstResult = await first.provisionAll({ home, platform: "linux" })
 
     expect(firstResult.ok).toBe(true)
     if (!firstResult.ok) return
@@ -57,6 +57,7 @@ test("a stubbed bare-home run reaches ready, and the second run skips the built 
       "python:completed",
       "gpu:completed",
       "environment:completed",
+      "align:skipped",
       "scripts:completed",
     ])
     expect(firstCommands.filter((command) => command[0] === "nvidia-smi")).toHaveLength(1)
@@ -78,7 +79,7 @@ test("a stubbed bare-home run reaches ready, and the second run skips the built 
       runProcess: secondRun,
     })
 
-    const secondResult = await second.provisionAll({ home })
+    const secondResult = await second.provisionAll({ home, platform: "linux" })
 
     expect(secondResult.ok).toBe(true)
     if (!secondResult.ok) return
@@ -87,6 +88,7 @@ test("a stubbed bare-home run reaches ready, and the second run skips the built 
       "python:skipped",
       "gpu:completed",
       "environment:skipped",
+      "align:skipped",
       "scripts:completed",
     ])
     expect(secondCommands).toEqual([
@@ -109,7 +111,7 @@ test("a machine with no NVIDIA driver stops before building any environment", as
       },
     })
 
-    const result = await slice.provisionAll({ home })
+    const result = await slice.provisionAll({ home, platform: "linux" })
 
     expect(result.ok).toBe(false)
     if (result.ok) return

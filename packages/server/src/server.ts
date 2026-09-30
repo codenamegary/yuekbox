@@ -25,6 +25,7 @@ import { checkYue2, makeRunYue2Generate } from "./generation/generation.yue2.ada
 import { assembleProvisioningSlice } from "./provisioning/provisioning.assembly"
 import { runProvisioningCommand } from "./provisioning/provisioning.cli"
 import { makeReadGpuFacts } from "./provisioning/provisioning.gpu.adapters"
+import { unifiedMemoryFloorOverrideBytes } from "./provisioning/provisioning.gpu"
 import { runProcess } from "./shared/process"
 import { version } from "./version"
 
@@ -83,10 +84,15 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
   })
 
   if (boot.provision) {
-    const provisioning = assembleProvisioningSlice({ home: boot.home })
+    const provisioning = assembleProvisioningSlice({
+      home: boot.home,
+      platform: boot.platform,
+      env: input.env,
+    })
     process.exit(
       await runProvisioningCommand({
         home: boot.home,
+        platform: boot.platform,
         provisionAll: provisioning.provisionAll,
         log: (line: string) => console.log(line),
       }),
@@ -117,7 +123,7 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
     scriptPath: boot.sheetsage2Script,
   })
   const lyricAlignState = checkLyricAlign({
-    pythonBin: boot.python,
+    pythonBin: boot.alignPython,
     scriptPath: boot.lyricAlignScript,
   })
   if (ffmpegState === "missing") {
@@ -141,7 +147,7 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
   }
   if (lyricAlignState === "missing") {
     console.warn(
-      `lyric-align not found (python=${boot.python}, script=${boot.lyricAlignScript}); songs will complete without lyric cues`,
+      `lyric-align not found (python=${boot.alignPython}, script=${boot.lyricAlignScript}); songs will complete without lyric cues`,
     )
   }
 
@@ -154,21 +160,23 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
     device: boot.sheetsage2Device,
     offline: boot.sheetsage2Offline,
     cwd: boot.home,
+    backend: boot.platform === "macos" ? "mlx" : "torch",
     readModelPaths,
   }
 
   const lyricAlignEnv: LyricAlignAdapterEnv = {
-    pythonBin: boot.python,
+    pythonBin: boot.alignPython,
     scriptPath: boot.lyricAlignScript,
     device: boot.lyricAlignDevice,
     cwd: boot.home,
+    backend: boot.platform === "macos" ? "mlx" : "torch",
     readModelPaths,
   }
 
   // Readiness, downloads, and the generation adapters resolve the five paths
   // per request/call, so `PUT /v1/config` takes effect with no restart. Only
   // the boot-time `/v1/status` checks keep the paths resolved at boot.
-  const readGpuFacts = makeReadGpuFacts({ cwd: boot.home, runProcess })
+  const readGpuFacts = makeReadGpuFacts({ cwd: boot.home, runProcess, platform: boot.platform })
 
   const { app, songs, models } = composeServer({
     db: database.db,
@@ -183,6 +191,8 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
       scriptPath: boot.generateScript,
       gpuBudget: boot.gpuBudget,
       cwd: boot.home,
+      backend: boot.platform === "macos" ? "mlx" : "torch",
+      mlxPrecision: boot.mlxPrecision,
       readModelPaths,
     }),
     runTranscribe: makeRunTranscribe(sheetsage2Env),
@@ -204,6 +214,7 @@ export const startServer = async (input: StartServerInput): Promise<RunningServe
       readModelPaths,
       checkFfmpeg: async () => (await checkFfmpeg(boot.ffmpegBin)) === "ok",
       readGpuFacts,
+      unifiedMemoryFloorBytes: unifiedMemoryFloorOverrideBytes(input.env ?? {}),
     },
     models: {
       home: boot.home,

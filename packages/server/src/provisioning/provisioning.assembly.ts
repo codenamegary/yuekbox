@@ -1,6 +1,8 @@
+import { HostPlatform, hostPlatform } from "../shared/platform"
 import { ProcessRunner, runProcess } from "../shared/process"
 import { FetchLike, makeDownloadFile } from "./provisioning.download.adapters"
 import { makeReadGpuFacts } from "./provisioning.gpu.adapters"
+import { EnvLike, unifiedMemoryFloorOverrideBytes } from "./provisioning.gpu"
 import { makeProvisionAll } from "./provisioning.provision-all.usecase"
 import { makeEnsurePython, makeEnsureVenv } from "./provisioning.python.adapters"
 import { makeInstallScripts, toolsRoot } from "./provisioning.scripts.adapters"
@@ -13,6 +15,10 @@ export type ProvisioningSlice = Readonly<{
 
 export type AssembleProvisioningDeps = Readonly<{
   home: string
+  /** Defaults to the machine the process runs on; tests pass one explicitly. */
+  platform?: HostPlatform
+  /** Read once for the machine-floor override; tests pass a plain record. */
+  env?: EnvLike
   /** Test seams; the process root leaves every one at its real default. */
   fetchImpl?: FetchLike
   runProcess?: ProcessRunner
@@ -21,10 +27,11 @@ export type AssembleProvisioningDeps = Readonly<{
 
 /**
  * Wires the provisioning slice for the process root: the pinned uv fetch,
- * the managed interpreter, the one shared environment, the driver probe, and
- * the #50 script installer.
+ * the managed interpreter, the machine probe, the environment(s) the
+ * platform's pins describe, and the #50 script installer.
  */
 export const assembleProvisioningSlice = (deps: AssembleProvisioningDeps): ProvisioningSlice => {
+  const platform = deps.platform ?? hostPlatform()
   const processRunner = deps.runProcess ?? runProcess
   const downloadFile =
     deps.fetchImpl === undefined
@@ -36,11 +43,13 @@ export const assembleProvisioningSlice = (deps: AssembleProvisioningDeps): Provi
       home: deps.home,
       downloadFile,
       runProcess: processRunner,
+      platform,
     }),
     ensurePython: makeEnsurePython({ home: deps.home, runProcess: processRunner }),
-    readGpuFacts: makeReadGpuFacts({ cwd: deps.home, runProcess: processRunner }),
+    readGpuFacts: makeReadGpuFacts({ cwd: deps.home, runProcess: processRunner, platform }),
     ensureVenv: makeEnsureVenv({ home: deps.home, runProcess: processRunner }),
     installScripts: deps.installScripts ?? makeInstallScripts(toolsRoot),
+    unifiedMemoryFloorBytes: unifiedMemoryFloorOverrideBytes(deps.env ?? {}),
   })
 
   return Object.freeze({ provisionAll })

@@ -126,7 +126,7 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
       size: modelDownloadPins.whisper.totalBytes,
     })
     expect(readiness.system.ffmpeg.state).toBe("missing")
-    expect(readiness.system.nvidia.state).toBe("missing")
+    expect(readiness.system.gpu.state).toBe("missing")
     if (readiness.system.ffmpeg.state === "missing") {
       expect(readiness.system.ffmpeg.fix.linux).toContain("ffmpeg")
       expect(readiness.system.ffmpeg.fix.wsl2).toContain("ffmpeg")

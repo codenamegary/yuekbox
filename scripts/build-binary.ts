@@ -8,9 +8,8 @@
 //   bun run build:binary [outfile] [--target <bun-target>] [--executable <path>]
 //
 // Defaults to `./yuekbox` for the host platform. `--target` cross-compiles (for
-// example `bun-linux-x64-musl`); `--executable` points at a local Bun runtime
-// for that target so the build stays offline. `macos-arm64` is not a supported
-// target: yuekbox needs a local NVIDIA GPU, so it ships for Linux/WSL2 only.
+// example `bun-linux-x64-musl` or `bun-darwin-arm64`); `--executable` points at
+// a local Bun runtime for that target so the build stays offline.
 import { rm } from "node:fs/promises"
 import path from "node:path"
 import tailwind from "../packages/web/node_modules/bun-plugin-tailwind"
@@ -39,15 +38,23 @@ const readFlagValue = (flag: string, inline: string | null, next: string | undef
  * the ship targets are Linux; the case arms are checked against
  * Bun.Build.CompileTarget, so a typo never typechecks.
  */
+/**
+ * The compile targets yuekbox ships. Linux x86_64 is the NVIDIA/CUDA target;
+ * darwin-arm64 is the Apple Silicon target. The case arms are checked against
+ * Bun.Build.CompileTarget, so a typo never typechecks.
+ */
 const parseTarget = (value: string): Bun.Build.CompileTarget => {
   switch (value) {
     case "bun-linux-x64":
     case "bun-linux-x64-musl":
     case "bun-linux-arm64":
     case "bun-linux-arm64-musl":
+    case "bun-darwin-arm64":
       return value
     default:
-      throw new Error(`unsupported --target ${value}: yuekbox ships for Linux and WSL2 only`)
+      throw new Error(
+        `unsupported --target ${value}: yuekbox ships for Linux/WSL2 and Apple Silicon macOS`,
+      )
   }
 }
 

@@ -22,7 +22,7 @@ export const unusedReadinessFixture = (): ReadinessReader => async (): Promise<R
   },
   system: {
     ffmpeg: { state: "ready" },
-    nvidia: { state: "ready" },
+    gpu: { state: "ready" },
   },
 })
 

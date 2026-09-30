@@ -72,9 +72,9 @@ queue, a worker, and the real YuE2 runtime. The visuals are just here to make th
 
 You need:
 
-- 🐧 **Linux x86_64 or WSL2** with an **NVIDIA GPU** (16 GB VRAM works with the default budget. 24 GB is YuE2's stated recommendation) and an NVIDIA driver new enough for CUDA 12 (`525.60.13` or newer). macOS is not supported.
+- 🐧 **Linux x86_64 or WSL2** with an **NVIDIA GPU** (16 GB VRAM works with the default budget. 24 GB is YuE2's stated recommendation) and an NVIDIA driver new enough for CUDA 12 (`525.60.13` or newer), **or** 🍎 a **Mac with Apple Silicon** (M1 or newer, macOS 14.2+, 16 GB unified memory minimum — 32 GB is comfortable). On the Mac, generation runs on the GPU through the MLX port of the same YuE2 stack; no NVIDIA anything required.
 - 🎧 **ffmpeg** with `libmp3lame`. yuekbox checks for it at boot and tells you how to install it. It never installs it for you.
-- 🧠 **The five model directories**: YuE2-3B, YuE2-Vae, SheetSage2, MERT-v2-FullSong, and Whisper large-v3-turbo. Download them from the app's models panel, or point yuekbox at copies you already have with `~/.yuekbox/config.yaml` or a CLI flag. Defaults live under `~/.yuekbox/models/<name>`.
+- 🧠 **The five model directories**: YuE2-3B, YuE2-Vae, SheetSage2, MERT-v2-FullSong, and Whisper large-v3-turbo. Download them from the app's models panel, or point yuekbox at copies you already have with `~/.yuekbox/config.yaml` or a CLI flag. Defaults live under `~/.yuekbox/models/<name>`. The platform picks the right pinned revisions automatically (the Mac downloads the pre-converted MLX weights).
 - 🌐 **Network access** for `--provision` and any model downloads.
 - 🥟 **[Bun](https://bun.sh) 1.4+** only to run from source. The released binary needs no Bun and no checkout.
 
@@ -164,12 +164,14 @@ bun run build:binary yuekbox-musl \
   --executable ~/.bun/install/cache/@oven/bun-linux-x64-musl@1.4.2@@@1/bin/bun
 ```
 
-linux-x64 is the ship target. macos-arm64 is not supported: yuekbox wants a
-local NVIDIA GPU. `scripts/smoke-binary.sh ./yuekbox` runs the compiled
-acceptance smoke test locally. CI runs it on every PR. `sh scripts/install.test.sh`
+linux-x64 and darwin-arm64 are the ship targets. `scripts/smoke-binary.sh ./yuekbox` runs the compiled
+acceptance smoke test locally. CI runs it on every PR, on ubuntu-latest and on a
+macOS arm64 runner. `sh scripts/install.test.sh`
 exercises the release installer against a local HTTP server, and
 [`docs/releasing.md`](docs/releasing.md) covers the release workflow and the
-clean-machine install test.
+clean-machine install test. The Apple Silicon acceptance bench
+(`darwin-verify.yml`) provisions and generates one Song end to end in CI; run
+it before publishing a release that touched the macOS paths or a runtime pin.
 
 Yuekbox keeps everything it manages in `~/.yuekbox` (`--home` moves it): the Python
 runtime under `tools/`, model defaults under `models/`, the Python environment under

@@ -30,6 +30,7 @@ const progressEvent = (
     python: "Installing the song engine",
     gpu: "Checking the graphics card",
     environment: "Installing the song tools",
+    align: "Installing the lyric timing tools",
     scripts: "Installing helper programs",
   }[step],
   status,
@@ -83,7 +84,12 @@ test("prints every step and ends ready", async () => {
     progressEvent("scripts", "completed"),
   ])
 
-  const code = await runProvisioningCommand({ home: "/home/u/.yuekbox", provisionAll, log })
+  const code = await runProvisioningCommand({
+    home: "/home/u/.yuekbox",
+    platform: "linux",
+    provisionAll,
+    log,
+  })
 
   expect(code).toBe(0)
   const output = lines.join("\n")
@@ -118,6 +124,7 @@ test("a failure prints the plain-English message and the retry, then exits nonze
 
   const code = await runProvisioningCommand({
     home: "/home/u/.yuekbox",
+    platform: "linux",
     provisionAll,
     log,
     logDetail,
@@ -148,7 +155,7 @@ test("the progress stream is forwarded as it arrives", async () => {
     }
   }
 
-  await runProvisioningCommand({ home: "/home/u/.yuekbox", provisionAll, log })
+  await runProvisioningCommand({ home: "/home/u/.yuekbox", platform: "linux", provisionAll, log })
 
   expect(seen[0]).toContain("first")
 })
@@ -167,6 +174,7 @@ test("on a terminal, uv activity redraws one live line and the step still ends d
 
   const code = await runProvisioningCommand({
     home: "/home/u/.yuekbox",
+    platform: "linux",
     provisionAll,
     log,
     logDetail: (line) => details.push(line),
@@ -200,6 +208,7 @@ test("piped output keeps durable lines and never writes control characters", asy
 
   const code = await runProvisioningCommand({
     home: "/home/u/.yuekbox",
+    platform: "linux",
     provisionAll,
     log,
     write: (text) => written.push(text),
@@ -239,6 +248,7 @@ test("uv-derived activity on stdout matches no forbidden word", async () => {
 
   const code = await runProvisioningCommand({
     home: "/home/u/.yuekbox",
+    platform: "linux",
     provisionAll,
     log,
     write: (text) => written.push(text),
@@ -278,6 +288,7 @@ test("a failure clears the live line before the failure message", async () => {
 
   const code = await runProvisioningCommand({
     home: "/home/u/.yuekbox",
+    platform: "linux",
     provisionAll,
     log,
     logDetail: () => undefined,
@@ -304,6 +315,7 @@ test("an unexpected throw clears the live line before the failure message", asyn
 
   const code = await runProvisioningCommand({
     home: "/home/u/.yuekbox",
+    platform: "linux",
     provisionAll,
     log,
     write: (text) => written.push(text),
@@ -324,7 +336,12 @@ test("an unexpected throw still prints a plain-English failure, not a stack trac
     throw new Error("boom: adapter invariant broke at provisioning.cli.ts:1")
   }
 
-  const code = await runProvisioningCommand({ home: "/home/u/.yuekbox", provisionAll, log })
+  const code = await runProvisioningCommand({
+    home: "/home/u/.yuekbox",
+    platform: "linux",
+    provisionAll,
+    log,
+  })
 
   expect(code).toBe(1)
   const output = lines.join("\n")

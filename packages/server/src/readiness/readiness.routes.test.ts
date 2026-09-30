@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { ReadinessSchema } from "contracts/http/readiness"
 import Fastify from "fastify"
-import { ffmpegCheck, nvidiaCheck } from "./readiness.preflight"
+import { ffmpegCheck, gpuCheck } from "./readiness.preflight"
 import { readinessRoutes } from "./readiness.routes"
 
 test("GET /v1/readiness answers the contract payload with fixes on failed checks", async () => {
@@ -25,7 +25,7 @@ test("GET /v1/readiness answers the contract payload with fixes on failed checks
       },
       system: {
         ffmpeg: ffmpegCheck(false),
-        nvidia: nvidiaCheck({ kind: "absent", detail: "no nvidia-smi in this test" }),
+        gpu: gpuCheck({ kind: "absent", detail: "no nvidia-smi in this test" }),
       },
     }),
   })
@@ -37,8 +37,19 @@ test("GET /v1/readiness answers the contract payload with fixes on failed checks
   expect(parsed.models.yue2.state).toBe("missing")
   expect(parsed.models.yue2Vae.state).toBe("ready")
   expect(parsed.system.ffmpeg).toEqual(ffmpegCheck(false))
-  expect(parsed.system.nvidia).toEqual(
-    nvidiaCheck({ kind: "absent", detail: "no nvidia-smi in this test" }),
+  expect(parsed.system.gpu).toEqual(
+    gpuCheck({ kind: "absent", detail: "no nvidia-smi in this test" }),
   )
   await app.close()
+})
+
+test("the GPU check honors a lowered unified-memory floor for CI benches", () => {
+  const smallMac = {
+    kind: "apple-silicon" as const,
+    memoryBytes: 7 * 1024 ** 3,
+    macosVersion: "14.6",
+  }
+
+  expect(gpuCheck(smallMac).state).toBe("missing")
+  expect(gpuCheck(smallMac, 4 * 1024 ** 3).state).toBe("ready")
 })

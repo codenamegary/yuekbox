@@ -10,6 +10,7 @@ const withInput = (input: {
   provision?: boolean
   env?: Readonly<Record<string, string | undefined>>
   osHome?: string
+  platform?: "linux" | "macos"
   file?: ModelPathOverrides
 }) => ({
   home: input.home ?? null,
@@ -18,6 +19,7 @@ const withInput = (input: {
   provision: input.provision ?? false,
   env: input.env ?? {},
   osHome: input.osHome ?? "/home/u",
+  ...(input.platform === undefined ? {} : { platform: input.platform }),
   loadModelOverrides: async () => input.file ?? {},
 })
 
@@ -43,14 +45,26 @@ test("defaults every managed path under ~/.yuekbox", async () => {
   expect(boot.provision).toBe(false)
 })
 
-test("one shared interpreter serves every Python pass", async () => {
-  const boot = await resolveBootEnv(withInput({}))
+test("one shared interpreter serves every Python pass on Linux", async () => {
+  const boot = await resolveBootEnv(withInput({ platform: "linux" }))
   const home = "/home/u/.yuekbox"
 
   expect(boot.python).toBe(join(home, "venvs/python/bin/python"))
+  expect(boot.alignPython).toBe(boot.python)
   expect(Object.keys(boot)).not.toContain("yue2Python")
   expect(Object.keys(boot)).not.toContain("sheetsage2Python")
-  expect(Object.keys(boot)).not.toContain("lyricAlignPython")
+})
+
+test("macOS points the aligner at its own environment and defaults away from CUDA", async () => {
+  const boot = await resolveBootEnv(withInput({ platform: "macos" }))
+  const home = "/home/u/.yuekbox"
+
+  expect(boot.platform).toBe("macos")
+  expect(boot.python).toBe(join(home, "venvs/python/bin/python"))
+  expect(boot.alignPython).toBe(join(home, "venvs/align/bin/python"))
+  expect(boot.sheetsage2Device).toBe("cpu")
+  expect(boot.lyricAlignDevice).toBe("cpu")
+  expect(boot.mlxPrecision).toBe("8bit")
 })
 
 test("--provision reaches the boot env", async () => {
@@ -60,8 +74,8 @@ test("--provision reaches the boot env", async () => {
   expect(boot.home).toBe("/srv/yuekbox")
 })
 
-test("runtime knobs keep their existing defaults", async () => {
-  const boot = await resolveBootEnv(withInput({}))
+test("runtime knobs keep their existing defaults on Linux", async () => {
+  const boot = await resolveBootEnv(withInput({ platform: "linux" }))
 
   expect(boot.host).toBe("127.0.0.1")
   expect(boot.port).toBe(8787)
@@ -76,6 +90,7 @@ test("runtime knobs keep their existing defaults", async () => {
 test("explicit env overrides win over the home defaults", async () => {
   const boot = await resolveBootEnv(
     withInput({
+      platform: "linux",
       env: {
         HOST: "0.0.0.0",
         PORT: "9000",

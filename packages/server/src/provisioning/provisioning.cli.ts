@@ -1,3 +1,4 @@
+import { HostPlatform } from "../shared/platform"
 import { provisionFailureMessage } from "./provisioning.messages"
 import { ProvisionProgress } from "./provisioning.models"
 import {
@@ -11,6 +12,8 @@ import { ProvisionAll } from "./provisioning.ports"
 
 export type ProvisioningCommandDeps = Readonly<{
   home: string
+  /** The host platform, for the machine check and the environment pins. */
+  platform: HostPlatform
   provisionAll: ProvisionAll
   log: (line: string) => void
   /** The diagnostic stream; the process root leaves it at console.error. */
@@ -91,6 +94,7 @@ const provisionOrFail = async (
   try {
     return await deps.provisionAll({
       home: deps.home,
+      platform: deps.platform,
       onProgress: (event) => renderProgress(deps.log, logDetail, live, event),
     })
   } catch {

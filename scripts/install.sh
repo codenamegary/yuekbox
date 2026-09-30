@@ -1,10 +1,16 @@
 #!/bin/sh
-# yuekbox installer (#56).
+# yuekbox installer (#56, #79).
 #
 #   curl -fsSL https://github.com/codenamegary/yuekbox/releases/latest/download/install.sh | sh
 #
-# Downloads the prebuilt linux-x64 executable, verifies its SHA-256, and
-# installs it to ${YUEKBOX_INSTALL_DIR:-$HOME/.local/bin}.
+# Downloads the prebuilt executable for this machine, verifies its SHA-256,
+# and installs it to ${YUEKBOX_INSTALL_DIR:-$HOME/.local/bin}.
+#
+# Platforms:
+#   Linux x86_64        yuekbox-linux-x64      NVIDIA GPU (or WSL2)
+#   macOS Apple Silicon  yuekbox-darwin-arm64   M1 or newer; generation
+#                        runs on the GPU through MLX
+# An Intel Mac refuses the install: the MLX runtime needs Apple Silicon.
 #
 # Environment:
 #   YUEKBOX_INSTALL_DIR  where the `yuekbox` executable lands (default: ~/.local/bin)
@@ -18,8 +24,12 @@
 # PyTorch, Python, ffmpeg, or model weights. Those stay a machine prerequisite
 # and a runtime download: `yuekbox --provision` builds the Python runtime under
 # ~/.yuekbox, and the app downloads the models (or points ~/.yuekbox/config.yaml
-# at existing copies). An NVIDIA GPU with a recent driver and ffmpeg with
-# libmp3lame are still required.
+# at existing copies). Linux still needs an NVIDIA GPU with a recent driver and
+# ffmpeg with libmp3lame; macOS needs ffmpeg too.
+#
+# Note for browser downloads: a binary fetched through a browser carries a
+# quarantine mark that macOS Gatekeeper blocks. The curl install below does
+# not; `xattr -d com.apple.quarantine yuekbox` clears it by hand.
 #
 # Everything runnable lives inside main(), which is called on the last line.
 # A cut-off `curl | sh` delivers a partial script whose last line never
@@ -37,7 +47,6 @@ fail() {
 
 main() {
   repo="codenamegary/yuekbox"
-  asset="yuekbox-linux-x64"
   tmp_prefix="yuekbox-install"
 
   # ---- platform ---------------------------------------------------------------
@@ -46,19 +55,24 @@ main() {
   arch="$(uname -m)"
 
   case "$os" in
-    Linux) ;;
+    Linux)
+      case "$arch" in
+        x86_64 | amd64) asset="yuekbox-linux-x64" ;;
+        *)
+          fail "unsupported architecture: $arch. The prebuilt yuekbox binary is x86_64 only. Build from source instead: https://github.com/$repo"
+          ;;
+      esac
+      ;;
     Darwin)
-      fail "macOS is not supported. yuekbox needs a local NVIDIA GPU, so Linux and WSL2 only."
+      case "$arch" in
+        arm64) asset="yuekbox-darwin-arm64" ;;
+        *)
+          fail "unsupported Mac: $arch. yuekbox on macOS needs Apple Silicon (M1 or newer). Build from source instead: https://github.com/$repo"
+          ;;
+      esac
       ;;
     *)
-      fail "unsupported operating system: $os. yuekbox supports Linux and WSL2 with an NVIDIA GPU only."
-      ;;
-  esac
-
-  case "$arch" in
-    x86_64 | amd64) ;;
-    *)
-      fail "unsupported architecture: $arch. The prebuilt yuekbox binary is x86_64 only. Build from source instead: https://github.com/$repo"
+      fail "unsupported operating system: $os. yuekbox supports Linux/WSL2 with an NVIDIA GPU, or macOS on Apple Silicon."
       ;;
   esac
 
@@ -132,7 +146,7 @@ main() {
 
   # ---- download and verify ----------------------------------------------------
 
-  say "Downloading yuekbox ($version) for linux-x64..."
+  say "Downloading yuekbox ($version) for ${asset#yuekbox-}..."
   download "$base_url/$asset" "$tmp_dir/$asset" ||
     fail "could not download $base_url/$asset. Check the machine's network and that the release has the asset."
   download "$base_url/$asset.sha256" "$tmp_dir/$asset.sha256" ||
@@ -164,8 +178,13 @@ main() {
   say "  yuekbox --provision   one-time setup: builds the Python runtime under ~/.yuekbox"
   say "  yuekbox               starts the app at http://127.0.0.1:3000"
   say ""
-  say "Still required on this machine: an NVIDIA GPU with a recent driver, ffmpeg"
-  say "with libmp3lame, and network access for --provision and the model downloads."
+  if [ "$os" = "Darwin" ]; then
+    say "Still required on this Mac: ffmpeg (brew install ffmpeg), network access"
+    say "for --provision and the model downloads, and macOS 14.2 or newer."
+  else
+    say "Still required on this machine: an NVIDIA GPU with a recent driver, ffmpeg"
+    say "with libmp3lame, and network access for --provision and the model downloads."
+  fi
   say "The binary bundles no CUDA, PyTorch, or model weights. See the README:"
   say "https://github.com/$repo#-install-a-release-no-bun-no-checkout"
 }

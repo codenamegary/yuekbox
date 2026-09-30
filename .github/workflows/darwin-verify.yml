@@ -29,6 +29,14 @@ jobs:
     env:
       HOME: /Users/runner
       YUEKBOX_SMOKE_PORT: "3391"
+      # The hosted macos-14 runner has 7 GiB of unified memory — under the
+      # documented 16 GiB floor — and no room for the real weights. The
+      # lowered floor lets provisioning build the real runtimes, and
+      # YUEKBOX_BENCH makes the three Python helpers render the same
+      # artifacts from canned output instead of loading models. The bench
+      # verifies the darwin plumbing end to end, not the model math.
+      YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB: "4"
+      YUEKBOX_BENCH: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -48,10 +56,16 @@ jobs:
       - name: Smoke-test the compiled binary
         run: ./scripts/smoke-binary.sh ./yuekbox
 
+      # Generation post-processes audio through ffmpeg with libmp3lame; the
+      # runner image ships without it, and the app only reports the absence.
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+
       # From here on the bench exercises the real machine path: an empty
       # home, the machine check, two environments, and the model downloads.
       - name: Provision the pinned runtimes
         run: |
+          set -euo pipefail
           set -x
           ./yuekbox --provision 2>&1 | tee provision.log
 

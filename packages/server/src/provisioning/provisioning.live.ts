@@ -31,6 +31,7 @@ const activityVerbs: Readonly<ReadonlyArray<readonly [RegExp, string]>> = Object
 const activityNouns: Readonly<Partial<Record<ProvisionStepId, string>>> = Object.freeze({
   python: "the song engine",
   environment: "the song tools",
+  align: "the lyric timing tools",
 })
 
 /**

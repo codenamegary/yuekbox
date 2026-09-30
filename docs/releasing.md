@@ -1,8 +1,10 @@
 # Releasing yuekbox
 
-The release artifact is `yuekbox-linux-x64`, one executable for Linux x86_64
-and WSL2 with an NVIDIA GPU. macOS is not supported. The binary does not bundle
-CUDA, PyTorch, Python, ffmpeg, or model weights. Those are a machine
+The release ships two executables: `yuekbox-linux-x64` for Linux x86_64 and
+WSL2 with an NVIDIA GPU, and `yuekbox-darwin-arm64` for macOS on Apple
+Silicon (M1 or newer, macOS 14.2+, 16 GiB unified memory floor), where
+generation runs on the GPU through the pinned MLX runtime. Neither binary
+bundles CUDA, PyTorch, Python, ffmpeg, or model weights. Those are a machine
 prerequisite and a runtime download, set up by `yuekbox --provision` and the
 app's model downloads.
 
@@ -10,8 +12,10 @@ app's model downloads.
 
 | Asset | Purpose |
 | --- | --- |
-| `yuekbox-linux-x64` | The compiled executable. |
+| `yuekbox-linux-x64` | The compiled executable for Linux x86_64 / WSL2. |
 | `yuekbox-linux-x64.sha256` | SHA-256 of the executable. The installer checks it. |
+| `yuekbox-darwin-arm64` | The compiled executable for Apple Silicon macOS. |
+| `yuekbox-darwin-arm64.sha256` | SHA-256 of the executable. The installer checks it. |
 | `install.sh` | The installer served by the one-line command. |
 
 Asset names are stable. The installer reads them from
@@ -28,19 +32,40 @@ a draft.
 3. Creating the draft starts `.github/workflows/release-binaries.yml` from the
    Release Please workflow. Draft releases fire no `release` event, so the
    workflow is called directly.
-4. The workflow checks out the tag, runs `bun install --frozen-lockfile`,
-   builds the binary, runs `scripts/smoke-binary.sh`, and writes
-   `yuekbox-linux-x64.sha256`.
-5. It uploads the binary, the checksum, and `scripts/install.sh` with
-   `gh release upload --clobber`.
-6. It appends `.github/release-notes-packaging.md` to the release body. The
+4. The workflow builds both targets in parallel: `linux-x64` on ubuntu-latest
+   and `darwin-arm64` on a native macOS arm64 runner. Each checks out the
+   tag, runs `bun install --frozen-lockfile`, builds the binary, runs
+   `scripts/smoke-binary.sh`, writes the `.sha256`, and uploads its assets
+   with `gh release upload --clobber`. The darwin binary is ad-hoc
+   codesigned before the smoke test (every arm64 binary needs a signature).
+5. The `publish` job waits for both builds, then appends
+   `.github/release-notes-packaging.md` to the release body. The
    `<!-- yuekbox-packaging -->` marker guards the append, so a second run
    leaves the body alone.
-7. It publishes the draft with `gh release edit --draft=false`. Publishing is
-   last on purpose: the assets and the tag lock together at that moment.
+6. It publishes the draft with `gh release edit --draft=false`. Publishing is
+   last on purpose: the assets and the tag lock together at that moment, and
+   only after both platforms are green.
 
 The workflow runs from the Release Please workflow and on manual dispatch
 only. It never runs on pull requests.
+
+## The Apple Silicon bench
+
+A release that touched the darwin paths, a Python tool, or a runtime pin is
+not supported macOS until `.github/workflows/darwin-verify.yml` ran green on
+its commit. The bench is a manual dispatch on a macOS arm64 runner: it
+provisions the pinned runtimes into an empty home, downloads the pinned
+macOS model set, generates one freeform Song on the MLX runtime (checking
+the lyric calibration came back), and cuts one cover through the MLX
+transcriber. Artifacts and the server log upload with the run.
+
+```sh
+gh workflow run darwin-verify.yml
+gh run watch   # then read the artifacts
+```
+
+Model downloads need roughly 15 GiB of disk and the two Songs take a while
+on the hosted M1; budget an hour for a full run.
 
 Retry a release whose build failed before it published:
 
@@ -54,9 +79,10 @@ wrong, cut a new patch release.
 
 ## Test the installer without a release
 
-`scripts/install.test.sh` starts a throwaway HTTP server with a fake binary and
-checksum, then drives `scripts/install.sh` through `YUEKBOX_BASE_URL`. It covers
-the happy path, a checksum mismatch, platform refusal, and the release URLs:
+`scripts/install.test.sh` starts a throwaway HTTP server with fake binaries and
+checksums, then drives `scripts/install.sh` through `YUEKBOX_BASE_URL`. It covers
+the happy path, a checksum mismatch, platform selection (darwin-arm64 on
+Apple Silicon) and refusals (Intel Mac, Linux ARM), and the release URLs:
 
 ```sh
 sh scripts/install.test.sh
@@ -92,7 +118,7 @@ The installer downloads both files, verifies the checksum, and installs
 ## Manual test on a clean machine
 
 Run this once per packaging change. Use a Linux or WSL2 machine with an NVIDIA
-GPU, no Bun, and no checkout.
+GPU — or a Mac with Apple Silicon — with no Bun and no checkout.
 
 1. Install the latest release:
 
@@ -101,9 +127,11 @@ GPU, no Bun, and no checkout.
    ```
 
 2. Confirm `~/.local/bin/yuekbox` exists and is executable. The installer
-   printed no checksum error.
-3. Set up the runtime: `yuekbox --provision`. Needs the NVIDIA driver and
-   network access. It builds the one shared Python environment under `~/.yuekbox`.
+   printed no checksum error, and it installed the asset for that machine
+   (`yuekbox-linux-x64` or `yuekbox-darwin-arm64`).
+3. Set up the runtime: `yuekbox --provision`. Needs the NVIDIA driver (Linux)
+   or nothing but network (macOS), plus network access. It builds the Python
+   environment(s) under `~/.yuekbox` — one on Linux, two on macOS.
 4. Start the app: `yuekbox`. Open <http://127.0.0.1:3000>. `GET /v1/status`
    reports `ffmpeg` and `yue2`.
 5. Pin a version with `YUEKBOX_VERSION=v0.3.0` and confirm the same result.

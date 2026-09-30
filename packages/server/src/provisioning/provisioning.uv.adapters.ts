@@ -1,34 +1,40 @@
 import { existsSync } from "node:fs"
 import { mkdir, rename, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
+import { HostPlatform } from "../shared/platform"
 import { ProcessOutcome, ProcessRunner } from "../shared/process"
 import { describeError } from "../shared/describe"
 import { err, ok, Result } from "../shared/result"
 import { homeLayout } from "../shared/home"
-import { uvPin } from "./provisioning.packages"
+import { uvPinFor, uvPins } from "./provisioning.packages"
 import { DownloadFile, EnsureUv } from "./provisioning.ports"
+
+/** The one uv release both platform archives come from; bump them together. */
+const uvVersion = uvPins.linux.version
 
 export type EnsureUvEnv = Readonly<{
   home: string
   downloadFile: DownloadFile
   runProcess: ProcessRunner
+  /** Picks the pinned archive: the Linux target or the Apple Silicon one. */
+  platform: HostPlatform
 }>
 
 /** `<home>/tools/uv-<version>/uv`, the copy yuekbox owns. */
 export const managedUvPath = (home: string): string =>
-  join(homeLayout(home).tools, `uv-${uvPin.version}`, "uv")
+  join(homeLayout(home).tools, `uv-${uvVersion}`, "uv")
 
 /** `<home>/tools/uv-<version>.tar.gz`, kept beside the extracted copy. */
 export const uvArchivePath = (home: string): string =>
-  join(homeLayout(home).tools, `uv-${uvPin.version}.tar.gz`)
+  join(homeLayout(home).tools, `uv-${uvVersion}.tar.gz`)
 
 /** `<home>/tools/uv-<version>.json`, written only after a verified install. */
 export const uvStampPath = (home: string): string =>
-  join(homeLayout(home).tools, `uv-${uvPin.version}.json`)
+  join(homeLayout(home).tools, `uv-${uvVersion}.json`)
 
 /** Where an archive extracts before it is moved into place. */
 export const uvStagingPath = (home: string): string =>
-  join(homeLayout(home).tools, `uv-${uvPin.version}.staging`)
+  join(homeLayout(home).tools, `uv-${uvVersion}.staging`)
 
 /**
  * Fetches the pinned uv release into `<home>/tools/`. A uv found on PATH is
@@ -41,6 +47,7 @@ export const uvStagingPath = (home: string): string =>
  * rerun without it starts over.
  */
 export const makeEnsureUv = (env: EnsureUvEnv): EnsureUv => {
+  const pin = uvPinFor(env.platform)
   return async () => {
     const managed = managedUvPath(env.home)
     const stamp = uvStampPath(env.home)
@@ -49,13 +56,13 @@ export const makeEnsureUv = (env: EnsureUvEnv): EnsureUv => {
     }
 
     const tools = homeLayout(env.home).tools
-    const installDir = join(tools, `uv-${uvPin.version}`)
+    const installDir = join(tools, `uv-${pin.version}`)
     const staging = uvStagingPath(env.home)
     const archive = uvArchivePath(env.home)
     const downloaded = await env.downloadFile({
-      url: uvPin.archiveUrl,
+      url: pin.archiveUrl,
       destPath: archive,
-      sha256: uvPin.sha256,
+      sha256: pin.sha256,
     })
     if (!downloaded.ok) {
       return err({ kind: "uv_unavailable", detail: downloaded.error.detail })
@@ -106,14 +113,14 @@ export const makeEnsureUv = (env: EnsureUvEnv): EnsureUv => {
       await rm(staging, { recursive: true, force: true }).catch(() => undefined)
       return err({
         kind: "uv_unavailable",
-        detail: `the archive did not contain a uv binary under uv-${uvPin.version}`,
+        detail: `the archive did not contain a uv binary under uv-${pin.version}`,
       })
     }
 
     try {
       await rm(installDir, { recursive: true, force: true })
       await rename(staging, installDir)
-      await writeFile(stamp, `${JSON.stringify({ version: uvPin.version }, null, 2)}\n`, "utf8")
+      await writeFile(stamp, `${JSON.stringify({ version: pin.version }, null, 2)}\n`, "utf8")
     } catch (error: unknown) {
       return err({
         kind: "uv_unavailable",

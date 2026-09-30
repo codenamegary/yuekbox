@@ -94,9 +94,9 @@ export const modelRowViews = (
 
 /** A machine prerequisite that is missing, with its copy-paste fixes. */
 export type SystemIssue = Readonly<{
-  id: "ffmpeg" | "nvidia"
+  id: "ffmpeg" | "gpu"
   message: string
-  fix: Readonly<{ linux: string; wsl2: string }>
+  fix: Readonly<{ linux?: string; wsl2?: string; macos?: string }>
 }>
 
 /** The failed half of the system preflight, in report order. Informational only. */
@@ -104,12 +104,10 @@ export const systemIssues = (system: SystemReadiness | undefined): readonly Syst
   if (system === undefined) return []
   const checks = [
     { id: "ffmpeg" as const, check: system.ffmpeg },
-    { id: "nvidia" as const, check: system.nvidia },
+    { id: "gpu" as const, check: system.gpu },
   ]
   return checks.flatMap(({ id, check }) =>
-    check.state === "missing"
-      ? [{ id, message: check.message, fix: { linux: check.fix.linux, wsl2: check.fix.wsl2 } }]
-      : [],
+    check.state === "missing" ? [{ id, message: check.message, fix: check.fix }] : [],
   )
 }
 

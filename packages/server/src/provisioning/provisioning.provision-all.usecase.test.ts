@@ -2,7 +2,13 @@ import { expect, test } from "bun:test"
 import { join } from "node:path"
 import { err, ok } from "../shared/result"
 import { ProvisionProgress, UvTool, VenvRequest } from "./provisioning.models"
-import { pypiIndexUrl, venvFingerprint, venvPin } from "./provisioning.packages"
+import {
+  pypiIndexUrl,
+  torchWheelIndexUrl,
+  uvPinFor,
+  venvFingerprint,
+  venvPinsFor,
+} from "./provisioning.packages"
 import {
   EnsurePython,
   EnsureUv,
@@ -15,6 +21,11 @@ import { makeProvisionAll } from "./provisioning.provision-all.usecase"
 const home = "/home/u/.yuekbox"
 const uvTool: UvTool = { path: "/usr/local/bin/uv" }
 const gpuOk: ReadGpuFacts = async () => ({ kind: "nvidia", driverVersion: "616.56" })
+const macOk: ReadGpuFacts = async () => ({
+  kind: "apple-silicon",
+  memoryBytes: 36 * 1024 ** 3,
+  macosVersion: "15.5",
+})
 
 type Stubs = Readonly<{
   ensureUv?: EnsureUv
@@ -22,6 +33,7 @@ type Stubs = Readonly<{
   readGpuFacts?: ReadGpuFacts
   ensureVenv?: EnsureVenv
   installScripts?: InstallScripts
+  unifiedMemoryFloorBytes?: number
 }>
 
 type Harness = Readonly<{
@@ -60,7 +72,7 @@ const harness = (stubs: Stubs = {}): Harness => {
     ensureVenv:
       stubs.ensureVenv ??
       (async (_uv, request) => {
-        calls.push("environment")
+        calls.push(`venv:${request.name}`)
         venvs.push(request)
         return ok({ status: "installed" })
       }),
@@ -71,13 +83,14 @@ const harness = (stubs: Stubs = {}): Harness => {
         scriptDirs.push(dir)
         return ok({ scriptsDir: dir, files: Object.freeze(["generate.py"]) })
       }),
+    unifiedMemoryFloorBytes: stubs.unifiedMemoryFloorBytes,
   })
 
   return { calls, venvs, scriptDirs, progress, provisionAll }
 }
 
-const run = async (state: Harness) =>
-  state.provisionAll({ home, onProgress: (event) => state.progress.push(event) })
+const run = async (state: Harness, platform: "linux" | "macos" = "linux") =>
+  state.provisionAll({ home, platform, onProgress: (event) => state.progress.push(event) })
 
 test("runs every piece in order and reports one completed step each", async () => {
   const state = harness()
@@ -86,16 +99,16 @@ test("runs every piece in order and reports one completed step each", async () =
 
   expect(result.ok).toBe(true)
   if (!result.ok) return
-  expect(state.calls).toEqual(["uv", "python", "gpu", "environment", "scripts"])
+  expect(state.calls).toEqual(["uv", "python", "gpu", "venv:python", "scripts"])
   expect(result.value.home).toBe(home)
-  expect(result.value.steps.map((step) => step.step)).toEqual([
-    "uv",
-    "python",
-    "gpu",
-    "environment",
-    "scripts",
+  expect(result.value.steps.map((step) => `${step.step}:${step.status}`)).toEqual([
+    "uv:completed",
+    "python:completed",
+    "gpu:completed",
+    "environment:completed",
+    "align:skipped",
+    "scripts:completed",
   ])
-  expect(result.value.steps.every((step) => step.status === "completed")).toBe(true)
 })
 
 test("emits a started event before each piece and a final status after it", async () => {
@@ -112,11 +125,12 @@ test("emits a started event before each piece and a final status after it", asyn
     "gpu:completed",
     "environment:started",
     "environment:completed",
+    "align:started",
+    "align:skipped",
     "scripts:started",
     "scripts:completed",
   ])
   expect(state.progress[0]?.label).toBe("Setting up yuekbox tools")
-  expect(state.progress[1]?.label).toBe("Setting up yuekbox tools")
 })
 
 test("installer output streams through the progress channel as it arrives", async () => {
@@ -159,21 +173,55 @@ test("builds exactly one shared venv under <home>/venvs with the manifest pin", 
 
   await run(state)
 
-  expect(state.venvs).toHaveLength(1)
   const request = state.venvs[0]
   if (request === undefined) throw new Error("no venv request")
+  const [pin] = venvPinsFor("linux", torchWheelIndexUrl)
+  if (pin === undefined) throw new Error("no linux pin")
   expect(request.dir).toBe(join(home, "venvs/python"))
-  expect(request.name).toBe(venvPin.name)
-  expect(request.pythonVersion).toBe(venvPin.python)
-  expect(request.packages).toEqual(venvPin.packages)
+  expect(request.name).toBe(pin.name)
+  expect(request.pythonVersion).toBe(pin.python)
+  expect(request.packages).toEqual(pin.packages)
   expect(request.indexUrl).toBe(pypiIndexUrl)
-  expect(request.extraIndexUrl).toBe("https://download.pytorch.org/whl/cu128")
-  expect(request.indexStrategy).toBe(venvPin.indexStrategy)
+  expect(request.extraIndexUrl).toBe(torchWheelIndexUrl)
+  expect(request.indexStrategy).toBe(pin.indexStrategy)
   expect(request.fingerprint.length).toBeGreaterThan(0)
-  expect(request.fingerprint).toBe(
-    venvFingerprint({ ...venvPin, extraIndexUrl: "https://download.pytorch.org/whl/cu128" }),
-  )
+  expect(request.fingerprint).toBe(venvFingerprint({ ...pin, extraIndexUrl: torchWheelIndexUrl }))
   expect(state.scriptDirs).toEqual([join(home, "scripts")])
+})
+
+test("macOS builds the MLX environment and the align environment, in order", async () => {
+  const state = harness({ readGpuFacts: macOk })
+
+  const result = await run(state, "macos")
+
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.value.steps.map((step) => `${step.step}:${step.status}`)).toEqual([
+    "uv:completed",
+    "python:completed",
+    "gpu:completed",
+    "environment:completed",
+    "align:completed",
+    "scripts:completed",
+  ])
+  expect(state.venvs).toHaveLength(2)
+
+  const generation = state.venvs[0]
+  const align = state.venvs[1]
+  if (generation === undefined || align === undefined) throw new Error("missing venv requests")
+  const [generationPin, alignPin] = venvPinsFor("macos", null)
+  if (generationPin === undefined || alignPin === undefined) throw new Error("missing mac pins")
+
+  expect(generation.dir).toBe(join(home, "venvs/python"))
+  expect(generation.name).toBe(generationPin.name)
+  expect(generation.packages).toEqual(generationPin.packages)
+  expect(generation.extraIndexUrl).toBeNull()
+  expect(generation.fingerprint).toBe(venvFingerprint(generationPin))
+
+  expect(align.dir).toBe(join(home, "venvs/align"))
+  expect(align.name).toBe(alignPin.name)
+  expect(align.packages).toEqual(alignPin.packages)
+  expect(align.extraIndexUrl).toBeNull()
 })
 
 test("a uv failure stops the run before anything else", async () => {
@@ -213,6 +261,51 @@ test("a graphics failure stops the run before any venv is built", async () => {
   expect(result.error.foundDriverVersion).toBe("470.82")
   expect(result.error.minimumDriverVersion).toBe("525.60.13")
   expect(state.calls).toEqual(["uv", "python"])
+})
+
+test("a Mac below the memory floor stops before any venv is built", async () => {
+  const state = harness({
+    readGpuFacts: async () => ({
+      kind: "apple-silicon",
+      memoryBytes: 8 * 1024 ** 3,
+      macosVersion: "15.5",
+    }),
+  })
+
+  const result = await run(state, "macos")
+
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error.step).toBe("gpu")
+  expect(result.error.kind).toBe("gpu_memory_low")
+  expect(result.error.foundAmount).toBe("8 GiB")
+  expect(result.error.minimumAmount).toBe("16 GiB")
+  expect(state.venvs).toHaveLength(0)
+})
+
+test("a lowered memory floor lets a small hosted Mac provision", async () => {
+  const state = harness({
+    readGpuFacts: async () => ({
+      kind: "apple-silicon",
+      memoryBytes: 7 * 1024 ** 3,
+      macosVersion: "14.6",
+    }),
+    unifiedMemoryFloorBytes: 4 * 1024 ** 3,
+  })
+
+  const result = await run(state, "macos")
+
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.value.steps.map((step) => `${step.step}:${step.status}`)).toEqual([
+    "uv:completed",
+    "python:completed",
+    "gpu:completed",
+    "environment:completed",
+    "align:completed",
+    "scripts:completed",
+  ])
+  expect(state.venvs.map((venv) => venv.name)).toEqual(["python", "align"])
 })
 
 test("a venv failure names the shared environment and stops the later pieces", async () => {
@@ -270,9 +363,15 @@ test("completed pieces report skipped on a rerun", async () => {
     "python:skipped",
     "gpu:completed",
     "environment:skipped",
+    "align:skipped",
     "scripts:completed",
   ])
-  expect(state.progress.filter((event) => event.status === "skipped")).toHaveLength(2)
+  expect(state.progress.filter((event) => event.status === "skipped")).toHaveLength(3)
+})
+
+test("the uv pin the run fetched matches the platform's archive", async () => {
+  expect(uvPinFor("linux").target).toBe("x86_64-unknown-linux-gnu")
+  expect(uvPinFor("macos").target).toBe("aarch64-apple-darwin")
 })
 
 test("the return type carries the same steps as the progress stream", async () => {

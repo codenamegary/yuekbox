@@ -31,6 +31,7 @@ const argsEnv: Sheetsage2ArgsEnv = {
   baseModel: "/kit/models/MERT-v2-FullSong",
   device: "cuda",
   offline: true,
+  backend: "torch",
 }
 
 const env: Sheetsage2AdapterEnv = {
@@ -39,6 +40,7 @@ const env: Sheetsage2AdapterEnv = {
   device: "cuda",
   offline: true,
   cwd: "/kit",
+  backend: "torch",
   readModelPaths: async () => modelPaths,
 }
 

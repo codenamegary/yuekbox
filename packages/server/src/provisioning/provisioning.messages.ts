@@ -13,7 +13,7 @@ export const provisionFailureMessage = (failure: ProvisionFailure): string => {
     case "python_unavailable":
       return `yuekbox could not install the song engine. ${retry}`
     case "gpu_missing":
-      return "yuekbox needs an NVIDIA graphics card and its driver to make songs. Install the driver for your card, then try again."
+      return "yuekbox could not find a GPU it can use to make songs. On Linux and WSL2 yuekbox needs an NVIDIA graphics card and its driver; on macOS it needs an Apple Silicon Mac (M1 or newer). Install the driver for your card, then try again."
     case "gpu_driver_too_old": {
       const found = failure.foundDriverVersion ?? "an older version"
       const minimum = failure.minimumDriverVersion ?? "a newer version"
@@ -21,6 +21,16 @@ export const provisionFailureMessage = (failure: ProvisionFailure): string => {
     }
     case "gpu_unreadable":
       return "yuekbox could not check your graphics driver. Install the latest NVIDIA driver for your card, then try again."
+    case "gpu_memory_low": {
+      const found = failure.foundAmount ?? "less memory"
+      const minimum = failure.minimumAmount ?? "more memory"
+      return `This Mac has ${found} of unified memory and yuekbox needs ${minimum} to make songs. Use a Mac with more memory, then try again.`
+    }
+    case "macos_too_old": {
+      const found = failure.foundAmount ?? "an older macOS"
+      const minimum = failure.minimumAmount ?? "a newer macOS"
+      return `yuekbox needs macOS ${minimum} or newer: this Mac has ${found}. Update macOS, then try again.`
+    }
     case "venv_failed":
       return `yuekbox could not finish ${lowercaseFirst(failure.label)}. ${retry}`
     case "scripts_failed":

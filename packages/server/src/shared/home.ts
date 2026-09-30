@@ -47,6 +47,15 @@ export const modelDirectoryNames = Object.freeze({
   whisper: "whisper-large-v3-turbo",
 })
 
+/**
+ * The second macOS environment, where the lyric aligner runs. Linux shares
+ * its one environment, so there this is the same interpreter as every other
+ * pass; on macOS it is the torch-based align environment.
+ */
+export const alignVenvPath = (home: string): string => join(homeLayout(home).venvs, "align")
+
+export const alignPythonPath = (home: string): string => join(alignVenvPath(home), "bin", "python")
+
 /** Our generate entrypoint, installed by the script installer. */
 export const generateScriptPath = (home: string): string =>
   join(homeLayout(home).scripts, "generate.py")

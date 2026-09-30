@@ -2,7 +2,7 @@ import { ModelReadiness, Readiness } from "contracts/http/readiness"
 import { ReadCurrentModelPaths } from "../config/config.current"
 import { ModelReadinessKey } from "./readiness.models"
 import { CheckFfmpeg, MeasureModelSize, ReadGpuFacts } from "./readiness.ports"
-import { ffmpegCheck, nvidiaCheck } from "./readiness.preflight"
+import { ffmpegCheck, gpuCheck } from "./readiness.preflight"
 
 export type ReadReadinessDeps = Readonly<{
   /** Resolved per read, so a saved path takes effect with no restart. */
@@ -12,6 +12,8 @@ export type ReadReadinessDeps = Readonly<{
   measureModelSize: MeasureModelSize
   checkFfmpeg: CheckFfmpeg
   readGpuFacts: ReadGpuFacts
+  /** CI and bench runs lower the 16 GiB Mac floor; unset means the documented floor. */
+  unifiedMemoryFloorBytes?: number
 }>
 
 /**
@@ -43,7 +45,7 @@ export const makeReadReadiness = (deps: ReadReadinessDeps) => async (): Promise<
     models: { yue2, yue2Vae, sheetsage2, sheetsage2Base, whisper },
     system: {
       ffmpeg: ffmpegCheck(ffmpegAvailable),
-      nvidia: nvidiaCheck(gpuFacts),
+      gpu: gpuCheck(gpuFacts, deps.unifiedMemoryFloorBytes),
     },
   }
 }

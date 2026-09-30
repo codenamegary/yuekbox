@@ -25,16 +25,27 @@ export const ModelsReadinessSchema = z.strictObject({
 })
 export type ModelsReadiness = z.infer<typeof ModelsReadinessSchema>
 
-/** The copy-paste install instructions a failed machine check carries. */
-export const SystemFixSchema = z.strictObject({
-  linux: z.string().min(1),
-  wsl2: z.string().min(1),
-})
+/**
+ * The copy-paste install instructions a failed machine check carries, per
+ * platform. A check carries only the platforms its fix applies to, and at
+ * least one.
+ */
+export const SystemFixSchema = z
+  .strictObject({
+    linux: z.string().min(1).optional(),
+    wsl2: z.string().min(1).optional(),
+    macos: z.string().min(1).optional(),
+  })
+  .refine(
+    (fix) => fix.linux !== undefined || fix.wsl2 !== undefined || fix.macos !== undefined,
+    "a fix names at least one platform",
+  )
 export type SystemFix = z.infer<typeof SystemFixSchema>
 
 /**
  * A machine prerequisite. Informational only: a failure carries a short
- * message and the install instruction for Linux and WSL2, never a config row.
+ * message and the install instruction for the machines it applies to, never
+ * a config row.
  */
 export const SystemCheckSchema = z.discriminatedUnion("state", [
   z.strictObject({ state: z.literal("ready") }),
@@ -48,7 +59,8 @@ export type SystemCheck = z.infer<typeof SystemCheckSchema>
 
 export const SystemReadinessSchema = z.strictObject({
   ffmpeg: SystemCheckSchema,
-  nvidia: SystemCheckSchema,
+  /** The GPU the machine needs: NVIDIA on Linux and WSL2, Apple Silicon on macOS. */
+  gpu: SystemCheckSchema,
 })
 export type SystemReadiness = z.infer<typeof SystemReadinessSchema>
 

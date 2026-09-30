@@ -27,6 +27,10 @@ fi
 bin="$(cd "$(dirname "$bin_input")" && pwd)/$(basename "$bin_input")"
 
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/yuekbox-smoke.XXXXXX")"
+# Canonicalize before any path is compared against binary output: macOS sets
+# TMPDIR with a trailing slash, so `$scratch` would carry a `//` the binary's
+# printed paths never have (and `pwd -P` also clears symlinks like /tmp).
+scratch="$(cd "$scratch" && pwd -P)"
 # Run a copy from the scratch dir so the test proves the artifact is
 # self-contained: no source tree, no node_modules, nothing beside it.
 cp "$bin" "$scratch/yuekbox"

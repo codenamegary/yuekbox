@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test"
-import { evaluateGpu, minimumTorchDriverVersion } from "./provisioning.gpu"
+import {
+  evaluateGpu,
+  evaluateMachine,
+  evaluateMacHardware,
+  minimumMacosVersion,
+  minimumTorchDriverVersion,
+  minimumUnifiedMemoryBytes,
+  unifiedMemoryFloorOverrideBytes,
+} from "./provisioning.gpu"
 
 test("a driver at the CUDA 12 floor passes and chooses the CUDA 12.8 wheels", () => {
   const result = evaluateGpu({ kind: "nvidia", driverVersion: minimumTorchDriverVersion })
@@ -74,4 +82,107 @@ test("a four-part driver version still compares numerically", () => {
   const result = evaluateGpu({ kind: "nvidia", driverVersion: "525.60.13.1" })
 
   expect(result.ok).toBe(true)
+})
+
+const macFacts = (overrides: Partial<{ memoryBytes: number; macosVersion: string }> = {}) => ({
+  kind: "apple-silicon" as const,
+  memoryBytes: 36 * 1024 ** 3,
+  macosVersion: "15.5",
+  ...overrides,
+})
+
+test("an Apple Silicon Mac at the memory floor passes with the MLX budget", () => {
+  const result = evaluateMacHardware(macFacts({ memoryBytes: minimumUnifiedMemoryBytes }))
+
+  expect(result).toEqual({ ok: true, value: { memoryBudgetGiB: 16 } })
+})
+
+test("a Mac below the unified memory floor fails and names both amounts", () => {
+  const result = evaluateMacHardware(macFacts({ memoryBytes: 8 * 1024 ** 3 }))
+
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error.kind).toBe("gpu_memory_low")
+  expect(result.error.foundAmount).toBe("8 GiB")
+  expect(result.error.minimumAmount).toBe("16 GiB")
+})
+
+test("a Mac below the macOS floor fails", () => {
+  const result = evaluateMacHardware(macFacts({ macosVersion: "14.1" }))
+
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error.kind).toBe("macos_too_old")
+  expect(result.error.foundAmount).toBe("14.1")
+  expect(result.error.minimumAmount).toBe(minimumMacosVersion)
+})
+
+test("the macOS floor itself passes and patch versions are ignored for the floor", () => {
+  expect(evaluateMacHardware(macFacts({ macosVersion: "14.2" })).ok).toBe(true)
+  expect(evaluateMacHardware(macFacts({ macosVersion: "14.2.1" })).ok).toBe(true)
+})
+
+test("an unparseable macOS version or memory size fails as unreadable", () => {
+  const version = evaluateMacHardware(macFacts({ macosVersion: "Tahoe" }))
+  expect(version.ok).toBe(false)
+  if (!version.ok) expect(version.error.kind).toBe("gpu_unreadable")
+
+  const memory = evaluateMacHardware(macFacts({ memoryBytes: Number.NaN }))
+  expect(memory.ok).toBe(false)
+  if (!memory.ok) expect(memory.error.kind).toBe("gpu_unreadable")
+})
+
+test("the machine check dispatches each platform's facts to its own evaluator", () => {
+  const cuda = evaluateMachine({ kind: "nvidia", driverVersion: minimumTorchDriverVersion })
+  expect(cuda).toEqual({
+    ok: true,
+    value: { kind: "cuda", indexUrl: "https://download.pytorch.org/whl/cu128" },
+  })
+
+  const mlx = evaluateMachine(macFacts())
+  expect(mlx).toEqual({ ok: true, value: { kind: "mlx", memoryBudgetGiB: 16 } })
+
+  const absent = evaluateMachine({ kind: "absent", detail: "no probe" })
+  expect(absent).toEqual({ ok: false, error: { kind: "gpu_missing", detail: "no probe" } })
+})
+
+test("a lowered memory floor lets a small Mac pass and forwards through the dispatch", () => {
+  const floor = unifiedMemoryFloorOverrideBytes({ YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB: "4" })
+  if (floor === undefined) throw new Error("the parser should accept a plain 4")
+
+  const result = evaluateMacHardware(macFacts({ memoryBytes: 7 * 1024 ** 3 }), floor)
+
+  expect(result).toEqual({ ok: true, value: { memoryBudgetGiB: 16 } })
+  expect(evaluateMachine(macFacts({ memoryBytes: 7 * 1024 ** 3 }), 4 * 1024 ** 3)).toEqual({
+    ok: true,
+    value: { kind: "mlx", memoryBudgetGiB: 16 },
+  })
+})
+
+test("a lowered floor still refuses a Mac below it, naming the effective floor", () => {
+  const result = evaluateMacHardware(macFacts({ memoryBytes: 3 * 1024 ** 3 }), 4 * 1024 ** 3)
+
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error.kind).toBe("gpu_memory_low")
+  expect(result.error.foundAmount).toBe("3 GiB")
+  expect(result.error.minimumAmount).toBe("4 GiB")
+})
+
+test("the floor override parses a plain integer GiB value and ignores everything else", () => {
+  expect(unifiedMemoryFloorOverrideBytes({ YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB: "4" })).toBe(
+    4 * 1024 ** 3,
+  )
+  expect(unifiedMemoryFloorOverrideBytes({ YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB: " 8 " })).toBe(
+    8 * 1024 ** 3,
+  )
+  expect(unifiedMemoryFloorOverrideBytes({})).toBeUndefined()
+  expect(unifiedMemoryFloorOverrideBytes({ YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB: "" })).toBeUndefined()
+  expect(
+    unifiedMemoryFloorOverrideBytes({ YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB: "abc" }),
+  ).toBeUndefined()
+  expect(unifiedMemoryFloorOverrideBytes({ YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB: "0" })).toBeUndefined()
+  expect(
+    unifiedMemoryFloorOverrideBytes({ YUEKBOX_UNIFIED_MEMORY_FLOOR_GIB: "-2" }),
+  ).toBeUndefined()
 })

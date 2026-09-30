@@ -1,3 +1,4 @@
+import { HostPlatform } from "../shared/platform"
 import { Result } from "../shared/result"
 import {
   DownloadedFile,
@@ -55,7 +56,7 @@ export type EnsureVenv = (
   onOutput?: OutputSink,
 ) => Promise<Result<VenvState, VenvFailure>>
 
-/** Probes the machine for an NVIDIA driver. Never throws. */
+/** Probes the machine for the GPU facts its platform carries. Never throws. */
 export type ReadGpuFacts = () => Promise<GpuFacts>
 
 /**
@@ -68,6 +69,8 @@ export type DownloadFile = (
 
 export type ProvisionAllInput = Readonly<{
   home: string
+  /** The host platform: it decides the machine check and the environments. */
+  platform: HostPlatform
   onProgress?: (event: ProvisionProgress) => void
 }>
 

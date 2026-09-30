@@ -3,11 +3,26 @@
 # bd90e4ccae671d869b3ecaca6d7e893927d29442, skills/yue2-music/scripts/transcribe.py.
 # Apache-2.0; see the upstream LICENSE. Vendored verbatim: yuekbox owns this copy
 # and its contract. Installed flat beside abc_tools.py and common.py.
-"""Transcribe audio to native ABC using SheetSage2's Transformers interface."""
+"""Transcribe audio to native ABC using SheetSage2.
+
+Backends (--backend):
+
+    torch  SheetSage2's Transformers interface on CUDA (Linux, WSL2). Default.
+           The model and its remote code load straight from the model folder.
+    mlx    the native MLX SheetSage2/MERT2 engine from the pinned mlx-yue
+           runtime (Apple Silicon). Same task names, same window presets,
+           and the same exported artifacts (score.abc plus the .lab files);
+           only the engine and the loader differ. `--device` does not apply.
+
+Bench mode: with YUEKBOX_BENCH=1 in the environment this script skips every
+model import and writes the same artifacts from canned rows — a CI bench on
+small hosted hardware verifies the plumbing, not the transcription.
+"""
 
 import argparse
 import importlib.metadata
 import inspect
+import os
 import sys
 from pathlib import Path
 
@@ -15,7 +30,87 @@ from abc_tools import parse_abc, report
 from common import fresh_directory, sha256, write_json
 
 
+def transcribe_mlx(args, output, prompts, melody_only):
+    """The Apple Silicon path: the pinned lyra engine, local weights only."""
+    from lyra.transcription import transcribe
+
+    result = transcribe(
+        args.audio,
+        output,
+        model_path=args.model,
+        base_model=args.base_model,
+        offline=args.offline,
+        task=args.task,
+        preset=args.preset,
+        max_seconds=args.max_seconds,
+    )
+    if result.get("abc_error") or not result.get("abc"):
+        raise ValueError(f"Transcription produced no usable ABC: {result.get('abc_error')}")
+    score = parse_abc(result["abc"])
+    if melody_only and any(v.chords for v in score.voices.values()):
+        raise ValueError("Melody transcription contains unexpected chord symbols")
+    write_json(output / "abc_check.json", {"status": "passed", "score": report(score),
+               "scope": "symbolic format; transcription accuracy still needs review"})
+    write_json(output / "transcription_manifest.json", {
+        "status": "complete", "warnings": result.get("warnings", []),
+        "backend": "mlx", "model": result.get("model"),
+        "source_audio_sha256": result.get("source_audio_sha256"),
+        "truncated": result.get("truncated", False),
+    })
+    print(f"Saved {output / 'score.abc'}; warnings: {result.get('warnings', [])}")
+
+
+BENCH_ABC = """X:1
+T:yuekbox bench reference
+C:yuekbox bench mode
+M:4/4
+L:1/8
+Q:1/4=100
+K:C
+"C"CDEF "G"G2zz | "Am"A2B2 "F"c2zz |
+"""
+
+
+def bench_duration_seconds(audio: Path) -> float:
+    import subprocess
+
+    try:
+        probed = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(audio)],
+            check=True, capture_output=True, text=True,
+        )
+        return max(1.0, float(probed.stdout.strip()))
+    except Exception:
+        return 8.0
+
+
+def bench_run(args) -> int:
+    output = fresh_directory(args.output)
+    duration = bench_duration_seconds(Path(args.audio))
+    if args.task == "melody-vocal":
+        notes, beats = [], []
+        pitches = (60, 64, 67, 65)
+        second, position = 0.0, 1
+        while second + 1.0 <= duration:
+            notes.append(f"{second:.3f} {second + 0.75:.3f} {pitches[len(notes) % 4]}")
+            beats.append(f"{second:.3f} {position} 4 4")
+            second += 1.0
+            position = position % 4 + 1
+        (output / "melody_vocal.lab").write_text("\n".join(notes) + "\n", encoding="utf-8")
+        (output / "beat.lab").write_text("\n".join(beats) + "\n", encoding="utf-8")
+        (output / "structure.lab").write_text(
+            f"0.000 {duration / 2:.3f} verse\n{duration / 2:.3f} {duration:.3f} chorus\n",
+            encoding="utf-8",
+        )
+    else:
+        (output / "score.abc").write_text(BENCH_ABC, encoding="utf-8")
+    print(f"[bench] wrote {args.task} artifacts to {output}")
+    return 0
+
+
 def run(args):
+    if os.environ.get("YUEKBOX_BENCH") == "1":
+        return bench_run(args)
     if not args.audio.is_file():
         raise FileNotFoundError(args.audio)
     if args.max_seconds is not None and args.max_seconds <= 0:
@@ -32,9 +127,12 @@ def run(args):
         "model": args.model, "revision": args.revision, "offline": args.offline,
         "base_model_path": args.base_model, "prompts": prompts, "melody_only": melody_only,
         "preset": args.preset, "max_seconds": args.max_seconds,
-        "device": args.device, "dtype": args.dtype,
+        "device": args.device, "dtype": args.dtype, "backend": args.backend,
     })
     try:
+        if args.backend == "mlx":
+            transcribe_mlx(args, output, prompts, melody_only)
+            return
         import torch
         from transformers import AutoModel
 
@@ -106,6 +204,7 @@ def main():
     parser.add_argument("--preset", choices=("default", "paper"), default="default")
     parser.add_argument("--max-seconds", type=float, help="Explicitly crop audio; omitted means process the whole input")
     parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument("--backend", choices=("torch", "mlx"), default="torch")
     args = parser.parse_args()
     try:
         run(args)
