@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.0](https://github.com/codenamegary/yuekbox/compare/v0.3.3...v0.4.0) (2026-09-30)
+
+
+### Features
+
+* **cli:** add start, stop, status, and uninstall to the binary ([#91](https://github.com/codenamegary/yuekbox/issues/91)) ([ef1abab](https://github.com/codenamegary/yuekbox/commit/ef1ababf8143645ea2c3c4902e61f67883696125))
+* run on Apple Silicon macOS via MLX ([#92](https://github.com/codenamegary/yuekbox/issues/92)) ([06dc5ef](https://github.com/codenamegary/yuekbox/commit/06dc5efae6efcb24db47dae004112440e244f703))
+* **server:** stream live install activity during --provision ([#89](https://github.com/codenamegary/yuekbox/issues/89)) ([993d593](https://github.com/codenamegary/yuekbox/commit/993d593490cc827796e1fffa4e33c632f948ae85)), closes [#84](https://github.com/codenamegary/yuekbox/issues/84)
+
 ## [0.3.3](https://github.com/codenamegary/yuekbox/compare/v0.3.2...v0.3.3) (2026-09-27)
 
 
