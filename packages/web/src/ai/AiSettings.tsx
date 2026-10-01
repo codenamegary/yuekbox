@@ -26,8 +26,8 @@ type ScopeDraft = Readonly<{ baseUrl: string | null; apiKey: string | null }>
 type ScopeDrafts = Readonly<Record<WriterScope, ScopeDraft>>
 
 const untouched: ScopeDrafts = {
-  style: { baseUrl: null, apiKey: null },
   lyrics: { baseUrl: null, apiKey: null },
+  style: { baseUrl: null, apiKey: null },
   visuals: { baseUrl: null, apiKey: null },
 }
 
@@ -207,11 +207,11 @@ const SettingEditor: React.FC<SettingEditorProps> = ({
 
 type WriterPatch = Partial<Omit<Setting, "keyHint">> & { apiKey?: string }
 
-const writerScopes: readonly WriterScope[] = ["style", "lyrics", "visuals"]
+const writerScopes: readonly WriterScope[] = ["lyrics", "style", "visuals"]
 
 const writerTitles: Readonly<Record<WriterScope, string>> = {
-  style: "Style",
   lyrics: "Lyrics",
+  style: "Style",
   visuals: "Visuals",
 }
 
