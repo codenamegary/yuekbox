@@ -97,7 +97,7 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine }) => {
   const title = song === null ? "Nothing on the turntable" : song.title
 
   return (
-    <div className="cabinet fixed top-6 left-6 z-20 flex w-[min(24rem,calc(100vw-3rem))] items-center gap-4 rounded-2xl p-3 pr-5 pointer-events-auto">
+    <div className="panel fixed top-6 left-6 z-20 flex w-[min(24rem,calc(100vw-3rem))] items-center gap-4 rounded-2xl p-3 pr-5 pointer-events-auto">
       <button
         type="button"
         onClick={toggle}
@@ -105,9 +105,7 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine }) => {
         aria-label={playing ? "Pause" : "Play"}
         title={playing ? "Pause" : "Play"}
         className={cn(
-          "inline-flex size-14 shrink-0 items-center justify-center rounded-full text-ivory transition-[transform,background] duration-150",
-          "bg-[radial-gradient(circle_at_35%_30%,var(--color-cherry-bright),var(--color-cherry)_60%,#8f241d)]",
-          "shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_3px_0_rgba(0,0,0,0.5)] active:translate-y-px",
+          "btn-orange inline-flex size-14 shrink-0 items-center justify-center rounded-full",
           "disabled:cursor-not-allowed disabled:opacity-40",
         )}
       >
@@ -123,7 +121,7 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine }) => {
           <p
             className={cn(
               "truncate text-base font-semibold",
-              song === null ? "text-dim" : "text-ivory",
+              song === null ? "text-dim" : "text-snow",
             )}
             title={title}
           >
@@ -154,13 +152,13 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine }) => {
           }}
           className="group relative mt-2 flex h-5 w-full cursor-pointer touch-none select-none items-center"
         >
-          <span className="relative h-1.5 w-full overflow-hidden rounded-full bg-cabinet-sunken shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]">
-            <span ref={fillRef} className="block h-full w-0 rounded-full bg-amber" />
+          <span className="relative h-1.5 w-full overflow-hidden rounded-full bg-ink inset-shadow-well">
+            <span ref={fillRef} className="block h-full w-0 rounded-full bg-orange" />
           </span>
           <span
             ref={thumbRef}
             className={cn(
-              "pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-cabinet bg-amber-soft transition-opacity",
+              "pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-panel bg-orange-soft transition-opacity",
               scrubbing
                 ? "opacity-100"
                 : "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",

@@ -47,21 +47,15 @@ export const MissingModelDialog: React.FC<MissingModelDialogProps> = ({ models, 
       aria-label={title}
       className="fixed inset-0 z-[65] flex items-center justify-center p-4 sm:p-6"
     >
-      <div className="absolute inset-0 bg-cabinet-sunken/80 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-ink/80 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="cabinet panel-rise relative max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-3xl p-6 sm:p-8">
-        <p
-          className={cn(
-            "font-display text-2xl leading-none font-extrabold tracking-wide uppercase",
-            allReady ? "text-amber" : "text-alarm",
-          )}
-        >
-          {allReady ? "Ready to generate" : "Out of order"}
-        </p>
-        <h2 className="mt-3 text-2xl font-semibold text-ivory">{title}</h2>
+      <div className="panel panel-rise relative max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-3xl p-6 sm:p-8">
+        <h2 className={cn("text-2xl font-semibold", allReady ? "text-orange" : "text-snow")}>
+          {title}
+        </h2>
         {allReady ? null : <p className="mt-2 text-base text-dim">{blockedDetail(models)}</p>}
 
-        <div className="mt-4 border-t border-cabinet-line">
+        <div className="mt-4 border-t border-line">
           <ModelRows keys={keys} externalPaths={refused} />
         </div>
 

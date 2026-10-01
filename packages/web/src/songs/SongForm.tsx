@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn"
 import { Button } from "@/components/ui/Button"
 import { Label } from "@/components/ui/Label"
 import { Textarea } from "@/components/ui/Textarea"
+import { Wordmark } from "@/components/ui/Wordmark"
 import { blockedModelsFromError } from "@/models/models.problems"
 import { useCreateSongMutation, useUploadReferenceMutation } from "./songs.mutations"
 import { stageLabels, stageOrderFor, stageProgressPercent } from "./songs.stages"
@@ -65,7 +66,7 @@ const StageMeter: React.FC<StageMeterProps> = ({ song, stages, queueDepth }) => 
 
   return (
     <div className="min-w-0 space-y-2" role="status">
-      <p className="truncate text-base text-ivory">
+      <p className="truncate text-base text-snow">
         {caption}
         {percent !== null ? (
           <span className="ml-2 font-mono text-dim tabular-nums">{Math.round(percent)}%</span>
@@ -76,13 +77,13 @@ const StageMeter: React.FC<StageMeterProps> = ({ song, stages, queueDepth }) => 
           <span
             key={stage}
             title={stageLabels[stage]}
-            className="relative h-2 flex-1 overflow-hidden rounded-full bg-cabinet-sunken shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]"
+            className="relative h-2 flex-1 overflow-hidden rounded-full bg-ink inset-shadow-well"
           >
-            {index < stageIndex ? <span className="absolute inset-0 bg-amber" /> : null}
+            {index < stageIndex ? <span className="absolute inset-0 bg-orange" /> : null}
             {index === stageIndex ? (
               <span
                 className={cn(
-                  "absolute inset-y-0 left-0 bg-amber transition-[width] duration-700 ease-out",
+                  "absolute inset-y-0 left-0 bg-orange transition-[width] duration-700 ease-out",
                   percent === null && "pending-breathe",
                 )}
                 style={{ width: `${percent ?? 100}%` }}
@@ -108,8 +109,8 @@ const EnhanceButton: React.FC<EnhanceButtonProps> = ({ kind, pending, disabled, 
     onClick={() => onEnhance(kind)}
     disabled={disabled}
     className={cn(
-      "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-base font-medium text-amber transition-colors",
-      "hover:bg-cabinet-raised hover:text-amber-soft disabled:cursor-wait disabled:opacity-50",
+      "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-base font-medium text-orange transition-colors",
+      "hover:bg-panel-raised hover:text-orange-soft disabled:cursor-wait disabled:opacity-50",
       pending && "pending-breathe",
     )}
     title={
@@ -208,20 +209,12 @@ export const SongForm: React.FC<SongFormProps> = ({
   return (
     <section
       aria-labelledby="request-title"
-      className="cabinet panel-rise mx-auto w-full max-w-5xl rounded-3xl p-6 pointer-events-auto sm:p-8"
+      className="panel panel-rise mx-auto w-full max-w-5xl overflow-hidden rounded-3xl pointer-events-auto"
     >
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1
-            id="request-title"
-            className="font-display text-6xl leading-[0.85] font-black tracking-tight text-amber uppercase"
-          >
-            Yuekbox
-          </h1>
-          <p className="mt-2 text-base text-dim">
-            The jukebox that writes its own records. Results may vary.
-          </p>
-        </div>
+      <header className="tweed flex flex-wrap items-center justify-between gap-4 px-6 py-5 sm:px-8">
+        <h1 id="request-title" className="text-5xl leading-display">
+          <Wordmark />
+        </h1>
 
         {aiEnabled ? (
           <button
@@ -230,7 +223,7 @@ export const SongForm: React.FC<SongFormProps> = ({
             aria-checked={false}
             onClick={onToggleFullAuto}
             title="Hide the inputs, then generate and play songs forever"
-            className="flex items-center gap-3 rounded-xl px-3 py-2 text-base font-medium text-ivory transition-colors hover:bg-cabinet-raised"
+            className="text-stage flex items-center gap-3 rounded-xl px-3 py-2 text-base font-semibold text-snow transition-colors hover:bg-ink/40"
           >
             Full auto
             <span className="switch">
@@ -240,10 +233,10 @@ export const SongForm: React.FC<SongFormProps> = ({
         ) : null}
       </header>
 
-      <div className="mt-6 grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 p-6 sm:p-8 md:grid-cols-2">
         <div className="space-y-2">
           <div className="flex min-h-9 items-center justify-between">
-            <Label htmlFor="lyrics-input" className="text-base font-semibold text-ivory">
+            <Label htmlFor="lyrics-input" className="text-base font-semibold text-snow">
               Lyrics
             </Label>
             {aiEnabled ? (
@@ -262,7 +255,7 @@ export const SongForm: React.FC<SongFormProps> = ({
               value={lyrics}
               onChange={(event) => onLyricsChange(event.target.value)}
               placeholder={"[Verse]\nWrite the words here\n\n[Chorus]\n…"}
-              className="h-[12lh] w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 font-mono text-base leading-relaxed text-ivory shadow-none placeholder:text-faint focus-visible:ring-0"
+              className="h-[12lh] w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 font-mono text-base leading-relaxed text-snow shadow-none placeholder:text-faint focus-visible:ring-0"
             />
           </div>
         </div>
@@ -270,7 +263,7 @@ export const SongForm: React.FC<SongFormProps> = ({
         <div className="flex flex-col gap-6">
           <div className="space-y-2">
             <div className="flex min-h-9 items-center justify-between">
-              <Label htmlFor="style-input" className="text-base font-semibold text-ivory">
+              <Label htmlFor="style-input" className="text-base font-semibold text-snow">
                 Style
               </Label>
               {aiEnabled ? (
@@ -289,13 +282,12 @@ export const SongForm: React.FC<SongFormProps> = ({
                 value={style}
                 onChange={(event) => onStyleChange(event.target.value)}
                 placeholder="Genre, voice, instruments, tempo"
-                className="max-h-[8lh] min-h-[4lh] w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 text-base leading-relaxed text-ivory shadow-none placeholder:text-faint focus-visible:ring-0"
+                className="max-h-[8lh] min-h-[4lh] w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 text-base leading-relaxed text-snow shadow-none placeholder:text-faint focus-visible:ring-0"
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <p className="text-base font-semibold text-ivory">Reference song</p>
             <input
               ref={fileInputRef}
               type="file"
@@ -305,25 +297,20 @@ export const SongForm: React.FC<SongFormProps> = ({
               aria-label="Upload a reference song"
             />
             {reference === null ? (
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={pickFile}
-                  disabled={uploadReference.isPending}
-                  className={cn(
-                    "border border-cabinet-edge",
-                    uploadReference.isPending && "pending-breathe",
-                  )}
-                >
-                  <Paperclip aria-hidden />
-                  {uploadReference.isPending ? "Uploading…" : "Attach audio"}
-                </Button>
-                <span className="text-base text-dim">Optional. Its melody guides a cover.</span>
-              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={pickFile}
+                disabled={uploadReference.isPending}
+                title="Upload a song whose melody guides a cover"
+                className={cn("border border-edge", uploadReference.isPending && "pending-breathe")}
+              >
+                <Paperclip aria-hidden />
+                {uploadReference.isPending ? "Uploading…" : "Add reference song"}
+              </Button>
             ) : (
-              <div className="cabinet-raised flex items-center gap-3 rounded-xl py-2 pr-2 pl-3">
-                <Paperclip className="size-5 shrink-0 text-amber" aria-hidden />
+              <div className="panel-raised flex items-center gap-3 rounded-xl py-2 pr-2 pl-3">
+                <Paperclip className="size-5 shrink-0 text-orange" aria-hidden />
                 <span className="min-w-0 flex-1 truncate text-base" title={reference.filename}>
                   {reference.filename}
                 </span>
@@ -345,7 +332,7 @@ export const SongForm: React.FC<SongFormProps> = ({
         </div>
       </div>
 
-      <footer className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-cabinet-line pt-6">
+      <footer className="mx-6 flex flex-wrap items-center justify-between gap-4 border-t border-line py-6 sm:mx-8">
         <div className="min-w-0 flex-1 basis-64">
           <StageMeter song={activeSong} stages={stages} queueDepth={queueDepth} />
         </div>
@@ -359,7 +346,7 @@ export const SongForm: React.FC<SongFormProps> = ({
               onClick={onRandom}
               disabled={randomPending}
               title="AI writes a song, Yuekbox plays it"
-              className={cn("border border-cabinet-edge", randomPending && "pending-breathe")}
+              className={cn("border border-edge", randomPending && "pending-breathe")}
             >
               <Dices aria-hidden />
               {randomPending ? "Rolling…" : "Surprise me"}
@@ -372,20 +359,16 @@ export const SongForm: React.FC<SongFormProps> = ({
             onClick={submit}
             disabled={!canGenerate}
             title={canGenerate ? "Generate this song" : "Fill in lyrics and style first"}
-            className={cn(
-              "text-ivory hover:brightness-110",
-              "bg-[linear-gradient(180deg,var(--color-cherry-bright),var(--color-cherry))]",
-              "shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_3px_0_rgba(0,0,0,0.5)] active:translate-y-px",
-            )}
+            className="btn-orange"
           >
             <Disc3 aria-hidden className={cn(createSong.isPending && "animate-spin")} />
-            {createSong.isPending ? "Pressing…" : "Generate song"}
+            {createSong.isPending ? "Sending…" : "Generate song"}
           </Button>
         </div>
       </footer>
 
       {enhanceError !== null || createError !== null ? (
-        <div className="mt-4 space-y-1">
+        <div className="space-y-1 px-6 pb-6 sm:px-8">
           {enhanceError !== null ? <p className="text-base text-alarm">{enhanceError}</p> : null}
           {createError !== null ? <p className="text-base text-alarm">{createError}</p> : null}
         </div>

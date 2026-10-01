@@ -10,8 +10,8 @@
 }
 
 body {
-  background-color: var(--color-cabinet-sunken);
-  color: var(--color-ivory);
+  background-color: var(--color-ink);
+  color: var(--color-snow);
   margin: 0;
 }
 
@@ -21,37 +21,62 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-amber);
+  outline: 2px solid var(--color-orange);
   outline-offset: 2px;
 }
 
 /* Darkens the edges so panels read over any visualizer. */
-.cabinet-vignette {
+.vignette {
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse at 50% 45%, transparent 45%, rgba(15, 11, 9, 0.85) 100%);
+  background: radial-gradient(
+    ellipse at 50% 45%,
+    transparent 45%,
+    color-mix(in oklab, var(--color-ink) 85%, transparent) 100%
+  );
   pointer-events: none;
   z-index: 1;
 }
 
 /* Layered so Tailwind utilities can still override sizes and colors. */
 @layer components {
-  /* The cabinet: a solid bakelite panel with a faint top sheen. */
-  .cabinet {
-    background: rgba(23, 17, 14, 0.94);
-    border: 1px solid var(--color-cabinet-line);
+  /* Black tolex: a near-flat panel with a faint top sheen. */
+  .panel {
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--color-panel-raised) 96%, transparent) 0%,
+      color-mix(in oklab, var(--color-panel) 96%, transparent) 100%
+    );
+    border: 1px solid var(--color-line);
+    box-shadow: var(--shadow-panel);
+  }
+
+  .panel-raised {
+    background: var(--color-panel-raised);
+    border: 1px solid var(--color-line);
+  }
+
+  /* Grey tweed grille cloth: a twill weave with light flecks. */
+  .tweed {
+    background-color: var(--color-tweed);
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+      repeating-linear-gradient(
+        45deg,
+        color-mix(in oklab, var(--color-tweed-fleck) 22%, transparent) 0 1px,
+        transparent 1px 4px
+      ),
+      repeating-linear-gradient(
+        -45deg,
+        color-mix(in oklab, var(--color-ink) 45%, transparent) 0 1px,
+        transparent 1px 4px
+      );
     box-shadow:
-      inset 0 1px 0 rgba(255, 236, 210, 0.06),
-      0 24px 60px -24px rgba(0, 0, 0, 0.85);
+      inset 0 -1px 0 color-mix(in oklab, var(--color-ink) 60%, transparent),
+      inset 0 1px 0 color-mix(in oklab, var(--color-snow) 8%, transparent);
   }
 
-  .cabinet-raised {
-    background: var(--color-cabinet-raised);
-    border: 1px solid var(--color-cabinet-line);
-    box-shadow: inset 0 1px 0 rgba(255, 236, 210, 0.05);
-  }
-
-  /* Selector keys: dark until pressed, then backlit amber. */
+  /* Selector keys: dark until pressed, then lit orange. */
   .key {
     display: inline-flex;
     align-items: center;
@@ -59,28 +84,24 @@ body {
     width: 2.75rem;
     height: 2.75rem;
     border-radius: 0.625rem;
-    border: 1px solid var(--color-cabinet-edge);
-    background: linear-gradient(180deg, #2e221c 0%, #1f1712 100%);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 236, 210, 0.08),
-      0 2px 0 rgba(0, 0, 0, 0.45);
+    border: 1px solid var(--color-edge);
+    background: linear-gradient(180deg, var(--color-panel-raised) 0%, var(--color-panel) 100%);
+    box-shadow: var(--shadow-key);
     color: var(--color-dim);
     cursor: pointer;
     transition:
       color 150ms ease,
       border-color 150ms ease,
-      background 150ms ease,
       transform 100ms ease;
   }
 
   .key:hover {
-    color: var(--color-ivory);
-    border-color: rgba(242, 169, 59, 0.55);
+    color: var(--color-snow);
+    border-color: color-mix(in oklab, var(--color-orange) 55%, transparent);
   }
 
   .key:active {
     transform: translateY(1px);
-    box-shadow: inset 0 1px 0 rgba(255, 236, 210, 0.04);
   }
 
   .key:disabled {
@@ -90,22 +111,42 @@ body {
 
   .key-lit,
   .key-lit:hover {
-    color: var(--color-strip-ink);
-    border-color: var(--color-amber-soft);
-    background: linear-gradient(180deg, var(--color-amber-soft) 0%, var(--color-amber) 100%);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.45),
-      0 0 0 1px rgba(242, 169, 59, 0.2),
-      0 8px 22px -8px rgba(242, 169, 59, 0.6);
+    color: var(--color-ink);
+    border-color: var(--color-orange-soft);
+    background: linear-gradient(180deg, var(--color-orange-soft) 0%, var(--color-orange) 100%);
+    box-shadow: var(--shadow-key-lit);
   }
 
-  /* Form fields sit sunken into the cabinet. */
+  /* The loud button: play and generate. */
+  .btn-orange {
+    color: var(--color-ink);
+    background: linear-gradient(
+      180deg,
+      var(--color-orange-soft) 0%,
+      var(--color-orange) 55%,
+      var(--color-orange-deep) 100%
+    );
+    box-shadow: var(--shadow-key-lit);
+    transition:
+      filter 150ms ease,
+      transform 100ms ease;
+  }
+
+  .btn-orange:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+
+  .btn-orange:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  /* Form fields sit sunken into the panel. */
   .field {
     border-radius: 0.75rem;
-    border: 1px solid var(--color-cabinet-edge);
-    background: var(--color-cabinet-sunken);
-    color: var(--color-ivory);
-    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45);
+    border: 1px solid var(--color-edge);
+    background: var(--color-ink);
+    color: var(--color-snow);
+    box-shadow: var(--inset-shadow-well);
     transition:
       border-color 150ms ease,
       box-shadow 150ms ease;
@@ -114,10 +155,10 @@ body {
   .field:focus-within,
   .field:focus {
     outline: none;
-    border-color: var(--color-amber);
+    border-color: var(--color-orange);
     box-shadow:
-      inset 0 2px 6px rgba(0, 0, 0, 0.45),
-      0 0 0 3px rgba(242, 169, 59, 0.18);
+      var(--inset-shadow-well),
+      0 0 0 3px color-mix(in oklab, var(--color-orange) 20%, transparent);
   }
 
   .field::placeholder,
@@ -130,8 +171,8 @@ body {
     cursor: pointer;
     padding-right: 2.25rem;
     background-image:
-      linear-gradient(45deg, transparent 50%, var(--color-amber) 50%),
-      linear-gradient(135deg, var(--color-amber) 50%, transparent 50%);
+      linear-gradient(45deg, transparent 50%, var(--color-orange) 50%),
+      linear-gradient(135deg, var(--color-orange) 50%, transparent 50%);
     background-position:
       calc(100% - 18px) calc(50% - 1px),
       calc(100% - 12px) calc(50% - 1px);
@@ -142,8 +183,8 @@ body {
   }
 
   select.field option {
-    background: var(--color-cabinet-raised);
-    color: var(--color-ivory);
+    background: var(--color-panel-raised);
+    color: var(--color-snow);
   }
 
   /* A two-position toggle: knob slides right and lights up. */
@@ -152,9 +193,9 @@ body {
     width: 3.25rem;
     height: 1.75rem;
     border-radius: 9999px;
-    border: 1px solid var(--color-cabinet-edge);
-    background: var(--color-cabinet-sunken);
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--color-edge);
+    background: var(--color-ink);
+    box-shadow: var(--inset-shadow-well);
     transition: background 200ms ease;
     flex-shrink: 0;
   }
@@ -167,36 +208,35 @@ body {
     height: 1.25rem;
     border-radius: 9999px;
     transform: translateY(-50%);
-    background: linear-gradient(180deg, #5a463a, #3b2c23);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    background: linear-gradient(180deg, var(--color-dim), var(--color-faint));
     transition:
       left 200ms ease,
       background 200ms ease;
   }
 
   .switch.on {
-    border-color: var(--color-amber);
-    background: rgba(242, 169, 59, 0.2);
+    border-color: var(--color-orange);
+    background: color-mix(in oklab, var(--color-orange) 20%, var(--color-ink));
   }
 
   .switch.on .switch-knob {
     left: calc(100% - 1.45rem);
-    background: linear-gradient(180deg, var(--color-amber-soft), var(--color-amber));
+    background: linear-gradient(180deg, var(--color-orange-soft), var(--color-orange));
   }
 
-  /* Jukebox title strip: paper card, A-side title over a cherry band over the B-side. */
+  /* Title strip: paper card, title over an orange band over the style. */
   .strip {
     position: relative;
     width: 100%;
     border-radius: 0.25rem;
-    background: var(--color-strip);
-    color: var(--color-strip-ink);
-    box-shadow:
-      inset 0 0 0 1px rgba(42, 29, 22, 0.12),
-      0 2px 0 rgba(0, 0, 0, 0.35);
-    transition:
-      transform 150ms ease,
-      box-shadow 150ms ease;
+    background: linear-gradient(
+      180deg,
+      var(--color-paper) 0%,
+      color-mix(in oklab, var(--color-paper) 92%, var(--color-dim)) 100%
+    );
+    color: var(--color-paper-ink);
+    box-shadow: var(--shadow-key);
+    transition: transform 150ms ease;
   }
 
   .strip:hover {
@@ -205,24 +245,36 @@ body {
 
   .strip-current {
     box-shadow:
-      inset 0 0 0 1px rgba(42, 29, 22, 0.12),
-      0 0 0 3px var(--color-amber),
-      0 2px 0 rgba(0, 0, 0, 0.35);
+      var(--shadow-key),
+      0 0 0 3px var(--color-orange);
   }
 
   .strip-band {
     height: 2px;
     flex: 1 1 0%;
-    background: var(--color-cherry);
+    background: var(--color-orange);
+  }
+
+  /* Centers a dark pool behind the progress reel. */
+  .scrim-radial {
+    background: radial-gradient(
+      ellipse at center,
+      color-mix(in oklab, var(--color-ink) 75%, transparent) 0%,
+      color-mix(in oklab, var(--color-ink) 35%, transparent) 45%,
+      transparent 75%
+    );
+  }
+
+  /* Big words over the visualizer carry their own shadow. */
+  .text-stage {
+    text-shadow:
+      0 3px 0 color-mix(in oklab, var(--color-ink) 60%, transparent),
+      0 0 48px color-mix(in oklab, var(--color-ink) 75%, transparent);
   }
 }
 
-/* Lyrics float over the visualizer, so they carry their own shadow. */
 .lyric-line {
   will-change: opacity, transform, filter;
-  text-shadow:
-    0 3px 0 rgba(15, 11, 9, 0.55),
-    0 0 48px rgba(15, 11, 9, 0.75);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -236,18 +288,21 @@ body {
 }
 
 textarea::-webkit-scrollbar,
-div::-webkit-scrollbar {
+div::-webkit-scrollbar,
+ol::-webkit-scrollbar {
   width: 8px;
 }
 
 textarea::-webkit-scrollbar-track,
-div::-webkit-scrollbar-track {
+div::-webkit-scrollbar-track,
+ol::-webkit-scrollbar-track {
   background: transparent;
 }
 
 textarea::-webkit-scrollbar-thumb,
-div::-webkit-scrollbar-thumb {
-  background: rgba(242, 169, 59, 0.35);
+div::-webkit-scrollbar-thumb,
+ol::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--color-orange) 40%, transparent);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
@@ -303,17 +358,13 @@ div::-webkit-scrollbar-thumb {
   transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.reel-word {
-  text-shadow: 0 3px 0 rgba(15, 11, 9, 0.6);
-}
-
-/* Active word: a warm highlight sweeps across the glyphs. */
+/* Active word: a white highlight sweeps across the orange glyphs. */
 .reel-word-active {
   background-image: linear-gradient(
     110deg,
-    var(--color-amber) 40%,
-    var(--color-ivory) 50%,
-    var(--color-amber) 60%
+    var(--color-orange) 40%,
+    var(--color-snow) 50%,
+    var(--color-orange) 60%
   );
   background-size: 200% 100%;
   -webkit-background-clip: text;
@@ -321,12 +372,12 @@ div::-webkit-scrollbar-thumb {
   color: transparent;
   -webkit-text-fill-color: transparent;
   text-shadow: none;
-  filter: drop-shadow(0 3px 0 rgba(15, 11, 9, 0.6));
+  filter: drop-shadow(0 3px 0 color-mix(in oklab, var(--color-ink) 60%, transparent));
   animation: reel-shimmer 1.8s linear infinite;
 }
 
 .reel-word-ready {
-  color: var(--color-amber-soft);
+  color: var(--color-orange-soft);
 }
 
 .reel-word-failed {
@@ -365,7 +416,7 @@ div::-webkit-scrollbar-thumb {
   .reel-word-active {
     animation: none;
     background-image: none;
-    color: var(--color-amber);
-    -webkit-text-fill-color: var(--color-amber);
+    color: var(--color-orange);
+    -webkit-text-fill-color: var(--color-orange);
   }
 }

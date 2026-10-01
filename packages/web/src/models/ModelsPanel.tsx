@@ -1,5 +1,5 @@
 import * as React from "react"
-import { X } from "lucide-react"
+import { PanelHeader } from "@/components/ui/PanelHeader"
 import { useEscapeKey } from "@/lib/use-escape-key"
 import { useReadinessQuery } from "./models.queries"
 import { modelCatalogOrder } from "./models.catalog"
@@ -27,35 +27,16 @@ export const ModelsPanel: React.FC<ModelsPanelProps> = ({ onClose }) => {
       aria-label="models"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
     >
-      <div className="absolute inset-0 bg-cabinet-sunken/75 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-ink/75 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="cabinet panel-rise relative max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-3xl p-6 sm:p-8">
-        <header className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="font-display text-5xl leading-none font-black tracking-tight text-amber uppercase">
-              Models
-            </h2>
-            <p className="mt-2 text-base text-dim">
-              The parts inside the box. Point at a copy you already have, or let Yuekbox download
-              one.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="key shrink-0"
-            aria-label="Close models"
-            title="Close"
-          >
-            <X className="size-5" />
-          </button>
-        </header>
+      <div className="panel panel-rise relative max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-3xl">
+        <PanelHeader title="Models" closeLabel="Close models" onClose={onClose} />
 
-        <div className="mt-4">
+        <div className="px-6 sm:px-8">
           <ModelRows keys={allKeys} />
         </div>
 
-        <footer className="mt-4 border-t border-cabinet-line pt-4">
+        <footer className="mx-6 border-t border-line py-4 sm:mx-8">
           <SystemLine system={readiness.data?.system} />
         </footer>
       </div>

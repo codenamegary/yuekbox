@@ -77,24 +77,24 @@
 }
 
 .dark {
-  --background: #17110e;
-  --foreground: #f4ecdd;
-  --card: #241a15;
-  --card-foreground: #f4ecdd;
-  --popover: #241a15;
-  --popover-foreground: #f4ecdd;
-  --primary: #f2a93b;
-  --primary-foreground: #241a15;
-  --secondary: #2e221c;
-  --secondary-foreground: #f4ecdd;
-  --muted: #2e221c;
-  --muted-foreground: #b3a390;
-  --accent: #2e221c;
-  --accent-foreground: #f4ecdd;
-  --destructive: #c8372d;
-  --border: #3b2c23;
-  --input: #4a382d;
-  --ring: #f2a93b;
+  --background: var(--color-panel);
+  --foreground: var(--color-snow);
+  --card: var(--color-panel-raised);
+  --card-foreground: var(--color-snow);
+  --popover: var(--color-panel-raised);
+  --popover-foreground: var(--color-snow);
+  --primary: var(--color-orange);
+  --primary-foreground: var(--color-ink);
+  --secondary: var(--color-panel-raised);
+  --secondary-foreground: var(--color-snow);
+  --muted: var(--color-panel-raised);
+  --muted-foreground: var(--color-dim);
+  --accent: var(--color-panel-raised);
+  --accent-foreground: var(--color-snow);
+  --destructive: var(--color-danger);
+  --border: var(--color-line);
+  --input: var(--color-edge);
+  --ring: var(--color-orange);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -119,25 +119,35 @@
   }
 }
 
-/* Jukebox showroom: bakelite cabinet, amber backlight, cherry keys, paper title strips. */
+/* Amp head: black tolex, grey tweed grille, orange pilot light, white lettering. */
 @theme {
   --font-sans: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Big Shoulders Display Variable", "Arial Narrow", sans-serif;
-  --font-mono: "Courier Prime", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: "Archivo Variable", "Arial Black", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --color-cabinet: #17110e;
-  --color-cabinet-raised: #241a15;
-  --color-cabinet-sunken: #0f0b09;
-  --color-cabinet-line: #3b2c23;
-  --color-cabinet-edge: #4a382d;
-  --color-ivory: #f4ecdd;
-  --color-dim: #b3a390;
-  --color-faint: #7e705f;
-  --color-amber: #f2a93b;
-  --color-amber-soft: #f7c873;
-  --color-cherry: #c8372d;
-  --color-cherry-bright: #dc4a3f;
-  --color-alarm: #f2867a;
-  --color-strip: #f1e6cf;
-  --color-strip-ink: #2a1d16;
+  --color-ink: #0b0b0c;
+  --color-panel: #161618;
+  --color-panel-raised: #212124;
+  --color-line: #2c2c30;
+  --color-edge: #3d3d42;
+  --color-tweed: #3a3a3d;
+  --color-tweed-fleck: #8a8a8f;
+  --color-snow: #f5f5f2;
+  --color-dim: #a3a3a8;
+  --color-faint: #6e6e74;
+  --color-orange: #ff7a1a;
+  --color-orange-soft: #ffa057;
+  --color-orange-deep: #d65c08;
+  --color-danger: #e5484d;
+  --color-alarm: #ff8a80;
+  --color-paper: #f1f1ed;
+  --color-paper-ink: #151516;
+
+  --shadow-panel: 0 1px 0 0 rgb(255 255 255 / 0.06) inset, 0 24px 60px -24px rgb(0 0 0 / 0.9);
+  --shadow-key: 0 1px 0 0 rgb(255 255 255 / 0.08) inset, 0 2px 0 0 rgb(0 0 0 / 0.5);
+  --shadow-key-lit: 0 1px 0 0 rgb(255 255 255 / 0.45) inset, 0 8px 22px -8px rgb(255 122 26 / 0.65);
+  --shadow-drawer: -24px 0 60px -20px rgb(0 0 0 / 0.85);
+  --inset-shadow-well: inset 0 2px 6px rgb(0 0 0 / 0.55);
+
+  --leading-display: 0.9;
 }

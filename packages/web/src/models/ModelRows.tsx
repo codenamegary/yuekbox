@@ -31,7 +31,7 @@ export const ModelRows: React.FC<ModelRowsProps> = ({ keys, externalPaths }) => 
   }
 
   return (
-    <ul className="divide-y divide-cabinet-line">
+    <ul className="divide-y divide-line">
       {rows
         .filter((row) => keys.includes(row.key))
         .map((row) => (

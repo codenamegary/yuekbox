@@ -63,9 +63,7 @@ const fullAutoStatusLabels: Readonly<Record<FullAutoPhase, string>> = {
   starved: "The machine is catching up…",
 }
 
-const ToolbarDivider: React.FC = () => (
-  <span aria-hidden className="mx-1 h-6 w-px bg-cabinet-edge" />
-)
+const ToolbarDivider: React.FC = () => <span aria-hidden className="mx-1 h-6 w-px bg-edge" />
 
 export const SongsPage: React.FC = () => {
   const [audio] = React.useState(createAudioEngine)
@@ -393,13 +391,13 @@ export const SongsPage: React.FC = () => {
       ) : (
         <WinampCanvas engine={winamp} mode={mode} analysis={analysis} />
       )}
-      <div className="cabinet-vignette" />
+      <div className="vignette" />
 
       {!fullAutoActive ? (
         <div className="fixed top-6 right-6 z-20 flex flex-col items-end gap-2 pointer-events-auto">
           <nav
             aria-label="Visuals and panels"
-            className="cabinet flex items-center gap-1.5 rounded-2xl p-2"
+            className="panel flex items-center gap-1.5 rounded-2xl p-2"
           >
             <button
               type="button"
@@ -488,8 +486,8 @@ export const SongsPage: React.FC = () => {
             </button>
           </nav>
           {showVisualizationBadge ? (
-            <p className="cabinet flex max-w-sm items-center gap-2 rounded-xl px-3 py-2 text-sm">
-              <span className="shrink-0 font-semibold text-amber">The visual failed.</span>
+            <p className="panel flex max-w-sm items-center gap-2 rounded-xl px-3 py-2 text-sm">
+              <span className="shrink-0 font-semibold text-orange">The visual failed.</span>
               {visualizationDetail !== null ? (
                 <span className="truncate text-dim" title={visualizationDetail}>
                   {visualizationDetail}
@@ -548,10 +546,10 @@ export const SongsPage: React.FC = () => {
         )}
 
         {fullAutoActive ? (
-          <div className="cabinet mx-auto flex shrink-0 items-center gap-4 rounded-2xl py-2 pr-2 pl-4 pointer-events-auto">
-            <InfinityIcon className="size-6 shrink-0 text-amber" aria-hidden />
+          <div className="panel mx-auto flex shrink-0 items-center gap-4 rounded-2xl py-2 pr-2 pl-4 pointer-events-auto">
+            <InfinityIcon className="size-6 shrink-0 text-orange" aria-hidden />
             <p className="text-base">
-              <span className="font-semibold text-ivory">Full auto</span>
+              <span className="font-semibold text-snow">Full auto</span>
               <span className="text-dim"> · {fullAutoStatusLabels[fullAutoState.phase]}</span>
             </p>
             <Button

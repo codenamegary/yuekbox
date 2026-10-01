@@ -25,14 +25,14 @@ export const SystemLine: React.FC<SystemLineProps> = ({ system }) => {
     <div className="space-y-3">
       {issues.map((issue) => (
         <div key={issue.id}>
-          <p className="text-base text-amber">{issue.message}</p>
+          <p className="text-base text-orange">{issue.message}</p>
           {fixPlatforms.map(({ key, label }) => {
             const line = issue.fix[key]
             if (line === undefined) return null
             return (
               <p key={key} className="mt-1 text-sm text-dim">
                 {label} ·{" "}
-                <code className="rounded bg-cabinet-sunken px-1.5 py-0.5 font-mono text-amber-soft">
+                <code className="rounded bg-ink px-1.5 py-0.5 font-mono text-orange-soft">
                   {line}
                 </code>
               </p>

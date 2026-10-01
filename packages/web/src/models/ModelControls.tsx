@@ -12,9 +12,7 @@ export const StateDot: React.FC<StateDotProps> = ({ state, className }) => (
     aria-hidden
     className={cn(
       "mt-1.5 inline-block size-3 shrink-0 rounded-full",
-      state === "ready"
-        ? "bg-amber shadow-[0_0_0_3px_rgba(242,169,59,0.2)]"
-        : "border-2 border-cabinet-edge bg-cabinet-sunken",
+      state === "ready" ? "bg-orange ring-3 ring-orange/20" : "border-2 border-edge bg-ink",
       className,
     )}
   />
@@ -27,13 +25,10 @@ export type DownloadBarProps = Readonly<{
 
 export const DownloadBar: React.FC<DownloadBarProps> = ({ value, className }) => (
   <div
-    className={cn(
-      "h-2 w-full overflow-hidden rounded-full bg-cabinet-sunken shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]",
-      className,
-    )}
+    className={cn("h-2 w-full overflow-hidden rounded-full bg-ink inset-shadow-well", className)}
   >
     <div
-      className="h-full rounded-full bg-amber transition-[width] duration-200 motion-reduce:transition-none"
+      className="h-full rounded-full bg-orange transition-[width] duration-200 motion-reduce:transition-none"
       style={{ width: `${Math.round(value)}%` }}
     />
   </div>
@@ -54,10 +49,9 @@ export const ActionButton: React.FC<ActionButtonProps> = ({
     type={type}
     className={cn(
       "rounded-lg border px-3 py-1.5 text-base font-semibold whitespace-nowrap transition-colors disabled:opacity-40",
-      tone === "primary" && "border-amber-soft bg-amber text-strip-ink hover:bg-amber-soft",
-      tone === "secondary" &&
-        "border-cabinet-edge bg-cabinet-raised text-ivory hover:border-amber/60",
-      tone === "ghost" && "border-transparent text-dim hover:text-ivory",
+      tone === "primary" && "border-orange-soft bg-orange text-paper-ink hover:bg-orange-soft",
+      tone === "secondary" && "border-edge bg-panel-raised text-snow hover:border-orange/60",
+      tone === "ghost" && "border-transparent text-dim hover:text-snow",
       className,
     )}
     {...props}

@@ -21,10 +21,10 @@ export const LoadSongDialog: React.FC<LoadSongDialogProps> = ({ song, onCancel, 
       aria-labelledby="load-song-title"
       className="fixed inset-0 z-40 flex items-center justify-center p-6"
     >
-      <div className="absolute inset-0 bg-cabinet-sunken/75 backdrop-blur-sm" onClick={onCancel} />
+      <div className="absolute inset-0 bg-ink/75 backdrop-blur-sm" onClick={onCancel} />
 
-      <div className="cabinet panel-rise relative w-full max-w-md rounded-2xl p-6">
-        <h2 id="load-song-title" className="text-xl font-semibold text-ivory">
+      <div className="panel panel-rise relative w-full max-w-md rounded-2xl p-6">
+        <h2 id="load-song-title" className="text-xl font-semibold text-snow">
           Replace what you wrote?
         </h2>
         <p className="mt-2 text-base text-dim">

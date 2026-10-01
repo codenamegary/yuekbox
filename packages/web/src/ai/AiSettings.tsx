@@ -9,7 +9,8 @@ import {
   Setting,
 } from "contracts/http/ai"
 import { useQueryClient } from "@tanstack/react-query"
-import { RefreshCw, X } from "lucide-react"
+import { RefreshCw } from "lucide-react"
+import { PanelHeader } from "@/components/ui/PanelHeader"
 import { cn } from "@/lib/cn"
 import { AiPresetIcon } from "./AiPresetIcon"
 import { useAiConfigQuery, useAiModelsQuery, useAiPresetsQuery } from "./ai.queries"
@@ -85,11 +86,8 @@ const SettingEditor: React.FC<SettingEditorProps> = ({
       : fallbackModels
 
   return (
-    <section className="cabinet-raised space-y-4 rounded-2xl p-5" aria-label={title}>
-      <div>
-        <h3 className="text-lg font-semibold text-ivory">{title}</h3>
-        <p className="text-base text-dim">{writerBlurbs[scope]}</p>
-      </div>
+    <section className="panel-raised space-y-3 rounded-2xl p-5" aria-label={title}>
+      <h3 className="text-lg font-semibold text-snow">{title}</h3>
 
       <div className="flex flex-wrap items-center gap-2">
         {presets.map((preset) => (
@@ -110,8 +108,8 @@ const SettingEditor: React.FC<SettingEditorProps> = ({
             className={cn(
               "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
               setting.presetId === preset.id
-                ? "border-amber-soft bg-amber text-strip-ink"
-                : "border-cabinet-edge bg-cabinet text-dim hover:border-amber/60 hover:text-ivory",
+                ? "border-orange-soft bg-orange text-paper-ink"
+                : "border-edge bg-panel text-dim hover:border-orange/60 hover:text-snow",
             )}
           >
             <AiPresetIcon name={preset.icon} />
@@ -120,47 +118,41 @@ const SettingEditor: React.FC<SettingEditorProps> = ({
         ))}
       </div>
 
-      <label className="block space-y-1.5">
-        <span className="text-sm font-medium text-dim">Endpoint</span>
-        <input
-          type="text"
-          value={draft.baseUrl ?? setting.baseUrl}
-          onChange={(event) => onBaseUrlChange(scope, event.target.value)}
-          onBlur={() => onFieldBlur(scope)}
-          placeholder="https://api.example.com/v1"
-          spellCheck={false}
-          className="field w-full px-3 py-2 font-mono text-base"
-        />
-      </label>
+      <input
+        type="text"
+        value={draft.baseUrl ?? setting.baseUrl}
+        onChange={(event) => onBaseUrlChange(scope, event.target.value)}
+        onBlur={() => onFieldBlur(scope)}
+        placeholder="https://api.example.com/v1"
+        spellCheck={false}
+        aria-label={`${title} endpoint`}
+        className="field w-full px-3 py-2 font-mono text-base"
+      />
 
-      <label className="block space-y-1.5">
-        <span className="text-sm font-medium text-dim">API key</span>
-        <input
-          type="password"
-          value={draft.apiKey ?? ""}
-          onChange={(event) => onApiKeyChange(scope, event.target.value)}
-          onBlur={() => onFieldBlur(scope)}
-          placeholder={
-            setting.keyHint !== null
-              ? `Stored ${setting.keyHint}`
-              : activePreset?.needsKey
-                ? "Required"
-                : "Optional"
-          }
-          autoComplete="off"
-          className="field w-full px-3 py-2 font-mono text-base"
-        />
-      </label>
+      <input
+        type="password"
+        value={draft.apiKey ?? ""}
+        onChange={(event) => onApiKeyChange(scope, event.target.value)}
+        onBlur={() => onFieldBlur(scope)}
+        placeholder={
+          setting.keyHint !== null
+            ? `API key stored ${setting.keyHint}`
+            : activePreset?.needsKey
+              ? "API key"
+              : "API key (optional)"
+        }
+        autoComplete="off"
+        aria-label={`${title} API key`}
+        className="field w-full px-3 py-2 font-mono text-base"
+      />
 
       <div className="space-y-1.5">
-        <label htmlFor={`ai-${scope}-model`} className="block text-sm font-medium text-dim">
-          Model
-        </label>
         <div className="flex items-center gap-2">
           <select
             id={`ai-${scope}-model`}
             value={setting.model}
             onChange={(event) => onPatch(scope, { model: event.target.value })}
+            aria-label={`${title} model`}
             className="field min-w-0 flex-1 px-3 py-2 font-mono text-base"
           >
             <option value="">Pick a model…</option>
@@ -180,35 +172,35 @@ const SettingEditor: React.FC<SettingEditorProps> = ({
             <RefreshCw className="size-5" />
           </button>
         </div>
-        <p className="text-sm text-dim">
-          {modelsLive
-            ? `Live list · ${models.length} model${models.length === 1 ? "" : "s"}`
-            : (modelsDetail ?? "Preset guesses. Check the endpoint, then refresh.")}
-        </p>
+        {!modelsLive && modelsDetail !== null ? (
+          <p className="text-sm text-alarm">{modelsDetail}</p>
+        ) : null}
       </div>
 
-      <fieldset className="space-y-1.5">
-        <legend className="text-sm font-medium text-dim">Reasoning effort</legend>
-        <div className="flex flex-wrap gap-1 rounded-xl border border-cabinet-edge bg-cabinet-sunken p-1">
-          {effortLevels.map((effort: EffortLevel) => (
-            <button
-              key={effort}
-              type="button"
-              onClick={() => onPatch(scope, { effort })}
-              aria-pressed={setting.effort === effort}
-              className={cn(
-                "flex-1 rounded-lg px-2 py-1 text-sm font-medium capitalize transition-colors",
-                setting.effort === effort
-                  ? "bg-amber text-strip-ink"
-                  : "text-dim hover:bg-cabinet-raised hover:text-ivory",
-              )}
-              title={effort === "off" ? "Send no reasoning effort" : `reasoning_effort: ${effort}`}
-            >
-              {effort}
-            </button>
-          ))}
-        </div>
-      </fieldset>
+      <div
+        role="group"
+        aria-label={`${title} reasoning effort`}
+        title="Reasoning effort"
+        className="flex flex-wrap gap-1 rounded-xl border border-edge bg-ink p-1"
+      >
+        {effortLevels.map((effort: EffortLevel) => (
+          <button
+            key={effort}
+            type="button"
+            onClick={() => onPatch(scope, { effort })}
+            aria-pressed={setting.effort === effort}
+            className={cn(
+              "flex-1 rounded-lg px-2 py-1 text-sm font-medium capitalize transition-colors",
+              setting.effort === effort
+                ? "bg-orange text-paper-ink"
+                : "text-dim hover:bg-panel-raised hover:text-snow",
+            )}
+            title={effort === "off" ? "Send no reasoning effort" : `reasoning_effort: ${effort}`}
+          >
+            {effort}
+          </button>
+        ))}
+      </div>
     </section>
   )
 }
@@ -221,12 +213,6 @@ const writerTitles: Readonly<Record<WriterScope, string>> = {
   style: "Style",
   lyrics: "Lyrics",
   visuals: "Visuals",
-}
-
-const writerBlurbs: Readonly<Record<WriterScope, string>> = {
-  style: "Sharpens the vibe you describe.",
-  lyrics: "Extends, reworks, or writes the words.",
-  visuals: "Writes a visualizer for each song.",
 }
 
 export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
@@ -319,38 +305,17 @@ export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
       aria-label="AI settings"
       className="fixed inset-0 z-40 flex items-center justify-center p-6"
     >
-      <div className="absolute inset-0 bg-cabinet-sunken/75 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-ink/75 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="cabinet panel-rise relative max-h-[88vh] w-full max-w-6xl space-y-6 overflow-y-auto rounded-3xl p-6 sm:p-8">
-        <header className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="font-display text-5xl leading-none font-black tracking-tight text-amber uppercase">
-              Ghostwriters
-            </h2>
-            <p className="mt-2 max-w-2xl text-base text-dim">
-              The AI that helps with style, lyrics, and visuals. Any OpenAI-compatible endpoint
-              works. Keys stay on this machine.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="key shrink-0"
-            aria-label="Close AI settings"
-            title="Close"
-          >
-            <X className="size-5" />
-          </button>
-        </header>
-
-        {config === undefined ? (
-          <p className="pending-breathe text-base text-dim">Waking the ghostwriters…</p>
-        ) : (
-          <>
+      <div className="panel panel-rise relative max-h-[88vh] w-full max-w-6xl overflow-y-auto rounded-3xl">
+        <PanelHeader title="AI settings" closeLabel="Close AI settings" onClose={onClose}>
+          {config === undefined ? null : (
             <button
               type="button"
               role="switch"
               aria-checked={config.enabled}
+              aria-label="Use AI"
+              title={config.enabled ? "Turn AI off" : "Turn AI on"}
               onClick={() => {
                 queryClient.setQueryData(queryKeys.aiConfig(), {
                   ...config,
@@ -358,69 +323,62 @@ export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
                 })
                 saveConfig.mutate({ enabled: !config.enabled })
               }}
-              className="cabinet-raised flex w-full items-center justify-between gap-4 rounded-2xl px-5 py-4 text-left"
+              className="text-stage flex items-center gap-3 rounded-xl px-3 py-2 text-base font-semibold text-snow hover:bg-ink/40"
             >
-              <span>
-                <span className="block text-lg font-semibold text-ivory">Use AI ghostwriters</span>
-                <span className="block text-base text-dim">
-                  {config.enabled
-                    ? "On. Enhance buttons, Surprise me, and Full auto are available."
-                    : "Off. You write everything yourself, like it's 1958."}
-                </span>
-              </span>
+              {config.enabled ? "On" : "Off"}
               <span className={cn("switch", config.enabled && "on")}>
                 <span className="switch-knob" />
               </span>
             </button>
+          )}
+        </PanelHeader>
 
-            <div
-              className={cn(
-                "space-y-4 transition-opacity duration-500",
-                config.enabled ? "opacity-100" : "opacity-40 pointer-events-none",
-              )}
-            >
-              <div className="grid gap-4 md:grid-cols-3">
-                {writerScopes.map((scope) => (
-                  <SettingEditor
-                    key={scope}
-                    scope={scope}
-                    title={writerTitles[scope]}
-                    setting={config[scope]}
-                    presets={presets}
-                    models={modelQueries[scope].data?.models ?? []}
-                    modelsLive={modelQueries[scope].data?.live ?? false}
-                    modelsDetail={modelQueries[scope].data?.detail ?? null}
-                    draft={drafts[scope]}
-                    onBaseUrlChange={(changedScope, value) => {
-                      setDrafts((all) => ({
-                        ...all,
-                        [changedScope]: { ...all[changedScope], baseUrl: value },
-                      }))
-                      patchScopeDebounced(changedScope, { baseUrl: value })
-                    }}
-                    onApiKeyChange={(changedScope, value) => {
-                      setDrafts((all) => ({
-                        ...all,
-                        [changedScope]: { ...all[changedScope], apiKey: value },
-                      }))
-                      patchScopeDebounced(changedScope, { apiKey: value })
-                    }}
-                    onPatch={patchScope}
-                    onFieldBlur={flushScope}
-                    onRefreshModels={(refreshScope) => {
-                      void queryClient.refetchQueries({
-                        queryKey: queryKeys.aiModels(refreshScope),
-                      })
-                    }}
-                  />
-                ))}
-              </div>
-
-              <p className="text-sm text-dim" aria-live="polite">
-                {saveCount > 0 ? "Changes saved." : "Changes save as you type."}
-              </p>
+        {config === undefined ? (
+          <p className="pending-breathe p-6 text-base text-dim sm:p-8">Loading…</p>
+        ) : (
+          <div
+            className={cn(
+              "p-6 transition-opacity duration-500 sm:p-8",
+              config.enabled ? "opacity-100" : "pointer-events-none opacity-40",
+            )}
+          >
+            <div className="grid gap-4 md:grid-cols-3">
+              {writerScopes.map((scope) => (
+                <SettingEditor
+                  key={scope}
+                  scope={scope}
+                  title={writerTitles[scope]}
+                  setting={config[scope]}
+                  presets={presets}
+                  models={modelQueries[scope].data?.models ?? []}
+                  modelsLive={modelQueries[scope].data?.live ?? false}
+                  modelsDetail={modelQueries[scope].data?.detail ?? null}
+                  draft={drafts[scope]}
+                  onBaseUrlChange={(changedScope, value) => {
+                    setDrafts((all) => ({
+                      ...all,
+                      [changedScope]: { ...all[changedScope], baseUrl: value },
+                    }))
+                    patchScopeDebounced(changedScope, { baseUrl: value })
+                  }}
+                  onApiKeyChange={(changedScope, value) => {
+                    setDrafts((all) => ({
+                      ...all,
+                      [changedScope]: { ...all[changedScope], apiKey: value },
+                    }))
+                    patchScopeDebounced(changedScope, { apiKey: value })
+                  }}
+                  onPatch={patchScope}
+                  onFieldBlur={flushScope}
+                  onRefreshModels={(refreshScope) => {
+                    void queryClient.refetchQueries({
+                      queryKey: queryKeys.aiModels(refreshScope),
+                    })
+                  }}
+                />
+              ))}
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>

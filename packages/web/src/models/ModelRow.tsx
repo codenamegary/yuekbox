@@ -96,9 +96,9 @@ export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) 
       <StateDot state={row.state} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-3">
-          <span className="shrink-0 text-base font-semibold text-ivory">{row.name}</span>
+          <span className="shrink-0 text-base font-semibold text-snow">{row.name}</span>
           {row.active ? (
-            <span className="ml-auto shrink-0 font-mono text-base text-amber tabular-nums">
+            <span className="ml-auto shrink-0 font-mono text-base text-orange tabular-nums">
               {row.percent === null ? "Starting…" : `${row.percent}%`}
             </span>
           ) : null}
@@ -122,7 +122,7 @@ export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) 
         {row.active ? <DownloadBar value={row.percent ?? 0} className="mt-2" /> : null}
 
         {row.downloadError !== null ? (
-          <p className="mt-1 line-clamp-2 text-base text-amber" title={row.downloadError}>
+          <p className="mt-1 line-clamp-2 text-base text-orange" title={row.downloadError}>
             The download stopped. {row.downloadError}
           </p>
         ) : null}
