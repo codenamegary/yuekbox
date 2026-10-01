@@ -29,10 +29,11 @@ const translateYFor = (activeIndex: number): number =>
 
 /** Fit the widest stage label ("Transcribing reference") inside a row at every width. */
 const wordClassFor = (label: string): string => {
-  const base = "font-black tracking-[-0.02em] whitespace-nowrap"
-  if (label.length > 18) return cn(base, "text-xl sm:text-2xl md:text-3xl lg:text-4xl")
-  if (label.length > 12) return cn(base, "text-2xl sm:text-3xl md:text-4xl lg:text-5xl")
-  return cn(base, "text-3xl sm:text-4xl md:text-5xl lg:text-6xl")
+  const base =
+    "text-stage font-display font-black uppercase tracking-tight whitespace-nowrap font-stretch-extra-condensed"
+  if (label.length > 18) return cn(base, "text-3xl sm:text-4xl md:text-5xl lg:text-6xl")
+  if (label.length > 12) return cn(base, "text-4xl sm:text-5xl md:text-6xl")
+  return cn(base, "text-5xl sm:text-6xl md:text-7xl")
 }
 
 export const GeneratingOverlay: React.FC<GeneratingOverlayProps> = ({
@@ -88,8 +89,8 @@ export const GeneratingOverlay: React.FC<GeneratingOverlayProps> = ({
       const active = index === center
       const state = !active
         ? index < center
-          ? "text-cyan-300/40"
-          : "text-white/15"
+          ? "text-orange/45"
+          : "text-snow/25"
         : rowStatus === "failed"
           ? "reel-word-failed"
           : rowStatus === "complete"
@@ -108,21 +109,21 @@ export const GeneratingOverlay: React.FC<GeneratingOverlayProps> = ({
         >
           <span>{label}</span>
           {active && rowStatus === "running" && barPercent !== null ? (
-            <div className="h-0.5 w-40 overflow-hidden rounded-full bg-white/10">
+            <div className="h-1.5 w-48 overflow-hidden rounded-full bg-ink/80">
               <div
-                className="h-full bg-cyan-400/90 transition-[width] duration-700 ease-out"
+                className="h-full bg-orange transition-[width] duration-700 ease-out"
                 style={{ width: `${barPercent}%` }}
               />
             </div>
           ) : null}
           {active && rowStatus === "queued" && queueDepth !== null && queueDepth > 0 ? (
-            <span className="font-mono text-3xs tracking-[0.3em] uppercase text-cyan-200/70">
-              queue {queueDepth}
+            <span className="font-sans text-base font-medium tracking-normal normal-case text-snow">
+              {queueDepth} ahead in line
             </span>
           ) : null}
           {active && rowStatus === "failed" ? (
             <span
-              className="max-w-[70vw] truncate font-mono text-3xs tracking-widest text-rose-300/80"
+              className="max-w-[70vw] truncate font-sans text-base font-medium tracking-normal normal-case text-alarm"
               title={song?.errorDetail}
             >
               {song?.errorDetail}
@@ -136,7 +137,8 @@ export const GeneratingOverlay: React.FC<GeneratingOverlayProps> = ({
     <div
       aria-hidden={!visible}
       className={cn(
-        "fixed inset-0 z-[15] flex flex-col items-center justify-center gap-8 px-6",
+        "fixed inset-0 z-[15] flex flex-col items-center justify-center gap-6 px-6",
+        "scrim-radial",
         "pointer-events-none select-none transition-[opacity,visibility] duration-700 ease-out",
         visible ? "opacity-100" : "invisible opacity-0",
       )}
@@ -175,10 +177,10 @@ export const GeneratingOverlay: React.FC<GeneratingOverlayProps> = ({
       <button
         type="button"
         onClick={onDismiss}
-        className="pointer-events-auto font-mono text-3xs tracking-[0.25em] uppercase text-white/35 transition-colors hover:text-white"
-        title="Hide the generating overlay (Esc)"
+        className="panel pointer-events-auto rounded-xl px-4 py-2 text-base font-medium text-snow transition-colors hover:text-orange"
+        title="Hide the progress (Esc)"
       >
-        dismiss ✕
+        Hide progress
       </button>
     </div>
   )

@@ -16,6 +16,7 @@ type Artifacts = {
   completedDuration: number | null
   completedTruncated: Readonly<{ abc: boolean; semantic: boolean }> | null
   referenceScore: string | null
+  cfgScale: number | null
 }
 
 const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
@@ -28,6 +29,7 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
     completedDuration: null,
     completedTruncated: null,
     referenceScore: null,
+    cfgScale: null,
   }
   const queue: Song[] = [queuedSong]
 
@@ -61,6 +63,7 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
     },
     runYue2Generate: async (input) => {
       calls.push(`generate:${input.cot}:${input.abc === null ? "no-abc" : "abc"}`)
+      artifacts.cfgScale = input.cfgScale
       input.onStage("plan")
       input.onStage("semantic")
       return ok({
@@ -150,6 +153,17 @@ test("complete path writes the mp3 and score through one capability", async () =
   })
   expect(harness.artifacts.completedDuration).toBe(184.5)
   expect(harness.artifacts.completedTruncated).toEqual({ abc: false, semantic: false })
+})
+
+test("generation receives the song's cfg scale", async () => {
+  const queue = [songFixture({ cfgScale: 1.4 })]
+  const harness = makeHarness({
+    claimNextQueuedSong: async () => queue.shift() ?? null,
+  })
+
+  await harness.run()
+
+  expect(harness.artifacts.cfgScale).toBe(1.4)
 })
 
 test("a failed transcript leaves the Song complete with no analysis", async () => {

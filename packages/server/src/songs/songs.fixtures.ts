@@ -16,6 +16,7 @@ export const songFixture = (overrides: Partial<Song> = {}): Song =>
     title: "hello",
     style: "pop",
     seed: 1,
+    cfgScale: 1,
     cot: "full",
     reference: null,
     scoreAbc: null,

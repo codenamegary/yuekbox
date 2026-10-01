@@ -1,4 +1,5 @@
 import * as React from "react"
+import { PanelHeader } from "@/components/ui/PanelHeader"
 import { useEscapeKey } from "@/lib/use-escape-key"
 import { useReadinessQuery } from "./models.queries"
 import { modelCatalogOrder } from "./models.catalog"
@@ -26,31 +27,16 @@ export const ModelsPanel: React.FC<ModelsPanelProps> = ({ onClose }) => {
       aria-label="models"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
     >
-      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-ink/75 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="ai-settings-panel hairline-glass-box relative max-h-[86vh] w-full max-w-2xl overflow-y-auto rounded-2xl p-6">
-        <div className="flex items-center justify-between border-b border-white/10 pb-3">
-          <span className="font-mono text-xs font-bold tracking-widest text-slate-200 uppercase">
-            models
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="font-mono text-xs text-slate-400 hover:text-white"
-          >
-            ✕ Close
-          </button>
-        </div>
+      <div className="panel panel-rise relative max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-3xl">
+        <PanelHeader title="Models" closeLabel="Close models" onClose={onClose} />
 
-        <p className="mt-3 text-xs leading-relaxed text-white/45">
-          Point at a copy you already have, or let yuekbox download one.
-        </p>
-
-        <div className="mt-2">
+        <div className="px-6 sm:px-8">
           <ModelRows keys={allKeys} />
         </div>
 
-        <footer className="mt-2 border-t border-white/10 pt-3">
+        <footer className="mx-6 border-t border-line py-4 sm:mx-8">
           <SystemLine system={readiness.data?.system} />
         </footer>
       </div>

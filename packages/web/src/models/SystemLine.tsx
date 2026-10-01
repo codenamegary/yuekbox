@@ -18,21 +18,23 @@ export const SystemLine: React.FC<SystemLineProps> = ({ system }) => {
   if (system === undefined) return null
 
   if (issues.length === 0) {
-    return <p className="font-mono text-3xs text-white/30">system ready · ffmpeg · GPU</p>
+    return <p className="text-sm text-dim">System ready · ffmpeg · GPU</p>
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {issues.map((issue) => (
         <div key={issue.id}>
-          <p className="font-mono text-3xs leading-relaxed text-amber-200/80">{issue.message}</p>
+          <p className="text-base text-orange">{issue.message}</p>
           {fixPlatforms.map(({ key, label }) => {
             const line = issue.fix[key]
             if (line === undefined) return null
             return (
-              <p key={key} className="mt-0.5 font-mono text-3xs text-white/35">
+              <p key={key} className="mt-1 text-sm text-dim">
                 {label} ·{" "}
-                <code className="rounded bg-black/50 px-1 py-0.5 text-amber-100">{line}</code>
+                <code className="rounded bg-ink px-1.5 py-0.5 font-mono text-orange-soft">
+                  {line}
+                </code>
               </p>
             )
           })}

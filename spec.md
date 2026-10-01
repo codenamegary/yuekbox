@@ -501,7 +501,7 @@ CreateTempDir
 RemoveTempDir
 ```
 
-`RunYue2Generate` takes `{ lyrics, style, seed, cot, abc, outputDir, onStage, onProgress }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter runs our `generate.py` at `<home>/scripts/generate.py` (source: `packages/server/tools/yue2/generate.py`) with the shared environment's Python. It does not import Python.
+`RunYue2Generate` takes `{ lyrics, style, seed, cfgScale, cot, abc, outputDir, onStage, onProgress }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter runs our `generate.py` at `<home>/scripts/generate.py` (source: `packages/server/tools/yue2/generate.py`) with the shared environment's Python. It does not import Python.
 
 `RunLyricAlign` takes `{ audioPath, outputDir }` and returns the calibration, or a Result error. The adapter runs the lyric-align script at `<home>/scripts/align.py` (source: `packages/server/tools/lyric-align/align.py`; Demucs vocal stem, Whisper word timings, silence gate, display-line grouping) and reads back the `calibration.json` it writes under the output dir.
 

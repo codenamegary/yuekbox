@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Dices, Disc3, Paperclip, Sparkles, X } from "lucide-react"
 import { EnhanceScope } from "contracts/http/ai"
 import { MissingModel } from "contracts/http/models"
 import { Reference } from "contracts/http/references"
@@ -7,8 +8,18 @@ import { cn } from "@/lib/cn"
 import { Button } from "@/components/ui/Button"
 import { Label } from "@/components/ui/Label"
 import { Textarea } from "@/components/ui/Textarea"
+import { Wordmark } from "@/components/ui/Wordmark"
 import { blockedModelsFromError } from "@/models/models.problems"
 import { useCreateSongMutation, useUploadReferenceMutation } from "./songs.mutations"
+import {
+  cfgScaleMax,
+  cfgScaleMin,
+  cfgScalePercent,
+  cfgScaleStep,
+  cfgScaleSweetHigh,
+  cfgScaleSweetLow,
+  formatCfgScale,
+} from "./songs.cfg"
 import { stageLabels, stageOrderFor, stageProgressPercent } from "./songs.stages"
 
 type SongFormProps = Readonly<{
@@ -16,12 +27,14 @@ type SongFormProps = Readonly<{
   queueDepth: number | null
   style: string
   lyrics: string
+  cfgScale: number
   aiEnabled: boolean
-  enhancing: EnhanceScope | null
+  enhancing: readonly EnhanceScope[]
   enhanceError: string | null
   randomPending: boolean
   onStyleChange: (value: string) => void
   onLyricsChange: (value: string) => void
+  onCfgScaleChange: (value: number) => void
   onCreated: (song: Song) => void
   onBlocked: (models: readonly MissingModel[]) => void
   onEnhance: (kind: EnhanceScope) => void
@@ -29,45 +42,96 @@ type SongFormProps = Readonly<{
   onToggleFullAuto: () => void
 }>
 
-const pipClassName = (song: Song | null, stages: readonly SongStage[], index: number): string => {
-  if (song === null) return "w-2 h-2 rounded-full bg-white/20"
-  if (song.status === "failed") return "w-2 h-2 rounded-full bg-destructive/70"
-  if (song.status === "complete") {
-    return "w-2 h-2 rounded-full bg-cyan-300 shadow-[0_0_10px_#00f0ff]"
+type StageMeterProps = Readonly<{
+  song: Song | null
+  stages: readonly SongStage[]
+  queueDepth: number | null
+}>
+
+/** One segment per stage: done, the one in progress, and the ones still ahead. */
+const StageMeter: React.FC<StageMeterProps> = ({ song, stages, queueDepth }) => {
+  if (song === null) return null
+
+  if (song.status === "failed") {
+    return (
+      <p className="text-base text-alarm" title={song.errorDetail}>
+        That one didn&apos;t make it.
+        {song.errorDetail !== undefined ? (
+          <span className="block truncate text-sm text-dim">{song.errorDetail}</span>
+        ) : null}
+      </p>
+    )
   }
-  if (song.status === "running" && song.stage !== undefined) {
-    const stageIndex = stages.indexOf(song.stage)
-    if (index === stageIndex) {
-      return "w-2.5 h-2.5 rounded-full bg-cyan-300 shadow-[0_0_14px_#00f0ff] scale-125"
-    }
-    if (index < stageIndex) {
-      return "w-2 h-2 rounded-full bg-cyan-500"
-    }
-  }
-  return "w-2 h-2 rounded-full bg-white/20"
+
+  if (song.status === "complete") return null
+
+  const stageIndex =
+    song.status === "running" && song.stage !== undefined ? stages.indexOf(song.stage) : -1
+  const percent = song.status === "running" ? stageProgressPercent(song.stageProgress) : null
+  const caption =
+    stageIndex >= 0 && song.stage !== undefined
+      ? `${stageLabels[song.stage]} · step ${stageIndex + 1} of ${stages.length}`
+      : queueDepth !== null && queueDepth > 0
+        ? `Queued · ${queueDepth} ahead in line`
+        : "Queued"
+
+  return (
+    <div className="min-w-0 space-y-2" role="status">
+      <p className="truncate text-base text-snow">
+        {caption}
+        {percent !== null ? (
+          <span className="ml-2 font-mono text-dim tabular-nums">{Math.round(percent)}%</span>
+        ) : null}
+      </p>
+      <div className="flex gap-1">
+        {stages.map((stage, index) => (
+          <span
+            key={stage}
+            title={stageLabels[stage]}
+            className="relative h-2 flex-1 overflow-hidden rounded-full bg-ink inset-shadow-well"
+          >
+            {index < stageIndex ? <span className="absolute inset-0 bg-orange" /> : null}
+            {index === stageIndex ? (
+              <span
+                className={cn(
+                  "absolute inset-y-0 left-0 bg-orange transition-[width] duration-700 ease-out",
+                  percent === null && "pending-breathe",
+                )}
+                style={{ width: `${percent ?? 100}%` }}
+              />
+            ) : null}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
 }
 
-type EnhancePillProps = Readonly<{
+type EnhanceButtonProps = Readonly<{
   kind: EnhanceScope
   pending: boolean
   disabled: boolean
   onEnhance: (kind: EnhanceScope) => void
 }>
 
-const EnhancePill: React.FC<EnhancePillProps> = ({ kind, pending, disabled, onEnhance }) => (
+const EnhanceButton: React.FC<EnhanceButtonProps> = ({ kind, pending, disabled, onEnhance }) => (
   <button
     type="button"
     onClick={() => onEnhance(kind)}
     disabled={disabled}
-    className={cn("ai-enhance-pill", pending && "pending")}
+    className={cn(
+      "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-base font-medium text-orange transition-colors",
+      "hover:bg-panel-raised hover:text-orange-soft disabled:cursor-default disabled:opacity-50",
+      pending && "pending-breathe",
+    )}
     title={
       kind === "style"
-        ? "Enhance style with AI — sharpen the vibe you're pointing at"
-        : "Enhance lyrics with AI — extend, rework, or write them fresh"
+        ? "Have AI sharpen the style you described"
+        : "Have AI extend, rework, or write the lyrics"
     }
   >
-    <span className="ai-enhance-glyph">✧</span>
-    <span>{pending ? "dreaming" : "enhance"}</span>
+    <Sparkles className="size-4" aria-hidden />
+    {pending ? "Enhancing…" : "Enhance"}
   </button>
 )
 
@@ -76,12 +140,14 @@ export const SongForm: React.FC<SongFormProps> = ({
   queueDepth,
   style,
   lyrics,
+  cfgScale,
   aiEnabled,
   enhancing,
   enhanceError,
   randomPending,
   onStyleChange,
   onLyricsChange,
+  onCfgScaleChange,
   onCreated,
   onBlocked,
   onEnhance,
@@ -136,6 +202,7 @@ export const SongForm: React.FC<SongFormProps> = ({
       {
         style: style.trim(),
         lyrics: lyrics.trim(),
+        cfgScale,
         ...(reference !== null ? { referenceId: reference.id } : {}),
       },
       {
@@ -148,199 +215,208 @@ export const SongForm: React.FC<SongFormProps> = ({
     )
   }
 
-  const progressPercent = stageProgressPercent(
-    activeSong !== null && activeSong.status === "running" ? activeSong.stageProgress : undefined,
-  )
+  const createError =
+    createSong.error !== null && blockedModelsFromError(createSong.error) === null
+      ? createSong.error.message
+      : null
 
   return (
-    <div className="w-full max-w-4xl mx-auto pointer-events-auto space-y-3">
-      <div className="rounded-3xl bg-black/85 p-5 sm:p-6">
-        <div className="grid gap-5 md:grid-cols-2">
+    <section
+      aria-labelledby="request-title"
+      className="panel panel-rise mx-auto w-full max-w-5xl overflow-hidden rounded-3xl pointer-events-auto"
+    >
+      <header className="tweed flex flex-wrap items-center justify-between gap-4 px-6 py-5 sm:px-8">
+        <h1 id="request-title" className="text-5xl leading-display">
+          <Wordmark />
+        </h1>
+
+        {aiEnabled ? (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={false}
+            onClick={onToggleFullAuto}
+            title="Hide the inputs, then generate and play songs forever"
+            className="text-stage flex items-center gap-3 rounded-xl px-3 py-2 text-base font-semibold text-snow transition-colors hover:bg-ink/40"
+          >
+            Full auto
+            <span className="switch">
+              <span className="switch-knob" />
+            </span>
+          </button>
+        ) : null}
+      </header>
+
+      <div className="grid gap-6 p-6 sm:p-8 md:grid-cols-2">
+        <div className="space-y-2">
+          <div className="flex min-h-9 items-center justify-between">
+            <Label htmlFor="lyrics-input" className="text-base font-semibold text-snow">
+              Lyrics
+            </Label>
+            {aiEnabled ? (
+              <EnhanceButton
+                kind="lyrics"
+                pending={enhancing.includes("lyrics")}
+                disabled={enhancing.includes("lyrics")}
+                onEnhance={onEnhance}
+              />
+            ) : null}
+          </div>
+          <div className="field px-4 py-3">
+            <Textarea
+              id="lyrics-input"
+              rows={12}
+              value={lyrics}
+              onChange={(event) => onLyricsChange(event.target.value)}
+              placeholder={"[Verse]\nWrite the words here\n\n[Chorus]\n…"}
+              className="h-[12lh] w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 font-mono text-base leading-relaxed text-snow shadow-none outline-none placeholder:text-faint focus-visible:border-0 focus-visible:ring-0"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-6">
           <div className="space-y-2">
-            <div className="flex items-center justify-between pr-1">
-              <Label
-                htmlFor="lyrics-input"
-                className="font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
-              >
-                lyrics
+            <div className="flex min-h-9 items-center justify-between">
+              <Label htmlFor="style-input" className="text-base font-semibold text-snow">
+                Style
               </Label>
               {aiEnabled ? (
-                <EnhancePill
-                  kind="lyrics"
-                  pending={enhancing === "lyrics"}
-                  disabled={enhancing !== null}
+                <EnhanceButton
+                  kind="style"
+                  pending={enhancing.includes("style")}
+                  disabled={enhancing.includes("style")}
                   onEnhance={onEnhance}
                 />
               ) : null}
             </div>
-            <div className="hairline-glass-box rounded-2xl p-4">
+            <div className="field px-4 py-3">
               <Textarea
-                id="lyrics-input"
-                rows={12}
-                value={lyrics}
-                onChange={(event) => onLyricsChange(event.target.value)}
-                placeholder={"[Verse]\nwrite the words here\n\n[Chorus]\n..."}
-                className="w-full h-[12lh] overflow-y-auto border-0 bg-transparent p-0 text-xs font-mono text-slate-200 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15"
+                id="style-input"
+                rows={4}
+                value={style}
+                onChange={(event) => onStyleChange(event.target.value)}
+                placeholder="Genre, voice, instruments, tempo"
+                className="max-h-[8lh] min-h-[4lh] w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 text-base leading-relaxed text-snow shadow-none outline-none placeholder:text-faint focus-visible:border-0 focus-visible:ring-0"
               />
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between pr-1">
-                <Label
-                  htmlFor="style-input"
-                  className="font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80 pl-1"
-                >
-                  style
-                </Label>
-                {aiEnabled ? (
-                  <EnhancePill
-                    kind="style"
-                    pending={enhancing === "style"}
-                    disabled={enhancing !== null}
-                    onEnhance={onEnhance}
-                  />
-                ) : null}
-              </div>
-              <div className="hairline-glass-box rounded-2xl p-4">
-                <Textarea
-                  id="style-input"
-                  rows={4}
-                  value={style}
-                  onChange={(event) => onStyleChange(event.target.value)}
-                  placeholder="genre, voice, instruments, tempo"
-                  className="w-full min-h-[4lh] max-h-[8lh] overflow-y-auto border-0 bg-transparent p-0 text-sm text-slate-100 shadow-none focus-visible:ring-0 resize-none leading-relaxed placeholder:text-white/15 md:text-sm"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 min-h-[1.75rem]">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="audio/*"
-                onChange={onFileChange}
-                className="hidden"
-                aria-label="Upload a reference song"
-              />
-              {reference === null ? (
-                <button
-                  type="button"
-                  onClick={pickFile}
-                  disabled={uploadReference.isPending}
-                  title="Upload a reference song; its melody guides the cover"
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1",
-                    "font-mono text-3xs tracking-[0.3em] uppercase text-cyan-300/70 transition-colors",
-                    "hover:border-cyan-400/60 hover:text-cyan-200 disabled:opacity-40",
-                    uploadFailed && "border-rose-400/40 text-rose-300/80",
-                  )}
-                >
-                  <span>{uploadReference.isPending ? "◌" : "＋"}</span>
-                  {uploadReference.isPending ? "uploading…" : "reference song"}
-                </button>
-              ) : (
-                <span className="inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-500/10 px-3 py-1 font-mono text-3xs tracking-[0.2em] uppercase text-cyan-200">
-                  <span title="Melody reference attached">⌁</span>
-                  <span className="max-w-[16rem] truncate">{reference.filename}</span>
-                  <button
-                    type="button"
-                    onClick={clearReference}
-                    title="Remove reference"
-                    className="text-cyan-200/60 hover:text-white transition-colors"
-                  >
-                    ✕
-                  </button>
-                </span>
-              )}
-              {uploadFailed ? (
-                <span className="font-mono text-3xs tracking-widest text-rose-300/90 uppercase">
-                  reference upload failed
-                </span>
-              ) : null}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-4">
-              {aiEnabled ? (
-                <Button
-                  type="button"
-                  size="icon"
-                  onClick={onRandom}
-                  disabled={randomPending}
-                  title="Random song — AI writes it, Yuekbox plays it"
-                  className="group relative w-12 h-12 rounded-full border border-white/20 bg-white/[0.04] hover:bg-fuchsia-500/20 hover:border-fuchsia-400/70 transition-all duration-500 shadow-[0_0_25px_rgba(232,121,249,0.15)] active:scale-95 disabled:opacity-30"
-                >
-                  <span className="font-mono text-lg text-white/70 group-hover:text-white group-hover:rotate-180 transition-all duration-500">
-                    ⚄
-                  </span>
-                </Button>
-              ) : null}
-
+          <div className="space-y-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="audio/*"
+              onChange={onFileChange}
+              className="hidden"
+              aria-label="Upload a reference song"
+            />
+            {reference === null ? (
               <Button
                 type="button"
-                size="icon"
-                onClick={submit}
-                disabled={!canGenerate}
-                title="Generate Song (Click to run 5-stage synthesis)"
-                className="group relative w-12 h-12 rounded-full border border-white/20 bg-white/[0.04] hover:bg-cyan-500/20 hover:border-cyan-400/80 transition-all duration-500 shadow-[0_0_25px_rgba(0,240,255,0.2)] active:scale-95 disabled:opacity-30"
+                variant="secondary"
+                onClick={pickFile}
+                disabled={uploadReference.isPending}
+                title="Upload a song whose melody guides a cover"
+                className={cn("border border-edge", uploadReference.isPending && "pending-breathe")}
               >
-                <span className="font-mono text-base text-white/80 group-hover:text-white group-hover:scale-125 transition-transform duration-300">
-                  ✦
-                </span>
+                <Paperclip aria-hidden />
+                {uploadReference.isPending ? "Uploading…" : "Add reference song"}
               </Button>
-
-              <div
-                className={cn(
-                  "relative transition-opacity duration-500",
-                  activeSong?.status === "running" ? "opacity-100" : "opacity-40",
-                )}
-              >
-                <div id="stages-pips" className="flex items-center gap-2.5">
-                  {stages.map((stage, index) => (
-                    <span
-                      key={stage}
-                      className={pipClassName(activeSong, stages, index)}
-                      title={stageLabels[stage]}
-                    />
-                  ))}
-                </div>
-                {progressPercent !== null ? (
-                  <div className="absolute left-0 right-0 top-full mt-1.5 h-px overflow-hidden bg-white/10">
-                    <div
-                      className="h-full bg-cyan-400/80 transition-[width] duration-700 ease-out"
-                      style={{ width: `${progressPercent}%` }}
-                    />
-                  </div>
-                ) : null}
-              </div>
-
-              {queueDepth !== null && queueDepth > 0 ? (
-                <span className="font-mono text-3xs tracking-widest text-cyan-200/70 uppercase">
-                  queue {queueDepth}
+            ) : (
+              <div className="panel-raised flex items-center gap-3 rounded-xl py-2 pr-2 pl-3">
+                <Paperclip className="size-5 shrink-0 text-orange" aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-base" title={reference.filename}>
+                  {reference.filename}
                 </span>
-              ) : null}
-
-              {aiEnabled ? (
                 <button
                   type="button"
-                  onClick={onToggleFullAuto}
-                  className="ai-fullauto-toggle"
-                  title="Full random mode — hide the inputs, generate and play forever"
+                  onClick={clearReference}
+                  aria-label="Remove reference song"
+                  title="Remove reference song"
+                  className="key size-9"
                 >
-                  <span className="text-sm leading-none">∞</span>
-                  <span className="font-mono text-3xs tracking-[0.25em] uppercase">full auto</span>
+                  <X className="size-4" />
                 </button>
-              ) : null}
+              </div>
+            )}
+            {uploadFailed ? (
+              <p className="text-base text-alarm">The upload failed. Try another audio file.</p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex min-h-9 items-center justify-between">
+              <Label htmlFor="cfg-scale-input" className="text-base font-semibold text-snow">
+                Prompt Adherence ({formatCfgScale(cfgScale)})
+              </Label>
+            </div>
+            <div className="relative">
+              <input
+                id="cfg-scale-input"
+                type="range"
+                min={cfgScaleMin}
+                max={cfgScaleMax}
+                step={cfgScaleStep}
+                value={cfgScale}
+                onChange={(event) => onCfgScaleChange(event.target.valueAsNumber)}
+                aria-describedby="cfg-scale-ends"
+                title="1.0 is the default and skips guidance. Higher follows the style and lyrics more closely; lower gives the model more freedom."
+                className="slider"
+                style={
+                  {
+                    "--sweet-low": `${cfgScalePercent(cfgScaleSweetLow)}%`,
+                    "--sweet-high": `${cfgScalePercent(cfgScaleSweetHigh)}%`,
+                  } as React.CSSProperties
+                }
+              />
+            </div>
+            <div id="cfg-scale-ends" className="flex items-center justify-between text-sm text-dim">
+              <span>Loose</span>
+              <span>Strict</span>
             </div>
           </div>
         </div>
       </div>
 
-      {enhanceError !== null ? <p className="text-xs text-rose-300/90">{enhanceError}</p> : null}
-      {createSong.error !== null && blockedModelsFromError(createSong.error) === null ? (
-        <p className="text-xs text-rose-300/90">{createSong.error.message}</p>
+      <footer className="mx-6 flex flex-wrap items-center justify-between gap-4 border-t border-line py-6 sm:mx-8">
+        <div className="min-w-0 flex-1 basis-64">
+          <StageMeter song={activeSong} stages={stages} queueDepth={queueDepth} />
+        </div>
+
+        <div className="flex items-center gap-3">
+          {aiEnabled ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={onRandom}
+              disabled={randomPending}
+              title="AI writes a song, Yuekbox plays it"
+              className={cn("border border-edge", randomPending && "pending-breathe")}
+            >
+              <Dices aria-hidden />
+              {randomPending ? "Rolling…" : "Random"}
+            </Button>
+          ) : null}
+
+          <Button
+            type="button"
+            onClick={submit}
+            disabled={!canGenerate}
+            title={canGenerate ? "Generate this song" : "Fill in lyrics and style first"}
+            className="btn-orange"
+          >
+            <Disc3 aria-hidden className={cn(createSong.isPending && "animate-spin")} />
+            {createSong.isPending ? "Sending…" : "Generate song"}
+          </Button>
+        </div>
+      </footer>
+
+      {enhanceError !== null || createError !== null ? (
+        <div className="space-y-1 px-6 pb-6 sm:px-8">
+          {enhanceError !== null ? <p className="text-base text-alarm">{enhanceError}</p> : null}
+          {createError !== null ? <p className="text-base text-alarm">{createError}</p> : null}
+        </div>
       ) : null}
-    </div>
+    </section>
   )
 }

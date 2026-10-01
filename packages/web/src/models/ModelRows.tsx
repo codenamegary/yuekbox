@@ -22,16 +22,16 @@ export const ModelRows: React.FC<ModelRowsProps> = ({ keys, externalPaths }) => 
 
   if (readiness.data === undefined) {
     return readiness.isError ? (
-      <p className="py-3 font-mono text-2xs leading-relaxed text-rose-300/90">
-        could not read the models · {errorMessage(readiness.error)}
+      <p className="py-3 text-base text-alarm">
+        Couldn&apos;t read the models. {errorMessage(readiness.error)}
       </p>
     ) : (
-      <p className="animate-pulse py-3 font-mono text-2xs text-slate-400">checking the models…</p>
+      <p className="pending-breathe py-3 text-base text-dim">Checking the models…</p>
     )
   }
 
   return (
-    <ul className="divide-y divide-white/5">
+    <ul className="divide-y divide-line">
       {rows
         .filter((row) => keys.includes(row.key))
         .map((row) => (

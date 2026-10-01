@@ -13,8 +13,8 @@ Usage:
                 [--backend {torch,mlx}] [--precision PRECISION]
 
 `request.json` carries the yue2 `SongRequest` fields yuekbox sets: `id`,
-`style`, `lyrics`, `cot`, `seed`, and optional `abc`. Artifacts land in
-`<output>/<id>/`: `audio.flac`, `result.json`, and `score.abc`.
+`style`, `lyrics`, `cot`, `seed`, `cfg_scale`, and optional `abc`. Artifacts
+land in `<output>/<id>/`: `audio.flac`, `result.json`, and `score.abc`.
 
 This calls the runtime library directly instead of forwarding to a CLI, so the
 flag names, the request surface, and the output layout stay ours. A runtime
@@ -44,7 +44,7 @@ import os
 import sys
 from pathlib import Path
 
-REQUEST_FIELDS = frozenset({"id", "style", "lyrics", "cot", "seed", "abc"})
+REQUEST_FIELDS = frozenset({"id", "style", "lyrics", "cot", "seed", "cfg_scale", "abc"})
 
 
 def parse_args() -> argparse.Namespace:

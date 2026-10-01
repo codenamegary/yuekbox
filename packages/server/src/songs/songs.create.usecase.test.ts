@@ -13,6 +13,7 @@ const toQueuedSong = (song: NewSong): Song =>
     title: song.title,
     style: song.style,
     seed: song.seed,
+    cfgScale: song.cfgScale,
     cot: song.cot,
     createdAt: song.createdAt,
     updatedAt: song.updatedAt,
@@ -188,6 +189,42 @@ test("create keeps an explicit seed", async () => {
   expect(result.ok).toBe(true)
   if (!result.ok) return
   expect(result.value.seed).toBe(7)
+})
+
+test("create defaults the cfg scale to the runtime's no-guidance value", async () => {
+  const harness = makeHarness()
+  const createSong = makeCreateSong(harness.deps)
+
+  const result = await createSong({ lyrics: "hello", style: "pop" })
+
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.value.cfgScale).toBe(1)
+  expect(harness.inserted[0]?.cfgScale).toBe(1)
+})
+
+test("create keeps an explicit cfg scale", async () => {
+  const harness = makeHarness()
+  const createSong = makeCreateSong(harness.deps)
+
+  const result = await createSong({ lyrics: "hello", style: "pop", cfgScale: 1.4 })
+
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.value.cfgScale).toBe(1.4)
+  expect(harness.inserted[0]?.cfgScale).toBe(1.4)
+})
+
+test("create rejects a cfg scale outside the runtime's bound", async () => {
+  const harness = makeHarness()
+  const createSong = makeCreateSong(harness.deps)
+
+  const result = await createSong({ lyrics: "hello", style: "pop", cfgScale: 20.1 })
+
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error.pointer).toBe("/cfgScale")
+  expect(harness.inserted).toHaveLength(0)
 })
 
 test("create trims lyrics and style before insert", async () => {

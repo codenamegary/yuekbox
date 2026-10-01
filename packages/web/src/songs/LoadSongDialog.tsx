@@ -21,33 +21,22 @@ export const LoadSongDialog: React.FC<LoadSongDialogProps> = ({ song, onCancel, 
       aria-labelledby="load-song-title"
       className="fixed inset-0 z-40 flex items-center justify-center p-6"
     >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+      <div className="absolute inset-0 bg-ink/75 backdrop-blur-sm" onClick={onCancel} />
 
-      <div className="hairline-glass-box relative w-full max-w-sm rounded-2xl p-6">
-        <p id="load-song-title" className="text-sm text-slate-100">
-          Replace the style and lyrics in the editor?
-        </p>
-        <p className="mt-2 text-xs text-slate-400">
-          This song&apos;s request will overwrite what is currently in the boxes.
+      <div className="panel panel-rise relative w-full max-w-md rounded-2xl p-6">
+        <h2 id="load-song-title" className="text-xl font-semibold text-snow">
+          Replace what you wrote?
+        </h2>
+        <p className="mt-2 text-base text-dim">
+          Loading &ldquo;{song.title}&rdquo; puts its lyrics and style in the boxes. What&apos;s
+          there now goes away.
         </p>
 
-        <div className="mt-5 flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onCancel}
-            autoFocus
-            className="text-slate-300 hover:text-white"
-          >
-            Cancel
+        <div className="mt-6 flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onCancel} autoFocus>
+            Keep mine
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={onConfirm}
-            className="border border-cyan-400/50 bg-cyan-500/20 text-cyan-100 hover:bg-cyan-500/30"
-          >
+          <Button type="button" onClick={onConfirm}>
             Replace
           </Button>
         </div>

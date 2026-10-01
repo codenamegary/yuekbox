@@ -1,8 +1,22 @@
 import * as React from "react"
+import {
+  AudioWaveform,
+  HardDrive,
+  Infinity as InfinityIcon,
+  Library,
+  ListOrdered,
+  LucideIcon,
+  RefreshCw,
+  SlidersHorizontal,
+  Sparkles,
+  Tornado,
+  Waves,
+} from "lucide-react"
 import { EnhanceScope } from "contracts/http/ai"
 import { MissingModel } from "contracts/http/models"
-import { Song, SongStage } from "contracts/http/songs"
+import { defaultCfgScale, Song, SongStage } from "contracts/http/songs"
 import { cn } from "@/lib/cn"
+import { Button } from "@/components/ui/Button"
 import { AiSettings } from "@/ai/AiSettings"
 import { useAiConfigQuery } from "@/ai/ai.queries"
 import { useEnhanceMutation, useRandomSongMutation } from "@/ai/ai.mutations"
@@ -17,7 +31,7 @@ import { SongPlayer } from "./SongPlayer"
 import { VisualizationCanvas } from "./VisualizationCanvas"
 import { WinampCanvas } from "./WinampCanvas"
 import { createAudioEngine } from "./songs.audio.engine"
-import { Draft, shouldConfirmLoad } from "./songs.draft"
+import { Draft, applyEnhanceToDraft, shouldConfirmLoad } from "./songs.draft"
 import { buildLyricCues } from "./songs.lyrics.timing"
 import { writerHidden } from "./songs.player"
 import { useDeleteSongMutation, useRerollVisualizationMutation } from "./songs.mutations"
@@ -35,18 +49,18 @@ import { initialOverlayState, overlayCloseDelayMs, stepOverlay } from "./songs.o
 import { createVisualizationEngine, VisualizationSong } from "./songs.visualization"
 import { createWinampEngine, TripMode } from "./songs.winamp.engine"
 
-const tripModes: ReadonlyArray<{ mode: TripMode; glyph: string; title: string }> = [
-  { mode: 0, glyph: "⏣", title: "Hyperspace Vortex (Milkdrop)" },
-  { mode: 1, glyph: "∿", title: "Phosphor Oscilloscope" },
-  { mode: 2, glyph: "❂", title: "Chromatic Plasma" },
-  { mode: 3, glyph: "✧", title: "Quantum Stardust Vortex" },
+const tripModes: ReadonlyArray<{ mode: TripMode; Icon: LucideIcon; title: string }> = [
+  { mode: 0, Icon: Tornado, title: "Hyperspace vortex" },
+  { mode: 1, Icon: AudioWaveform, title: "Phosphor oscilloscope" },
+  { mode: 2, Icon: Waves, title: "Chromatic plasma" },
+  { mode: 3, Icon: Sparkles, title: "Stardust vortex" },
 ]
 
 const fullAutoStatusLabels: Readonly<Record<FullAutoPhase, string>> = {
-  idle: "waking up",
-  generating: "dreaming up the next one…",
-  playing: "on air — next one brewing",
-  starved: "the spirits are catching up…",
+  idle: "Warming up the tubes",
+  generating: "Writing the next one…",
+  playing: "On air. The next one is in the oven.",
+  starved: "The machine is catching up…",
 }
 
 export const SongsPage: React.FC = () => {
@@ -66,7 +80,11 @@ export const SongsPage: React.FC = () => {
   const [overlay, dispatchOverlay] = React.useReducer(stepOverlay, initialOverlayState)
   const [trackedSong, setTrackedSong] = React.useState<Song | null>(null)
   const [mode, setMode] = React.useState<TripMode>(0)
-  const [draft, setDraft] = React.useState<Draft>({ style: "", lyrics: "" })
+  const [draft, setDraft] = React.useState<Draft>({
+    style: "",
+    lyrics: "",
+    cfgScale: defaultCfgScale,
+  })
   const [loadCandidate, setLoadCandidate] = React.useState<Song | null>(null)
   const [fullAuto, setFullAuto] = React.useState(false)
   const [playSignal, setPlaySignal] = React.useState(0)
@@ -173,7 +191,11 @@ export const SongsPage: React.FC = () => {
 
   const confirmLoad = React.useCallback(() => {
     if (loadCandidate !== null) {
-      applyDraft({ style: loadCandidate.style, lyrics: loadCandidate.lyrics })
+      applyDraft({
+        style: loadCandidate.style,
+        lyrics: loadCandidate.lyrics,
+        cfgScale: loadCandidate.cfgScale,
+      })
     }
     setLoadCandidate(null)
   }, [applyDraft, loadCandidate])
@@ -249,7 +271,11 @@ export const SongsPage: React.FC = () => {
       if (shouldConfirmLoad(draft, selected)) {
         setLoadCandidate(selected)
       } else {
-        applyDraft({ style: selected.style, lyrics: selected.lyrics })
+        applyDraft({
+          style: selected.style,
+          lyrics: selected.lyrics,
+          cfgScale: selected.cfgScale,
+        })
       }
     }
     setHistoryOpen(false)
@@ -323,18 +349,22 @@ export const SongsPage: React.FC = () => {
     rerollVisualization.mutate(activeSongId)
     poke()
   }
-  const enhance = useEnhanceMutation((kind, text) => {
-    if (kind === "style") {
-      applyDraft({ style: text, lyrics: draft.lyrics })
-    } else {
-      applyDraft({ style: draft.style, lyrics: text })
-    }
-    poke()
-  })
-
+  const onEnhanceDone = React.useCallback(
+    (kind: EnhanceScope, text: string) => {
+      setDraft((current) => applyEnhanceToDraft(current, kind, text))
+      poke()
+    },
+    [poke],
+  )
+  const enhanceLyrics = useEnhanceMutation(onEnhanceDone)
+  const enhanceStyle = useEnhanceMutation(onEnhanceDone)
   const handleEnhance = (kind: EnhanceScope) => {
     if (aiConfig === undefined) return
-    enhance.mutate({ kind, style: draft.style, lyrics: draft.lyrics })
+    if (kind === "lyrics") {
+      enhanceLyrics.mutate({ kind, style: draft.style, lyrics: draft.lyrics })
+    } else {
+      enhanceStyle.mutate({ kind, style: draft.style, lyrics: draft.lyrics })
+    }
     poke()
   }
 
@@ -375,119 +405,115 @@ export const SongsPage: React.FC = () => {
       ) : (
         <WinampCanvas engine={winamp} mode={mode} analysis={analysis} />
       )}
-      <div className="tech-vignette" />
+      <div className="vignette" />
 
       {!fullAutoActive ? (
-        <div className="fixed top-8 right-8 z-20 flex items-center gap-2.5 pointer-events-auto">
-          <div className="relative">
+        <div className="fixed top-6 right-6 z-20 flex flex-col items-end gap-2 pointer-events-auto">
+          <nav aria-label="Visuals and panels" className="flex items-center gap-3">
             <button
               type="button"
               onClick={rerollVisualizationNow}
               disabled={rerolling}
-              className={cn(
-                "alien-sigil disabled:opacity-40 disabled:pointer-events-none",
-                rerolling && "active",
-              )}
+              className={cn("key", rerolling && "key-lit")}
               title={rerollTitle}
+              aria-label={rerollTitle}
             >
-              <span
-                className={cn(
-                  "inline-block leading-none",
-                  rerolling && "animate-spin motion-reduce:animate-none",
-                )}
+              <RefreshCw
+                className={cn("size-5", rerolling && "animate-spin motion-reduce:animate-none")}
+              />
+            </button>
+            <div className="flex items-center gap-1.5">
+              {tripModes.map((trip) => (
+                <button
+                  key={trip.mode}
+                  type="button"
+                  onClick={() => {
+                    setMode(trip.mode)
+                    winamp.pulse(0.8)
+                  }}
+                  className={cn("key", mode === trip.mode && "key-lit")}
+                  title={trip.title}
+                  aria-label={trip.title}
+                  aria-pressed={mode === trip.mode}
+                >
+                  <trip.Icon className="size-5" />
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (overlayVisible) {
+                    dismissOverlay()
+                  } else {
+                    setTrackedSong(overlaySong)
+                    dispatchOverlay({ type: "show" })
+                  }
+                  poke()
+                }}
+                disabled={!overlayVisible && !songIsActive}
+                className={cn("key", overlayVisible && "key-lit")}
+                title={overlayVisible ? "Hide generation progress" : "Show generation progress"}
+                aria-label={
+                  overlayVisible ? "Hide generation progress" : "Show generation progress"
+                }
               >
-                ↻
-              </span>
-            </button>
-            {showVisualizationBadge ? (
-              <span className="absolute right-0 top-full mt-1.5 flex items-center gap-2 whitespace-nowrap">
-                <span className="font-mono text-3xs tracking-[0.25em] uppercase text-amber-200/70">
-                  visual failed
+                <ListOrdered className="size-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setHistoryOpen((open) => !open)
+                  poke()
+                }}
+                className={cn("key", historyOpen && "key-lit")}
+                title="Song history"
+                aria-label="Song history"
+                aria-pressed={historyOpen}
+              >
+                <Library className="size-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModelsOpen(true)
+                  poke()
+                }}
+                className={cn("key", modelsOpen && "key-lit")}
+                title="Models: point at a copy or download one"
+                aria-label="Models"
+              >
+                <HardDrive className="size-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSettingsOpen(true)
+                  poke()
+                }}
+                className={cn("key", settingsOpen && "key-lit")}
+                title="AI settings: pick endpoints, models, and effort"
+                aria-label="AI settings"
+              >
+                <SlidersHorizontal className="size-5" />
+              </button>
+            </div>
+          </nav>
+          {showVisualizationBadge ? (
+            <p className="text-float flex max-w-sm items-center gap-2 text-sm">
+              <span className="shrink-0 font-semibold text-orange">The visual failed.</span>
+              {visualizationDetail !== null ? (
+                <span className="truncate text-dim" title={visualizationDetail}>
+                  {visualizationDetail}
                 </span>
-                {visualizationDetail !== null ? (
-                  <span
-                    className="max-w-[14rem] truncate font-mono text-3xs text-white/30"
-                    title={visualizationDetail}
-                  >
-                    {visualizationDetail}
-                  </span>
-                ) : null}
-              </span>
-            ) : null}
-          </div>
-          <div className="w-px h-4 bg-white/10 mx-1" />
-          {tripModes.map((trip) => (
-            <button
-              key={trip.mode}
-              type="button"
-              onClick={() => {
-                setMode(trip.mode)
-                winamp.pulse(0.8)
-              }}
-              className={cn("alien-sigil", mode === trip.mode && "active")}
-              title={trip.title}
-            >
-              {trip.glyph}
-            </button>
-          ))}
-          <div className="w-px h-4 bg-white/10 mx-1" />
-          <button
-            type="button"
-            onClick={() => {
-              if (overlayVisible) {
-                dismissOverlay()
-              } else {
-                setTrackedSong(overlaySong)
-                dispatchOverlay({ type: "show" })
-              }
-              poke()
-            }}
-            disabled={!overlayVisible && !songIsActive}
-            className={cn(
-              "alien-sigil disabled:opacity-40 disabled:pointer-events-none",
-              overlayVisible && "active",
-            )}
-            title={overlayVisible ? "Hide the generating reel" : "Show the generating reel"}
-          >
-            ☰
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setHistoryOpen((open) => !open)
-              poke()
-            }}
-            className={cn("alien-sigil", historyOpen && "active")}
-            title="Song History (Click to pop out)"
-          >
-            ◷
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setModelsOpen(true)
-              poke()
-            }}
-            className={cn("alien-sigil", modelsOpen && "active")}
-            title="Models — point at a copy or download one"
-          >
-            ▤
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setSettingsOpen(true)
-              poke()
-            }}
-            className={cn("alien-sigil", settingsOpen && "active")}
-            title="AI Settings — pick agents, models, and effort"
-          >
-            ⚙
-          </button>
+              ) : null}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
-      <main className="relative z-10 w-full h-full flex flex-col p-8 sm:p-14 md:p-16 pointer-events-none">
+      <main className="relative z-10 w-full h-full flex flex-col px-6 pt-28 pb-6 sm:px-10 sm:pb-10 pointer-events-none">
         {!fullAutoActive ? (
           <div
             className={cn(
@@ -502,17 +528,28 @@ export const SongsPage: React.FC = () => {
                 queueDepth={statusQuery.data?.queueDepth ?? null}
                 style={draft.style}
                 lyrics={draft.lyrics}
+                cfgScale={draft.cfgScale}
                 aiEnabled={aiEnabled}
-                enhancing={enhance.isPending ? (enhance.variables?.kind ?? null) : null}
-                enhanceError={enhance.error?.message ?? null}
+                enhancing={[
+                  enhanceLyrics.isPending ? "lyrics" : null,
+                  enhanceStyle.isPending ? "style" : null,
+                ].filter((scope): scope is EnhanceScope => scope !== null)}
+                enhanceError={
+                  [enhanceLyrics.error?.message, enhanceStyle.error?.message]
+                    .filter((message): message is string => message !== undefined)
+                    .join(" ") || null
+                }
                 randomPending={manualRandom.isPending}
                 onStyleChange={(value) => {
-                  applyDraft({ style: value, lyrics: draft.lyrics })
+                  applyDraft({ ...draft, style: value })
                   typing()
                 }}
                 onLyricsChange={(value) => {
-                  applyDraft({ style: draft.style, lyrics: value })
+                  applyDraft({ ...draft, lyrics: value })
                   typing()
+                }}
+                onCfgScaleChange={(value) => {
+                  applyDraft({ ...draft, cfgScale: value })
                 }}
                 onCreated={handleCreated}
                 onBlocked={handleBlocked}
@@ -535,21 +572,22 @@ export const SongsPage: React.FC = () => {
         )}
 
         {fullAutoActive ? (
-          <div className="shrink-0 flex items-center justify-center gap-4 pb-3 max-w-2xl mx-auto w-full pointer-events-auto">
-            <span className="font-mono text-3xs tracking-[0.3em] uppercase text-cyan-200/60">
-              ∞ full auto · {fullAutoStatusLabels[fullAutoState.phase]}
-            </span>
-            <button
+          <div className="panel mx-auto flex shrink-0 items-center gap-4 rounded-2xl py-2 pr-2 pl-4 pointer-events-auto">
+            <InfinityIcon className="size-6 shrink-0 text-orange" aria-hidden />
+            <p className="text-base">
+              <span className="font-semibold text-snow">Full auto</span>
+              <span className="text-dim"> · {fullAutoStatusLabels[fullAutoState.phase]}</span>
+            </p>
+            <Button
               type="button"
+              variant="secondary"
               onClick={() => {
                 setFullAuto(false)
                 poke()
               }}
-              className="font-mono text-3xs tracking-[0.25em] uppercase text-white/35 hover:text-white transition-colors"
-              title="Leave full auto"
             >
-              exit ✕
-            </button>
+              Exit full auto
+            </Button>
           </div>
         ) : null}
 

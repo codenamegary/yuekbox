@@ -22,6 +22,7 @@ const newSong = (songId: string, createdAt: string): NewSong => ({
   title: "hello",
   style: "pop",
   seed: 1,
+  cfgScale: 1,
   cot: "full",
   createdAt,
   updatedAt: createdAt,
@@ -60,6 +61,7 @@ test("insert and find round-trip the lifecycle fields", async () => {
     expect(found?.lyrics).toBe("hello")
     expect(found?.title).toBe("hello")
     expect(found?.style).toBe("pop")
+    expect(found?.cfgScale).toBe(1)
   } finally {
     handle.close()
   }

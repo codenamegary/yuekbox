@@ -1,4 +1,4 @@
-import { CreateSongBody, CreateSongBodySchema } from "contracts/http/songs"
+import { CreateSongBody, CreateSongBodySchema, defaultCfgScale } from "contracts/http/songs"
 import { FindFiles, MakeDirectory, MoveFile, RemoveDirectory } from "../media/media.ports"
 import { err, ok, Result } from "../shared/result"
 import {
@@ -86,6 +86,7 @@ export const makeCreateSong =
       title,
       style: parsed.data.style,
       seed: parsed.data.seed ?? deps.randomSeed(),
+      cfgScale: parsed.data.cfgScale ?? defaultCfgScale,
       cot: referenceId === null ? "full" : "melody",
       createdAt: now,
       updatedAt: now,

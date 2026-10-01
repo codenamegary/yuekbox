@@ -9,6 +9,8 @@ import {
   Setting,
 } from "contracts/http/ai"
 import { useQueryClient } from "@tanstack/react-query"
+import { RefreshCw } from "lucide-react"
+import { PanelHeader } from "@/components/ui/PanelHeader"
 import { cn } from "@/lib/cn"
 import { AiPresetIcon } from "./AiPresetIcon"
 import { useAiConfigQuery, useAiModelsQuery, useAiPresetsQuery } from "./ai.queries"
@@ -24,8 +26,8 @@ type ScopeDraft = Readonly<{ baseUrl: string | null; apiKey: string | null }>
 type ScopeDrafts = Readonly<Record<WriterScope, ScopeDraft>>
 
 const untouched: ScopeDrafts = {
-  style: { baseUrl: null, apiKey: null },
   lyrics: { baseUrl: null, apiKey: null },
+  style: { baseUrl: null, apiKey: null },
   visuals: { baseUrl: null, apiKey: null },
 }
 
@@ -84,15 +86,10 @@ const SettingEditor: React.FC<SettingEditorProps> = ({
       : fallbackModels
 
   return (
-    <div className="hairline-glass-box rounded-2xl p-4 space-y-3">
-      <label
-        htmlFor={`ai-${scope}-model`}
-        className="block font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80"
-      >
-        {title}
-      </label>
+    <section className="panel-raised space-y-3 rounded-2xl p-5" aria-label={title}>
+      <h3 className="text-lg font-semibold text-snow">{title}</h3>
 
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex flex-wrap items-center gap-2">
         {presets.map((preset) => (
           <button
             key={preset.id}
@@ -107,7 +104,13 @@ const SettingEditor: React.FC<SettingEditorProps> = ({
               onBaseUrlChange(scope, preset.baseUrl)
             }}
             title={preset.baseUrl === "" ? `${preset.name} — bring your own URL` : preset.baseUrl}
-            className={cn("ai-agent-chip", setting.presetId === preset.id && "active")}
+            aria-pressed={setting.presetId === preset.id}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
+              setting.presetId === preset.id
+                ? "border-orange-soft bg-orange text-paper-ink"
+                : "border-edge bg-panel text-dim hover:border-orange/60 hover:text-snow",
+            )}
           >
             <AiPresetIcon name={preset.icon} />
             <span>{preset.name}</span>
@@ -122,89 +125,94 @@ const SettingEditor: React.FC<SettingEditorProps> = ({
         onBlur={() => onFieldBlur(scope)}
         placeholder="https://api.example.com/v1"
         spellCheck={false}
-        className="ai-input w-full"
-        aria-label={`${scope} API base URL`}
+        aria-label={`${title} endpoint`}
+        className="field w-full px-3 py-2 font-mono text-base"
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="password"
-          value={draft.apiKey ?? ""}
-          onChange={(event) => onApiKeyChange(scope, event.target.value)}
-          onBlur={() => onFieldBlur(scope)}
-          placeholder={
-            setting.keyHint !== null
-              ? `stored ${setting.keyHint}`
-              : activePreset?.needsKey
-                ? "API key"
-                : "API key (optional)"
-          }
-          autoComplete="off"
-          className="ai-input min-w-0 flex-1 basis-40"
-          aria-label={`${scope} API key`}
-        />
+      <input
+        type="password"
+        value={draft.apiKey ?? ""}
+        onChange={(event) => onApiKeyChange(scope, event.target.value)}
+        onBlur={() => onFieldBlur(scope)}
+        placeholder={
+          setting.keyHint !== null
+            ? `API key stored ${setting.keyHint}`
+            : activePreset?.needsKey
+              ? "API key"
+              : "API key (optional)"
+        }
+        autoComplete="off"
+        aria-label={`${title} API key`}
+        className="field w-full px-3 py-2 font-mono text-base"
+      />
 
-        <div className="flex items-center gap-1.5">
-          {effortLevels.map((effort: EffortLevel) => (
-            <button
-              key={effort}
-              type="button"
-              onClick={() => onPatch(scope, { effort })}
-              className={cn("ai-effort-chip", setting.effort === effort && "active")}
-              title={effort === "off" ? "Send no reasoning effort" : `reasoning_effort: ${effort}`}
-            >
-              {effort}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1 min-w-0">
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2">
           <select
             id={`ai-${scope}-model`}
             value={setting.model}
             onChange={(event) => onPatch(scope, { model: event.target.value })}
-            className="ai-select w-full"
-            aria-label={`${scope} model`}
+            aria-label={`${title} model`}
+            className="field min-w-0 flex-1 px-3 py-2 font-mono text-base"
           >
-            <option value="" className="bg-[#02050b] text-slate-100">
-              pick a model…
-            </option>
+            <option value="">Pick a model…</option>
             {options.map((model) => (
-              <option key={model} value={model} className="bg-[#02050b] text-slate-100">
+              <option key={model} value={model}>
                 {model}
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            onClick={() => onRefreshModels(scope)}
+            className="key"
+            title="Fetch the model list from the endpoint"
+            aria-label={`Refresh the ${scope} model list`}
+          >
+            <RefreshCw className="size-5" />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => onRefreshModels(scope)}
-          className="ai-refresh"
-          title="Fetch the model list from the endpoint"
-        >
-          ⟳
-        </button>
+        {!modelsLive && modelsDetail !== null ? (
+          <p className="text-sm text-alarm">{modelsDetail}</p>
+        ) : null}
       </div>
 
-      <p className="font-mono text-3xs text-white/35 leading-relaxed">
-        {modelsLive
-          ? `live · ${models.length} model${models.length === 1 ? "" : "s"}`
-          : (modelsDetail ?? "preset guesses — check the endpoint, then refresh")}
-      </p>
-    </div>
+      <div
+        role="group"
+        aria-label={`${title} reasoning effort`}
+        title="Reasoning effort"
+        className="flex flex-wrap gap-1 rounded-xl border border-edge bg-ink p-1"
+      >
+        {effortLevels.map((effort: EffortLevel) => (
+          <button
+            key={effort}
+            type="button"
+            onClick={() => onPatch(scope, { effort })}
+            aria-pressed={setting.effort === effort}
+            className={cn(
+              "flex-1 rounded-lg px-2 py-1 text-sm font-medium capitalize transition-colors",
+              setting.effort === effort
+                ? "bg-orange text-paper-ink"
+                : "text-dim hover:bg-panel-raised hover:text-snow",
+            )}
+            title={effort === "off" ? "Send no reasoning effort" : `reasoning_effort: ${effort}`}
+          >
+            {effort}
+          </button>
+        ))}
+      </div>
+    </section>
   )
 }
 
 type WriterPatch = Partial<Omit<Setting, "keyHint">> & { apiKey?: string }
 
-const writerScopes: readonly WriterScope[] = ["style", "lyrics", "visuals"]
+const writerScopes: readonly WriterScope[] = ["lyrics", "style", "visuals"]
 
 const writerTitles: Readonly<Record<WriterScope, string>> = {
-  style: "style · writer",
-  lyrics: "lyrics · writer",
-  visuals: "visuals · writer",
+  lyrics: "Lyrics",
+  style: "Style",
+  visuals: "Visuals",
 }
 
 export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
@@ -297,30 +305,17 @@ export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
       aria-label="AI settings"
       className="fixed inset-0 z-40 flex items-center justify-center p-6"
     >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-ink/75 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="ai-settings-panel hairline-glass-box relative w-full max-w-6xl rounded-2xl p-6 space-y-5 max-h-[86vh] overflow-y-auto">
-        <div className="flex items-center justify-between border-b border-white/10 pb-3">
-          <span className="text-xs font-mono font-bold tracking-widest text-slate-200 uppercase">
-            machine spirits
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-400 hover:text-white text-xs font-mono"
-          >
-            ✕ Close
-          </button>
-        </div>
-
-        {config === undefined ? (
-          <p className="font-mono text-2xs text-slate-400 animate-pulse">waking the spirits…</p>
-        ) : (
-          <>
+      <div className="panel panel-rise relative max-h-[88vh] w-full max-w-6xl overflow-y-auto rounded-3xl">
+        <PanelHeader title="AI settings" closeLabel="Close AI settings" onClose={onClose}>
+          {config === undefined ? null : (
             <button
               type="button"
               role="switch"
               aria-checked={config.enabled}
+              aria-label="Use AI"
+              title={config.enabled ? "Turn AI off" : "Turn AI on"}
               onClick={() => {
                 queryClient.setQueryData(queryKeys.aiConfig(), {
                   ...config,
@@ -328,65 +323,62 @@ export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
                 })
                 saveConfig.mutate({ enabled: !config.enabled })
               }}
-              className="ai-enable-toggle w-full"
+              className="text-stage flex items-center gap-3 rounded-xl px-3 py-2 text-base font-semibold text-snow hover:bg-ink/40"
             >
-              <span className="font-mono text-2xs tracking-[0.35em] uppercase text-slate-300">
-                ai enhancement
-              </span>
-              <span className={cn("ai-switch", config.enabled && "on")}>
-                <span className="ai-switch-knob" />
+              {config.enabled ? "On" : "Off"}
+              <span className={cn("switch", config.enabled && "on")}>
+                <span className="switch-knob" />
               </span>
             </button>
+          )}
+        </PanelHeader>
 
-            <div
-              className={cn(
-                "space-y-4 transition-opacity duration-500",
-                config.enabled ? "opacity-100" : "opacity-40 pointer-events-none",
-              )}
-            >
-              <div className="grid gap-4 md:grid-cols-3">
-                {writerScopes.map((scope) => (
-                  <SettingEditor
-                    key={scope}
-                    scope={scope}
-                    title={writerTitles[scope]}
-                    setting={config[scope]}
-                    presets={presets}
-                    models={modelQueries[scope].data?.models ?? []}
-                    modelsLive={modelQueries[scope].data?.live ?? false}
-                    modelsDetail={modelQueries[scope].data?.detail ?? null}
-                    draft={drafts[scope]}
-                    onBaseUrlChange={(changedScope, value) => {
-                      setDrafts((all) => ({
-                        ...all,
-                        [changedScope]: { ...all[changedScope], baseUrl: value },
-                      }))
-                      patchScopeDebounced(changedScope, { baseUrl: value })
-                    }}
-                    onApiKeyChange={(changedScope, value) => {
-                      setDrafts((all) => ({
-                        ...all,
-                        [changedScope]: { ...all[changedScope], apiKey: value },
-                      }))
-                      patchScopeDebounced(changedScope, { apiKey: value })
-                    }}
-                    onPatch={patchScope}
-                    onFieldBlur={flushScope}
-                    onRefreshModels={(refreshScope) => {
-                      void queryClient.refetchQueries({
-                        queryKey: queryKeys.aiModels(refreshScope),
-                      })
-                    }}
-                  />
-                ))}
-              </div>
-
-              <p className="font-mono text-3xs text-white/30 leading-relaxed">
-                any OpenAI-compatible endpoint works · keys stay on this machine
-                {saveCount > 0 ? " · saved" : ""}
-              </p>
+        {config === undefined ? (
+          <p className="pending-breathe p-6 text-base text-dim sm:p-8">Loading…</p>
+        ) : (
+          <div
+            className={cn(
+              "p-6 transition-opacity duration-500 sm:p-8",
+              config.enabled ? "opacity-100" : "pointer-events-none opacity-40",
+            )}
+          >
+            <div className="grid gap-4 md:grid-cols-3">
+              {writerScopes.map((scope) => (
+                <SettingEditor
+                  key={scope}
+                  scope={scope}
+                  title={writerTitles[scope]}
+                  setting={config[scope]}
+                  presets={presets}
+                  models={modelQueries[scope].data?.models ?? []}
+                  modelsLive={modelQueries[scope].data?.live ?? false}
+                  modelsDetail={modelQueries[scope].data?.detail ?? null}
+                  draft={drafts[scope]}
+                  onBaseUrlChange={(changedScope, value) => {
+                    setDrafts((all) => ({
+                      ...all,
+                      [changedScope]: { ...all[changedScope], baseUrl: value },
+                    }))
+                    patchScopeDebounced(changedScope, { baseUrl: value })
+                  }}
+                  onApiKeyChange={(changedScope, value) => {
+                    setDrafts((all) => ({
+                      ...all,
+                      [changedScope]: { ...all[changedScope], apiKey: value },
+                    }))
+                    patchScopeDebounced(changedScope, { apiKey: value })
+                  }}
+                  onPatch={patchScope}
+                  onFieldBlur={flushScope}
+                  onRefreshModels={(refreshScope) => {
+                    void queryClient.refetchQueries({
+                      queryKey: queryKeys.aiModels(refreshScope),
+                    })
+                  }}
+                />
+              ))}
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>

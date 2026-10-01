@@ -47,34 +47,26 @@ export const MissingModelDialog: React.FC<MissingModelDialogProps> = ({ models, 
       aria-label={title}
       className="fixed inset-0 z-[65] flex items-center justify-center p-4 sm:p-6"
     >
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-ink/80 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="ai-settings-panel hairline-glass-box relative max-h-[86vh] w-full max-w-2xl overflow-y-auto rounded-2xl p-6">
-        <p
-          className={cn(
-            "font-mono text-3xs uppercase tracking-[0.4em]",
-            allReady ? "text-cyan-300/70" : "text-amber-200/70",
-          )}
-        >
-          {allReady ? "ready to generate" : "generation blocked"}
-        </p>
-        <h2 className="mt-2 text-lg font-semibold text-slate-50">{title}</h2>
-        {allReady ? null : (
-          <p className="mt-2 text-sm leading-relaxed text-white/60">{blockedDetail(models)}</p>
-        )}
+      <div className="panel panel-rise relative max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-3xl p-6 sm:p-8">
+        <h2 className={cn("text-2xl font-semibold", allReady ? "text-orange" : "text-snow")}>
+          {title}
+        </h2>
+        {allReady ? null : <p className="mt-2 text-base text-dim">{blockedDetail(models)}</p>}
 
-        <div className="mt-3 border-t border-white/10">
+        <div className="mt-4 border-t border-line">
           <ModelRows keys={keys} externalPaths={refused} />
         </div>
 
         <div className="mt-5 flex items-center justify-end gap-2">
           {allReady ? (
             <ActionButton tone="primary" onClick={onClose}>
-              continue
+              Continue
             </ActionButton>
           ) : null}
           <ActionButton tone="ghost" onClick={onClose}>
-            not now
+            Not now
           </ActionButton>
         </div>
       </div>

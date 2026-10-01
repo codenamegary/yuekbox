@@ -139,6 +139,7 @@ export const makeRunYue2Generate =
           lyrics: input.lyrics,
           cot: input.cot,
           seed: input.seed,
+          cfg_scale: input.cfgScale,
           ...(input.abc !== null ? { abc: input.abc } : {}),
         },
         null,
