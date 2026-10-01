@@ -97,7 +97,7 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine }) => {
   const title = song === null ? "Nothing on the turntable" : song.title
 
   return (
-    <div className="panel fixed top-6 left-6 z-20 flex w-[min(24rem,calc(100vw-3rem))] items-center gap-4 rounded-2xl p-3 pr-5 pointer-events-auto">
+    <div className="fixed top-6 left-6 z-20 flex w-[min(24rem,calc(100vw-3rem))] items-center gap-3 pointer-events-auto">
       <button
         type="button"
         onClick={toggle}
@@ -105,14 +105,14 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine }) => {
         aria-label={playing ? "Pause" : "Play"}
         title={playing ? "Pause" : "Play"}
         className={cn(
-          "btn-orange inline-flex size-14 shrink-0 items-center justify-center rounded-full",
+          "btn-orange inline-flex size-7 shrink-0 items-center justify-center rounded-full",
           "disabled:cursor-not-allowed disabled:opacity-40",
         )}
       >
         {playing ? (
-          <Pause className="size-6" fill="currentColor" />
+          <Pause className="size-3.5" fill="currentColor" />
         ) : (
-          <Play className="ml-0.5 size-6" fill="currentColor" />
+          <Play className="ml-px size-3.5" fill="currentColor" />
         )}
       </button>
 
@@ -120,14 +120,17 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine }) => {
         <div className="flex items-baseline justify-between gap-3">
           <p
             className={cn(
-              "truncate text-base font-semibold",
+              "text-float truncate text-base font-semibold",
               song === null ? "text-dim" : "text-snow",
             )}
             title={title}
           >
             {title}
           </p>
-          <span ref={timeRef} className="shrink-0 font-mono text-sm text-dim tabular-nums">
+          <span
+            ref={timeRef}
+            className="text-float shrink-0 font-mono text-sm text-dim tabular-nums"
+          >
             00:00
           </span>
         </div>
@@ -152,13 +155,13 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine }) => {
           }}
           className="group relative mt-2 flex h-5 w-full cursor-pointer touch-none select-none items-center"
         >
-          <span className="relative h-1.5 w-full overflow-hidden rounded-full bg-ink inset-shadow-well">
+          <span className="relative h-1.5 w-full overflow-hidden rounded-full bg-snow/20 inset-shadow-well">
             <span ref={fillRef} className="block h-full w-0 rounded-full bg-orange" />
           </span>
           <span
             ref={thumbRef}
             className={cn(
-              "pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-panel bg-orange-soft transition-opacity",
+              "pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-ink bg-orange-soft transition-opacity",
               scrubbing
                 ? "opacity-100"
                 : "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",

@@ -1,6 +1,12 @@
+import { EnhanceScope } from "contracts/http/ai"
 import { Song } from "contracts/http/songs"
 
-export type Draft = Readonly<{ style: string; lyrics: string }>
+export type Draft = Readonly<{ style: string; lyrics: string; cfgScale: number }>
+
+export const applyEnhanceToDraft = (draft: Draft, kind: EnhanceScope, text: string): Draft =>
+  kind === "style"
+    ? { style: text, lyrics: draft.lyrics, cfgScale: draft.cfgScale }
+    : { style: draft.style, lyrics: text, cfgScale: draft.cfgScale }
 
 export const countWords = (text: string): number =>
   text

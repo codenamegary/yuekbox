@@ -21,7 +21,7 @@ it from the pinned git commit into the shared environment at `<home>/venvs/pytho
 ```
 
 `request.json` carries the `SongRequest` fields yuekbox sets: `id`, `style`,
-`lyrics`, `cot`, `seed`, and optional `abc`. Artifacts land in
+`lyrics`, `cot`, `seed`, `cfg_scale`, and optional `abc`. Artifacts land in
 `<output>/<id>/`: `audio.flac`, `result.json`, and `score.abc`. The server reads
 `audio.flac`, `score.abc`, and `result.json` (`audio_seconds` and the
 truncation flags).

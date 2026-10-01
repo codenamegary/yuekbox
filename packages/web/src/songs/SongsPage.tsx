@@ -14,7 +14,7 @@ import {
 } from "lucide-react"
 import { EnhanceScope } from "contracts/http/ai"
 import { MissingModel } from "contracts/http/models"
-import { Song, SongStage } from "contracts/http/songs"
+import { defaultCfgScale, Song, SongStage } from "contracts/http/songs"
 import { cn } from "@/lib/cn"
 import { Button } from "@/components/ui/Button"
 import { AiSettings } from "@/ai/AiSettings"
@@ -31,7 +31,7 @@ import { SongPlayer } from "./SongPlayer"
 import { VisualizationCanvas } from "./VisualizationCanvas"
 import { WinampCanvas } from "./WinampCanvas"
 import { createAudioEngine } from "./songs.audio.engine"
-import { Draft, shouldConfirmLoad } from "./songs.draft"
+import { Draft, applyEnhanceToDraft, shouldConfirmLoad } from "./songs.draft"
 import { buildLyricCues } from "./songs.lyrics.timing"
 import { writerHidden } from "./songs.player"
 import { useDeleteSongMutation, useRerollVisualizationMutation } from "./songs.mutations"
@@ -63,8 +63,6 @@ const fullAutoStatusLabels: Readonly<Record<FullAutoPhase, string>> = {
   starved: "The machine is catching up…",
 }
 
-const ToolbarDivider: React.FC = () => <span aria-hidden className="mx-1 h-6 w-px bg-edge" />
-
 export const SongsPage: React.FC = () => {
   const [audio] = React.useState(createAudioEngine)
   const [winamp] = React.useState(() =>
@@ -82,7 +80,11 @@ export const SongsPage: React.FC = () => {
   const [overlay, dispatchOverlay] = React.useReducer(stepOverlay, initialOverlayState)
   const [trackedSong, setTrackedSong] = React.useState<Song | null>(null)
   const [mode, setMode] = React.useState<TripMode>(0)
-  const [draft, setDraft] = React.useState<Draft>({ style: "", lyrics: "" })
+  const [draft, setDraft] = React.useState<Draft>({
+    style: "",
+    lyrics: "",
+    cfgScale: defaultCfgScale,
+  })
   const [loadCandidate, setLoadCandidate] = React.useState<Song | null>(null)
   const [fullAuto, setFullAuto] = React.useState(false)
   const [playSignal, setPlaySignal] = React.useState(0)
@@ -189,7 +191,11 @@ export const SongsPage: React.FC = () => {
 
   const confirmLoad = React.useCallback(() => {
     if (loadCandidate !== null) {
-      applyDraft({ style: loadCandidate.style, lyrics: loadCandidate.lyrics })
+      applyDraft({
+        style: loadCandidate.style,
+        lyrics: loadCandidate.lyrics,
+        cfgScale: loadCandidate.cfgScale,
+      })
     }
     setLoadCandidate(null)
   }, [applyDraft, loadCandidate])
@@ -265,7 +271,11 @@ export const SongsPage: React.FC = () => {
       if (shouldConfirmLoad(draft, selected)) {
         setLoadCandidate(selected)
       } else {
-        applyDraft({ style: selected.style, lyrics: selected.lyrics })
+        applyDraft({
+          style: selected.style,
+          lyrics: selected.lyrics,
+          cfgScale: selected.cfgScale,
+        })
       }
     }
     setHistoryOpen(false)
@@ -339,18 +349,22 @@ export const SongsPage: React.FC = () => {
     rerollVisualization.mutate(activeSongId)
     poke()
   }
-  const enhance = useEnhanceMutation((kind, text) => {
-    if (kind === "style") {
-      applyDraft({ style: text, lyrics: draft.lyrics })
-    } else {
-      applyDraft({ style: draft.style, lyrics: text })
-    }
-    poke()
-  })
-
+  const onEnhanceDone = React.useCallback(
+    (kind: EnhanceScope, text: string) => {
+      setDraft((current) => applyEnhanceToDraft(current, kind, text))
+      poke()
+    },
+    [poke],
+  )
+  const enhanceLyrics = useEnhanceMutation(onEnhanceDone)
+  const enhanceStyle = useEnhanceMutation(onEnhanceDone)
   const handleEnhance = (kind: EnhanceScope) => {
     if (aiConfig === undefined) return
-    enhance.mutate({ kind, style: draft.style, lyrics: draft.lyrics })
+    if (kind === "lyrics") {
+      enhanceLyrics.mutate({ kind, style: draft.style, lyrics: draft.lyrics })
+    } else {
+      enhanceStyle.mutate({ kind, style: draft.style, lyrics: draft.lyrics })
+    }
     poke()
   }
 
@@ -395,10 +409,7 @@ export const SongsPage: React.FC = () => {
 
       {!fullAutoActive ? (
         <div className="fixed top-6 right-6 z-20 flex flex-col items-end gap-2 pointer-events-auto">
-          <nav
-            aria-label="Visuals and panels"
-            className="panel flex items-center gap-1.5 rounded-2xl p-2"
-          >
+          <nav aria-label="Visuals and panels" className="flex items-center gap-3">
             <button
               type="button"
               onClick={rerollVisualizationNow}
@@ -411,82 +422,86 @@ export const SongsPage: React.FC = () => {
                 className={cn("size-5", rerolling && "animate-spin motion-reduce:animate-none")}
               />
             </button>
-            <ToolbarDivider />
-            {tripModes.map((trip) => (
+            <div className="flex items-center gap-1.5">
+              {tripModes.map((trip) => (
+                <button
+                  key={trip.mode}
+                  type="button"
+                  onClick={() => {
+                    setMode(trip.mode)
+                    winamp.pulse(0.8)
+                  }}
+                  className={cn("key", mode === trip.mode && "key-lit")}
+                  title={trip.title}
+                  aria-label={trip.title}
+                  aria-pressed={mode === trip.mode}
+                >
+                  <trip.Icon className="size-5" />
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5">
               <button
-                key={trip.mode}
                 type="button"
                 onClick={() => {
-                  setMode(trip.mode)
-                  winamp.pulse(0.8)
+                  if (overlayVisible) {
+                    dismissOverlay()
+                  } else {
+                    setTrackedSong(overlaySong)
+                    dispatchOverlay({ type: "show" })
+                  }
+                  poke()
                 }}
-                className={cn("key", mode === trip.mode && "key-lit")}
-                title={trip.title}
-                aria-label={trip.title}
-                aria-pressed={mode === trip.mode}
-              >
-                <trip.Icon className="size-5" />
-              </button>
-            ))}
-            <ToolbarDivider />
-            <button
-              type="button"
-              onClick={() => {
-                if (overlayVisible) {
-                  dismissOverlay()
-                } else {
-                  setTrackedSong(overlaySong)
-                  dispatchOverlay({ type: "show" })
+                disabled={!overlayVisible && !songIsActive}
+                className={cn("key", overlayVisible && "key-lit")}
+                title={overlayVisible ? "Hide generation progress" : "Show generation progress"}
+                aria-label={
+                  overlayVisible ? "Hide generation progress" : "Show generation progress"
                 }
-                poke()
-              }}
-              disabled={!overlayVisible && !songIsActive}
-              className={cn("key", overlayVisible && "key-lit")}
-              title={overlayVisible ? "Hide generation progress" : "Show generation progress"}
-              aria-label={overlayVisible ? "Hide generation progress" : "Show generation progress"}
-            >
-              <ListOrdered className="size-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setHistoryOpen((open) => !open)
-                poke()
-              }}
-              className={cn("key", historyOpen && "key-lit")}
-              title="Song history"
-              aria-label="Song history"
-              aria-pressed={historyOpen}
-            >
-              <Library className="size-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setModelsOpen(true)
-                poke()
-              }}
-              className={cn("key", modelsOpen && "key-lit")}
-              title="Models: point at a copy or download one"
-              aria-label="Models"
-            >
-              <HardDrive className="size-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSettingsOpen(true)
-                poke()
-              }}
-              className={cn("key", settingsOpen && "key-lit")}
-              title="AI settings: pick endpoints, models, and effort"
-              aria-label="AI settings"
-            >
-              <SlidersHorizontal className="size-5" />
-            </button>
+              >
+                <ListOrdered className="size-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setHistoryOpen((open) => !open)
+                  poke()
+                }}
+                className={cn("key", historyOpen && "key-lit")}
+                title="Song history"
+                aria-label="Song history"
+                aria-pressed={historyOpen}
+              >
+                <Library className="size-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setModelsOpen(true)
+                  poke()
+                }}
+                className={cn("key", modelsOpen && "key-lit")}
+                title="Models: point at a copy or download one"
+                aria-label="Models"
+              >
+                <HardDrive className="size-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSettingsOpen(true)
+                  poke()
+                }}
+                className={cn("key", settingsOpen && "key-lit")}
+                title="AI settings: pick endpoints, models, and effort"
+                aria-label="AI settings"
+              >
+                <SlidersHorizontal className="size-5" />
+              </button>
+            </div>
           </nav>
           {showVisualizationBadge ? (
-            <p className="panel flex max-w-sm items-center gap-2 rounded-xl px-3 py-2 text-sm">
+            <p className="text-float flex max-w-sm items-center gap-2 text-sm">
               <span className="shrink-0 font-semibold text-orange">The visual failed.</span>
               {visualizationDetail !== null ? (
                 <span className="truncate text-dim" title={visualizationDetail}>
@@ -513,17 +528,28 @@ export const SongsPage: React.FC = () => {
                 queueDepth={statusQuery.data?.queueDepth ?? null}
                 style={draft.style}
                 lyrics={draft.lyrics}
+                cfgScale={draft.cfgScale}
                 aiEnabled={aiEnabled}
-                enhancing={enhance.isPending ? (enhance.variables?.kind ?? null) : null}
-                enhanceError={enhance.error?.message ?? null}
+                enhancing={[
+                  enhanceLyrics.isPending ? "lyrics" : null,
+                  enhanceStyle.isPending ? "style" : null,
+                ].filter((scope): scope is EnhanceScope => scope !== null)}
+                enhanceError={
+                  [enhanceLyrics.error?.message, enhanceStyle.error?.message]
+                    .filter((message): message is string => message !== undefined)
+                    .join(" ") || null
+                }
                 randomPending={manualRandom.isPending}
                 onStyleChange={(value) => {
-                  applyDraft({ style: value, lyrics: draft.lyrics })
+                  applyDraft({ ...draft, style: value })
                   typing()
                 }}
                 onLyricsChange={(value) => {
-                  applyDraft({ style: draft.style, lyrics: value })
+                  applyDraft({ ...draft, lyrics: value })
                   typing()
+                }}
+                onCfgScaleChange={(value) => {
+                  applyDraft({ ...draft, cfgScale: value })
                 }}
                 onCreated={handleCreated}
                 onBlocked={handleBlocked}

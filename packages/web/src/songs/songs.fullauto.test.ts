@@ -10,6 +10,7 @@ const song = (id: string, status: Song["status"]): Song => {
     style: "warm piano pop",
     title: "la la la",
     seed: 1,
+    cfgScale: 1,
     createdAt: "2026-09-17T04:00:00.000Z",
     updatedAt: "2026-09-17T04:00:00.000Z",
   }

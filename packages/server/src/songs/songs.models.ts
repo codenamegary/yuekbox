@@ -18,6 +18,7 @@ export type Song = Readonly<{
   style: string
   title: string
   seed: number
+  cfgScale: number
   cot: string
   reference: SongReference | null
   scoreAbc: string | null
@@ -37,6 +38,7 @@ export type NewSong = Readonly<{
   style: string
   title: string
   seed: number
+  cfgScale: number
   cot: SongCot
   createdAt: string
   updatedAt: string

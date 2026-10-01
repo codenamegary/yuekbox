@@ -1,0 +1,1 @@
+ALTER TABLE `songs` ADD `cfg_scale` real DEFAULT 1 NOT NULL;

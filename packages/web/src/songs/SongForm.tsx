@@ -11,6 +11,15 @@ import { Textarea } from "@/components/ui/Textarea"
 import { Wordmark } from "@/components/ui/Wordmark"
 import { blockedModelsFromError } from "@/models/models.problems"
 import { useCreateSongMutation, useUploadReferenceMutation } from "./songs.mutations"
+import {
+  cfgScaleMax,
+  cfgScaleMin,
+  cfgScalePercent,
+  cfgScaleStep,
+  cfgScaleSweetHigh,
+  cfgScaleSweetLow,
+  formatCfgScale,
+} from "./songs.cfg"
 import { stageLabels, stageOrderFor, stageProgressPercent } from "./songs.stages"
 
 type SongFormProps = Readonly<{
@@ -18,12 +27,14 @@ type SongFormProps = Readonly<{
   queueDepth: number | null
   style: string
   lyrics: string
+  cfgScale: number
   aiEnabled: boolean
-  enhancing: EnhanceScope | null
+  enhancing: readonly EnhanceScope[]
   enhanceError: string | null
   randomPending: boolean
   onStyleChange: (value: string) => void
   onLyricsChange: (value: string) => void
+  onCfgScaleChange: (value: number) => void
   onCreated: (song: Song) => void
   onBlocked: (models: readonly MissingModel[]) => void
   onEnhance: (kind: EnhanceScope) => void
@@ -110,7 +121,7 @@ const EnhanceButton: React.FC<EnhanceButtonProps> = ({ kind, pending, disabled, 
     disabled={disabled}
     className={cn(
       "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-base font-medium text-orange transition-colors",
-      "hover:bg-panel-raised hover:text-orange-soft disabled:cursor-wait disabled:opacity-50",
+      "hover:bg-panel-raised hover:text-orange-soft disabled:cursor-default disabled:opacity-50",
       pending && "pending-breathe",
     )}
     title={
@@ -120,7 +131,7 @@ const EnhanceButton: React.FC<EnhanceButtonProps> = ({ kind, pending, disabled, 
     }
   >
     <Sparkles className="size-4" aria-hidden />
-    {pending ? "Meddling…" : "Let AI meddle"}
+    {pending ? "Enhancing…" : "Enhance"}
   </button>
 )
 
@@ -129,12 +140,14 @@ export const SongForm: React.FC<SongFormProps> = ({
   queueDepth,
   style,
   lyrics,
+  cfgScale,
   aiEnabled,
   enhancing,
   enhanceError,
   randomPending,
   onStyleChange,
   onLyricsChange,
+  onCfgScaleChange,
   onCreated,
   onBlocked,
   onEnhance,
@@ -189,6 +202,7 @@ export const SongForm: React.FC<SongFormProps> = ({
       {
         style: style.trim(),
         lyrics: lyrics.trim(),
+        cfgScale,
         ...(reference !== null ? { referenceId: reference.id } : {}),
       },
       {
@@ -242,8 +256,8 @@ export const SongForm: React.FC<SongFormProps> = ({
             {aiEnabled ? (
               <EnhanceButton
                 kind="lyrics"
-                pending={enhancing === "lyrics"}
-                disabled={enhancing !== null}
+                pending={enhancing.includes("lyrics")}
+                disabled={enhancing.includes("lyrics")}
                 onEnhance={onEnhance}
               />
             ) : null}
@@ -255,7 +269,7 @@ export const SongForm: React.FC<SongFormProps> = ({
               value={lyrics}
               onChange={(event) => onLyricsChange(event.target.value)}
               placeholder={"[Verse]\nWrite the words here\n\n[Chorus]\n…"}
-              className="h-[12lh] w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 font-mono text-base leading-relaxed text-snow shadow-none placeholder:text-faint focus-visible:ring-0"
+              className="h-[12lh] w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 font-mono text-base leading-relaxed text-snow shadow-none outline-none placeholder:text-faint focus-visible:border-0 focus-visible:ring-0"
             />
           </div>
         </div>
@@ -269,8 +283,8 @@ export const SongForm: React.FC<SongFormProps> = ({
               {aiEnabled ? (
                 <EnhanceButton
                   kind="style"
-                  pending={enhancing === "style"}
-                  disabled={enhancing !== null}
+                  pending={enhancing.includes("style")}
+                  disabled={enhancing.includes("style")}
                   onEnhance={onEnhance}
                 />
               ) : null}
@@ -282,7 +296,7 @@ export const SongForm: React.FC<SongFormProps> = ({
                 value={style}
                 onChange={(event) => onStyleChange(event.target.value)}
                 placeholder="Genre, voice, instruments, tempo"
-                className="max-h-[8lh] min-h-[4lh] w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 text-base leading-relaxed text-snow shadow-none placeholder:text-faint focus-visible:ring-0"
+                className="max-h-[8lh] min-h-[4lh] w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 text-base leading-relaxed text-snow shadow-none outline-none placeholder:text-faint focus-visible:border-0 focus-visible:ring-0"
               />
             </div>
           </div>
@@ -329,6 +343,38 @@ export const SongForm: React.FC<SongFormProps> = ({
               <p className="text-base text-alarm">The upload failed. Try another audio file.</p>
             ) : null}
           </div>
+
+          <div className="space-y-2">
+            <div className="flex min-h-9 items-center justify-between">
+              <Label htmlFor="cfg-scale-input" className="text-base font-semibold text-snow">
+                Prompt Adherence ({formatCfgScale(cfgScale)})
+              </Label>
+            </div>
+            <div className="relative">
+              <input
+                id="cfg-scale-input"
+                type="range"
+                min={cfgScaleMin}
+                max={cfgScaleMax}
+                step={cfgScaleStep}
+                value={cfgScale}
+                onChange={(event) => onCfgScaleChange(event.target.valueAsNumber)}
+                aria-describedby="cfg-scale-ends"
+                title="1.0 is the default and skips guidance. Higher follows the style and lyrics more closely; lower gives the model more freedom."
+                className="slider"
+                style={
+                  {
+                    "--sweet-low": `${cfgScalePercent(cfgScaleSweetLow)}%`,
+                    "--sweet-high": `${cfgScalePercent(cfgScaleSweetHigh)}%`,
+                  } as React.CSSProperties
+                }
+              />
+            </div>
+            <div id="cfg-scale-ends" className="flex items-center justify-between text-sm text-dim">
+              <span>Loose</span>
+              <span>Strict</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -342,20 +388,18 @@ export const SongForm: React.FC<SongFormProps> = ({
             <Button
               type="button"
               variant="secondary"
-              size="lg"
               onClick={onRandom}
               disabled={randomPending}
               title="AI writes a song, Yuekbox plays it"
               className={cn("border border-edge", randomPending && "pending-breathe")}
             >
               <Dices aria-hidden />
-              {randomPending ? "Rolling…" : "Surprise me"}
+              {randomPending ? "Rolling…" : "Random"}
             </Button>
           ) : null}
 
           <Button
             type="button"
-            size="lg"
             onClick={submit}
             disabled={!canGenerate}
             title={canGenerate ? "Generate this song" : "Fill in lyrics and style first"}

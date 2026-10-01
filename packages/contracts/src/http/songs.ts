@@ -28,6 +28,9 @@ export const CalibrationSchema = z.strictObject({
   cues: z.array(LyricCueSchema).min(1),
 })
 
+/** The runtime's guidance value at its 1.0 default: no classifier-free guidance. */
+export const defaultCfgScale = 1
+
 export const CreateSongBodySchema = z.strictObject({
   lyrics: z.string().trim().min(1).max(20000),
   style: z.string().trim().min(1).max(2000),
@@ -38,6 +41,7 @@ export const CreateSongBodySchema = z.strictObject({
     .min(0)
     .max(2 ** 31 - 1)
     .optional(),
+  cfgScale: z.number().min(0).max(20).optional(),
 })
 
 export const TruncatedSchema = z.strictObject({
@@ -60,6 +64,7 @@ export const SongSchema = z
     style: z.string(),
     title: z.string().min(1),
     seed: z.number().int(),
+    cfgScale: z.number().min(0).max(20),
     reference: ReferenceSummarySchema.optional(),
     durationSeconds: z.number().nonnegative().optional(),
     truncated: TruncatedSchema.optional(),

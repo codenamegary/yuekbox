@@ -12,7 +12,7 @@ export const Wordmark: React.FC<WordmarkProps> = ({ className }) => (
       className,
     )}
   >
-    <span className="text-snow">Yuek</span>
+    <span className="text-snow">yuek</span>
     <span className="text-orange">box</span>
   </span>
 )

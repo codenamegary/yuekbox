@@ -25,6 +25,10 @@ body {
   outline-offset: 2px;
 }
 
+.field :focus-visible {
+  outline: none;
+}
+
 /* Darkens the edges so panels read over any visualizer. */
 .vignette {
   position: fixed;
@@ -152,6 +156,11 @@ body {
       box-shadow 150ms ease;
   }
 
+  .field :is(input, textarea, select) {
+    outline: none;
+    box-shadow: none;
+  }
+
   .field:focus-within,
   .field:focus {
     outline: none;
@@ -224,6 +233,67 @@ body {
     background: linear-gradient(180deg, var(--color-orange-soft), var(--color-orange));
   }
 
+  /* Prompt Adherence: the track itself is the quality landscape. The caller
+     sets --sweet-low/--sweet-high so the gradient stays on scale. */
+  .slider {
+    appearance: none;
+    width: 100%;
+    height: 1.25rem;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .slider::-webkit-slider-runnable-track {
+    height: 0.5rem;
+    border-radius: 9999px;
+    background-color: var(--color-ink);
+    background-image: linear-gradient(
+      90deg,
+      var(--color-danger) 0%,
+      var(--color-caution) var(--sweet-low),
+      var(--color-good) 50%,
+      var(--color-caution) var(--sweet-high),
+      var(--color-danger) 100%
+    );
+    box-shadow: var(--inset-shadow-well);
+  }
+
+  .slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 1rem;
+    height: 1rem;
+    margin-top: -0.25rem;
+    border-radius: 9999px;
+    border: 2px solid var(--color-ink);
+    background: var(--color-snow);
+    box-shadow: var(--shadow-key);
+  }
+
+  .slider::-moz-range-track {
+    height: 0.5rem;
+    border-radius: 9999px;
+    background-color: var(--color-ink);
+    background-image: linear-gradient(
+      90deg,
+      var(--color-danger) 0%,
+      var(--color-caution) var(--sweet-low),
+      var(--color-good) 50%,
+      var(--color-caution) var(--sweet-high),
+      var(--color-danger) 100%
+    );
+    box-shadow: var(--inset-shadow-well);
+  }
+
+  .slider::-moz-range-thumb {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 9999px;
+    border: 2px solid var(--color-ink);
+    background: var(--color-snow);
+    box-shadow: var(--shadow-key);
+  }
+
   /* Title strip: paper card, title over an orange band over the style. */
   .strip {
     position: relative;
@@ -263,6 +333,13 @@ body {
       color-mix(in oklab, var(--color-ink) 35%, transparent) 45%,
       transparent 75%
     );
+  }
+
+  /* Small chrome floating over the visualizer carries its own halo. */
+  .text-float {
+    text-shadow:
+      0 1px 4px color-mix(in oklab, var(--color-ink) 90%, transparent),
+      0 0 18px color-mix(in oklab, var(--color-ink) 70%, transparent);
   }
 
   /* Big words over the visualizer carry their own shadow. */

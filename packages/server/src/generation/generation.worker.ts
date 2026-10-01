@@ -168,6 +168,7 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
         lyrics: song.lyrics,
         style: song.style,
         seed: song.seed,
+        cfgScale: song.cfgScale,
         cot,
         abc,
         outputDir: tempDir,

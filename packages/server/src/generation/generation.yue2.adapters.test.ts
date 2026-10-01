@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { ModelPaths } from "contracts/http/config"
@@ -85,6 +85,7 @@ test("generate args call our script with the resolved model and vae, not a kit",
       lyrics: "hello",
       style: "pop",
       seed: 7,
+      cfgScale: 1,
       cot: "full",
       abc: null,
       outputDir: "/tmp/output",
@@ -123,6 +124,7 @@ test("the mlx backend asks for its quantization instead of a CUDA device", () =>
       lyrics: "hello",
       style: "pop",
       seed: 7,
+      cfgScale: 1,
       cot: "full",
       abc: null,
       outputDir: "/tmp/output",
@@ -151,6 +153,49 @@ test("checkYue2 needs the python, the script, the model, and the vae", () => {
   expect(checkYue2({ ...ready, pythonBin: "/nope" })).toBe("missing")
   expect(checkYue2({ ...ready, model: "/nope" })).toBe("missing")
   expect(checkYue2({ ...ready, vae: "/nope" })).toBe("missing")
+})
+
+test("the request carries the cfg scale for the runtime", async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), "yuekbox-yue2-request-test-"))
+  try {
+    const run: ProcessRunner = async () => ({
+      exitCode: 1,
+      stdout: "",
+      stderrTail: "stop here",
+    })
+    const generate = makeRunYue2Generate(
+      {
+        pythonBin: process.execPath,
+        scriptPath: import.meta.path,
+        gpuBudget: 16,
+        cwd: "/tmp",
+        backend: "torch",
+        mlxPrecision: "8bit",
+        readModelPaths: async () => modelPaths,
+      },
+      run,
+    )
+
+    await generate({
+      songId: "song-1",
+      lyrics: "hello",
+      style: "pop",
+      seed: 7,
+      cfgScale: 1.4,
+      cot: "full",
+      abc: null,
+      outputDir,
+      onStage: () => {},
+      onProgress: () => {},
+    })
+
+    const request = JSON.parse(await readFile(join(outputDir, "request.json"), "utf8")) as {
+      cfg_scale: number
+    }
+    expect(request.cfg_scale).toBe(1.4)
+  } finally {
+    await rm(outputDir, { recursive: true, force: true })
+  }
 })
 
 test("the model and vae are resolved when the run starts, not at construction", async () => {
@@ -191,6 +236,7 @@ test("the model and vae are resolved when the run starts, not at construction", 
       lyrics: "hello",
       style: "pop",
       seed: 7,
+      cfgScale: 1,
       cot: "full",
       abc: null,
       outputDir,

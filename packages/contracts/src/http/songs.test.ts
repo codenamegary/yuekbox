@@ -3,6 +3,7 @@ import {
   Calibration,
   CalibrationSchema,
   CreateSongBodySchema,
+  defaultCfgScale,
   Song,
   SongSchema,
   SongsCollectionSchema,
@@ -22,6 +23,7 @@ const completeSong: Song = {
   title: "hello",
   style: "warm piano pop",
   seed: 831001,
+  cfgScale: 1,
   durationSeconds: 194.2,
   truncated: { abc: false, semantic: false },
   createdAt,
@@ -67,6 +69,33 @@ test("create body rejects unknown fields", () => {
   expect(result.success).toBe(false)
 })
 
+test("create body accepts a cfg scale inside the runtime's bound", () => {
+  expect(CreateSongBodySchema.parse({ lyrics: "hi", style: "pop", cfgScale: 1.4 })).toEqual({
+    lyrics: "hi",
+    style: "pop",
+    cfgScale: 1.4,
+  })
+  expect(CreateSongBodySchema.safeParse({ lyrics: "hi", style: "pop", cfgScale: 0 }).success).toBe(
+    true,
+  )
+  expect(CreateSongBodySchema.safeParse({ lyrics: "hi", style: "pop", cfgScale: 20 }).success).toBe(
+    true,
+  )
+})
+
+test("create body rejects a cfg scale outside the runtime's bound", () => {
+  expect(
+    CreateSongBodySchema.safeParse({ lyrics: "hi", style: "pop", cfgScale: -0.1 }).success,
+  ).toBe(false)
+  expect(
+    CreateSongBodySchema.safeParse({ lyrics: "hi", style: "pop", cfgScale: 20.1 }).success,
+  ).toBe(false)
+})
+
+test("the cfg scale default matches the runtime's no-guidance value", () => {
+  expect(defaultCfgScale).toBe(1)
+})
+
 test("parses a complete song fixture", () => {
   expect(SongSchema.parse(completeSong)).toEqual(completeSong)
 })
@@ -91,6 +120,7 @@ test("rejects a score on a song that is not complete", () => {
     title: "hi",
     style: "pop",
     seed: 1,
+    cfgScale: 1,
     createdAt,
     updatedAt: createdAt,
   }
@@ -144,6 +174,7 @@ test("rejects a calibration on a song that is not complete", () => {
     title: "hi",
     style: "pop",
     seed: 1,
+    cfgScale: 1,
     createdAt,
     updatedAt: createdAt,
   }
@@ -166,6 +197,7 @@ test("parses a running song fixture with a stage", () => {
     title: "hi",
     style: "pop",
     seed: 1,
+    cfgScale: 1,
     createdAt,
     updatedAt: createdAt,
   }
@@ -181,6 +213,7 @@ test("sync is a song stage", () => {
     title: "hi",
     style: "pop",
     seed: 1,
+    cfgScale: 1,
     createdAt,
     updatedAt: createdAt,
   }
@@ -197,6 +230,7 @@ test("parses a running song fixture with stage progress", () => {
     title: "hi",
     style: "pop",
     seed: 1,
+    cfgScale: 1,
     createdAt,
     updatedAt: createdAt,
   }
@@ -221,6 +255,7 @@ test("rejects stage progress that exceeds its total", () => {
     title: "hi",
     style: "pop",
     seed: 1,
+    cfgScale: 1,
     createdAt,
     updatedAt: createdAt,
   })
@@ -235,6 +270,7 @@ test("parses a queued song fixture without a stage", () => {
     title: "hi",
     style: "pop",
     seed: 1,
+    cfgScale: 1,
     createdAt,
     updatedAt: createdAt,
   }
@@ -249,6 +285,7 @@ test("parses a failed song fixture with an error detail", () => {
     title: "hi",
     style: "pop",
     seed: 1,
+    cfgScale: 1,
     errorDetail: "encode: ffmpeg exited 1",
     createdAt,
     updatedAt: createdAt,
@@ -323,6 +360,7 @@ test("a cover song carries its reference summary and a transcribe stage", () => 
     title: "hi",
     style: "jazz",
     seed: 1,
+    cfgScale: 1,
     createdAt,
     updatedAt: createdAt,
   }

@@ -17,6 +17,7 @@ export type RunYue2GenerateInput = Readonly<{
   lyrics: string
   style: string
   seed: number
+  cfgScale: number
   cot: SongCot
   abc: string | null
   outputDir: string

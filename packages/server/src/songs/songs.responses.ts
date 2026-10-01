@@ -18,6 +18,7 @@ export const toSongResponse = (song: Song, options: SongResponseOptions = {}) =>
     style: song.style,
     title: song.title,
     seed: song.seed,
+    cfgScale: song.cfgScale,
     ...(song.reference !== null ? { reference: song.reference } : {}),
     ...(song.durationSeconds !== null ? { durationSeconds: song.durationSeconds } : {}),
     ...(song.truncatedAbc !== null && song.truncatedSemantic !== null
