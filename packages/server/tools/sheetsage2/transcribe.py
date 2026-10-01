@@ -20,14 +20,69 @@ small hosted hardware verifies the plumbing, not the transcription.
 """
 
 import argparse
+import hashlib
 import importlib.metadata
 import inspect
+import json
 import os
 import sys
+import types
+from importlib import import_module
 from pathlib import Path
 
 from abc_tools import parse_abc, report
 from common import fresh_directory, sha256, write_json
+
+
+def class_from_local_snapshot(model_dir: Path, auto_key: str = "AutoModel"):
+    """Load a custom Auto class from a local snapshot directory.
+
+    Transformers' trust_remote_code path copies selected files into
+    ~/.cache/huggingface/modules/transformers_modules and imports that copy.
+    Relative imports then miss sibling files that were never copied. A local
+    yuekbox snapshot already has the full tree, so we import it in place.
+    """
+    model_dir = model_dir.resolve()
+    if not model_dir.is_dir():
+        raise FileNotFoundError(model_dir)
+    config = json.loads((model_dir / "config.json").read_text(encoding="utf-8"))
+    dotted = config["auto_map"][auto_key]
+    module_name, class_name = dotted.rsplit(".", 1)
+    pkg_name = "yuekbox_snapshot_" + hashlib.sha256(str(model_dir).encode()).hexdigest()[:16]
+    if pkg_name not in sys.modules:
+        pkg = types.ModuleType(pkg_name)
+        pkg.__path__ = [str(model_dir)]
+        pkg.__file__ = str(model_dir / "__init__.py")
+        pkg.__package__ = pkg_name
+        sys.modules[pkg_name] = pkg
+    return getattr(import_module(f"{pkg_name}.{module_name}"), class_name)
+
+
+def wrap_automodel_for_local_snapshots() -> None:
+    """Route AutoModel.from_pretrained through the snapshot when the path is a directory.
+
+    SheetSage2's own from_pretrained still calls AutoModel for the MERT parent.
+    The wrap covers that nested load too.
+    """
+    from transformers import AutoModel
+
+    if getattr(AutoModel, "_yuekbox_local_snapshots", False):
+        return
+    original = AutoModel.from_pretrained
+
+    def from_pretrained(cls, pretrained_model_name_or_path, *args, **kwargs):
+        path = Path(pretrained_model_name_or_path)
+        if path.is_dir() and (path / "config.json").is_file():
+            model_cls = class_from_local_snapshot(path)
+            kwargs = dict(kwargs)
+            kwargs.pop("trust_remote_code", None)
+            kwargs.pop("code_revision", None)
+            kwargs["local_files_only"] = True
+            return model_cls.from_pretrained(str(path), *args, **kwargs)
+        return original(pretrained_model_name_or_path, *args, **kwargs)
+
+    AutoModel.from_pretrained = classmethod(from_pretrained)
+    AutoModel._yuekbox_local_snapshots = True
 
 
 def transcribe_mlx(args, output, prompts, melody_only):
@@ -137,9 +192,16 @@ def run(args):
         from transformers import AutoModel
 
         torch.set_num_threads(args.threads)
-        loader = dict(trust_remote_code=True, local_files_only=args.offline)
-        if args.revision:
-            loader.update(revision=args.revision, code_revision=args.revision)
+        model_path = Path(args.model)
+        loader = {}
+        if model_path.is_dir():
+            wrap_automodel_for_local_snapshots()
+            loader["local_files_only"] = True
+        else:
+            loader["trust_remote_code"] = True
+            loader["local_files_only"] = args.offline
+            if args.revision:
+                loader.update(revision=args.revision, code_revision=args.revision)
         if args.base_model:
             loader["base_model_path"] = args.base_model
         model = AutoModel.from_pretrained(args.model, **loader).eval().to(args.device)
