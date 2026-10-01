@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/codenamegary/yuekbox/compare/v0.4.0...v0.5.0) (2026-10-01)
+
+
+### Features
+
+* **web:** redesign the UI with floating controls and prompt adherence ([#97](https://github.com/codenamegary/yuekbox/issues/97)) ([65101a2](https://github.com/codenamegary/yuekbox/commit/65101a2730cc6526a239f9cb76663db1d8a84e2b))
+
+
+### Bug Fixes
+
+* **server:** load SheetSage2 code from the local snapshot ([#95](https://github.com/codenamegary/yuekbox/issues/95)) ([c5a17f4](https://github.com/codenamegary/yuekbox/commit/c5a17f4e9d80c48f77d0ae82ce7ca367a99c9d5b))
+
 ## [0.4.0](https://github.com/codenamegary/yuekbox/compare/v0.3.3...v0.4.0) (2026-09-30)
 
 
