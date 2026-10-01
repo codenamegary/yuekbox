@@ -69,7 +69,10 @@ export const SongList: React.FC<SongListProps> = ({
                 type="button"
                 onClick={() => onSelect(song.id)}
                 aria-current={current ? "true" : undefined}
-                className={cn("strip px-4 py-2.5 text-left", current && "strip-current")}
+                className={cn(
+                  "strip min-w-0 flex-1 px-4 py-2.5 text-left",
+                  current && "strip-current",
+                )}
               >
                 <span className="block truncate text-center font-mono text-base font-bold uppercase">
                   {song.title}
