@@ -41,7 +41,7 @@ export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) 
     savePath.data !== undefined &&
     row.state === "missing" &&
     row.path === savePath.data.models[row.key]
-      ? "saved · no model found at that folder"
+      ? "Saved, but there's no model in that folder."
       : null
 
   const openEditor = (path: string) => {
@@ -74,7 +74,7 @@ export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) 
     if (row.state === "ready") {
       return (
         <ActionButton tone="ghost" onClick={() => openEditor(row.path)}>
-          change
+          Change
         </ActionButton>
       )
     }
@@ -82,67 +82,58 @@ export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) 
       <>
         {external === null ? (
           <ActionButton tone="primary" onClick={download}>
-            download
+            Download
             {row.sizeBytes > 0 ? ` · ${formatBytes(row.sizeBytes)}` : ""}
           </ActionButton>
         ) : null}
-        <ActionButton onClick={() => openEditor(external ?? row.path)}>choose folder</ActionButton>
+        <ActionButton onClick={() => openEditor(external ?? row.path)}>Choose folder</ActionButton>
       </>
     )
   }
 
   return (
-    <li className="flex items-start gap-3 py-3">
+    <li className="flex items-start gap-4 py-4">
       <StateDot state={row.state} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="shrink-0 text-sm text-slate-100">{row.name}</span>
-          {row.state === "ready" && row.path !== "" ? (
-            <span className="truncate font-mono text-3xs text-white/30" title={row.path}>
-              {row.path}
-            </span>
-          ) : null}
+        <div className="flex items-center gap-3">
+          <span className="shrink-0 text-base font-semibold text-ivory">{row.name}</span>
           {row.active ? (
-            <span className="ml-auto shrink-0 font-mono text-3xs text-cyan-200">
-              {row.percent === null ? "starting…" : `${row.percent}%`}
+            <span className="ml-auto shrink-0 font-mono text-base text-amber tabular-nums">
+              {row.percent === null ? "Starting…" : `${row.percent}%`}
             </span>
           ) : null}
         </div>
 
-        <p className="mt-0.5 font-mono text-3xs text-white/35">
+        <p className="text-base text-dim">
           {row.job} · {formatBytes(row.sizeBytes)}
           {row.state === "missing" ? " download" : " on disk"}
         </p>
 
+        {row.state === "ready" && row.path !== "" ? (
+          <p className="mt-0.5 truncate font-mono text-sm text-faint" title={row.path}>
+            {row.path}
+          </p>
+        ) : null}
         {row.active && row.currentFile !== null ? (
-          <p className="mt-0.5 truncate font-mono text-3xs text-white/25" title={row.currentFile}>
+          <p className="mt-0.5 truncate font-mono text-sm text-faint" title={row.currentFile}>
             {row.currentFile}
           </p>
         ) : null}
         {row.active ? <DownloadBar value={row.percent ?? 0} className="mt-2" /> : null}
 
         {row.downloadError !== null ? (
-          <p
-            className="mt-1 line-clamp-2 font-mono text-3xs leading-relaxed text-amber-200/80"
-            title={row.downloadError}
-          >
-            download stopped · {row.downloadError}
+          <p className="mt-1 line-clamp-2 text-base text-amber" title={row.downloadError}>
+            The download stopped. {row.downloadError}
           </p>
         ) : null}
         {external !== null && row.state === "missing" && !row.active ? (
-          <p className="mt-1 font-mono text-3xs leading-relaxed text-white/35">
-            yuekbox can&apos;t download into {external}. Point at a folder you already have.
+          <p className="mt-1 text-base text-dim">
+            Yuekbox can&apos;t download into {external}. Point at a folder you already have.
           </p>
         ) : null}
-        {savedNote !== null ? (
-          <p className="mt-1 font-mono text-3xs text-white/35">{savedNote}</p>
-        ) : null}
-        {rowError !== null ? (
-          <p className="mt-1 font-mono text-3xs text-rose-300/90">{rowError}</p>
-        ) : null}
-        {saveError !== null ? (
-          <p className="mt-1 font-mono text-3xs text-rose-300/90">{saveError}</p>
-        ) : null}
+        {savedNote !== null ? <p className="mt-1 text-base text-dim">{savedNote}</p> : null}
+        {rowError !== null ? <p className="mt-1 text-base text-alarm">{rowError}</p> : null}
+        {saveError !== null ? <p className="mt-1 text-base text-alarm">{saveError}</p> : null}
 
         {editing ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -152,7 +143,7 @@ export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) 
               autoFocus
               spellCheck={false}
               autoComplete="off"
-              placeholder="folder path"
+              placeholder="Folder path"
               aria-label={`${row.name} folder path`}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
@@ -162,17 +153,17 @@ export const ModelRow: React.FC<ModelRowProps> = ({ row, externalPath = null }) 
                   setEditing(false)
                 }
               }}
-              className="ai-input min-w-0 flex-1 basis-48"
+              className="field min-w-0 flex-1 basis-48 px-3 py-1.5 font-mono text-base"
             />
             <ActionButton
               tone="primary"
               onClick={save}
               disabled={savePath.isPending || draft.trim() === ""}
             >
-              {savePath.isPending ? "saving…" : "save"}
+              {savePath.isPending ? "Saving…" : "Save"}
             </ActionButton>
             <ActionButton tone="ghost" onClick={() => setEditing(false)}>
-              cancel
+              Cancel
             </ActionButton>
           </div>
         ) : null}

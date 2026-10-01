@@ -1,4 +1,5 @@
 import * as React from "react"
+import { Download, Trash2, X } from "lucide-react"
 import { Song } from "contracts/http/songs"
 import { Status } from "contracts/http/status"
 import { cn } from "@/lib/cn"
@@ -15,12 +16,18 @@ type SongListProps = Readonly<{
   onClose: () => void
 }>
 
-const statusColor = (song: Song): string => {
-  if (song.status === "complete") return "text-cyan-300"
-  if (song.status === "failed") return "text-rose-300"
-  if (song.status === "running") return "text-amber-300"
-  return "text-slate-400"
+const bandLabelColor = (song: Song): string => {
+  if (song.status === "failed") return "text-cherry"
+  if (song.status === "complete") return "text-strip-ink/70"
+  return "text-[#9a5b0c]"
 }
+
+const bandLabel = (song: Song): string =>
+  song.status === "complete" && song.durationSeconds !== undefined
+    ? formatDuration(song.durationSeconds)
+    : statusLabels[song.status]
+
+const recordCount = (count: number): string => (count === 1 ? "1 record" : `${count} records`)
 
 export const SongList: React.FC<SongListProps> = ({
   open,
@@ -37,121 +44,125 @@ export const SongList: React.FC<SongListProps> = ({
     value === undefined ? "…" : value
 
   return (
-    <div
+    <aside
       id="history-drawer"
+      aria-label="Song history"
+      aria-hidden={!open}
+      inert={!open}
       className={cn(
-        "fixed inset-y-0 right-0 w-80 bg-[#02050b]/90 backdrop-blur-2xl border-l border-white/10 z-30 p-6 flex flex-col justify-between transition-transform duration-500",
+        "fixed inset-y-0 right-0 z-30 flex w-full max-w-md flex-col border-l border-cabinet-line bg-cabinet transition-transform duration-500 sm:w-[28rem]",
+        "shadow-[-24px_0_60px_-20px_rgba(0,0,0,0.8)]",
         open ? "translate-x-0" : "translate-x-full",
       )}
     >
-      <div className="space-y-4">
-        <div className="flex items-center justify-between border-b border-white/10 pb-3">
-          <span className="text-xs font-mono font-bold tracking-widest text-slate-200 uppercase">
-            History
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-400 hover:text-white text-xs font-mono"
-          >
-            ✕ Close
-          </button>
+      <header className="flex items-center justify-between gap-4 border-b border-cabinet-line px-6 py-5">
+        <div>
+          <h2 className="font-display text-4xl leading-none font-black tracking-tight text-amber uppercase">
+            The stack
+          </h2>
+          <p className="mt-1 text-base text-dim">
+            {songs.length === 0 ? "Empty. Go make something." : recordCount(songs.length)}
+          </p>
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="key"
+          aria-label="Close song history"
+          title="Close"
+        >
+          <X className="size-5" />
+        </button>
+      </header>
 
-        <div className="space-y-2 max-h-[75vh] overflow-y-auto pr-1">
-          {songs.length === 0 ? (
-            <p className="text-xs font-mono text-slate-500 pt-2">No songs yet</p>
-          ) : null}
+      <ol className="flex-1 space-y-3 overflow-y-auto px-6 py-5">
+        {songs.map((song) => {
+          const current = song.id === activeId
+          const confirming = confirmId === song.id
+          return (
+            <li key={song.id} className="group flex items-stretch gap-2">
+              <button
+                type="button"
+                onClick={() => onSelect(song.id)}
+                aria-current={current ? "true" : undefined}
+                className={cn("strip px-4 py-2.5 text-left", current && "strip-current")}
+              >
+                <span className="block truncate text-center font-mono text-base font-bold uppercase">
+                  {song.title}
+                </span>
+                <span className="my-1 flex items-center gap-2" aria-hidden>
+                  <span className="strip-band" />
+                  <span
+                    className={cn("font-mono text-sm font-bold tabular-nums", bandLabelColor(song))}
+                  >
+                    {bandLabel(song)}
+                  </span>
+                  <span className="strip-band" />
+                </span>
+                <span className="sr-only">{bandLabel(song)}. Style: </span>
+                <span className="block truncate text-center font-mono text-sm text-strip-ink/75">
+                  {song.style}
+                </span>
+              </button>
 
-          {songs.map((song) => (
-            <div
-              key={song.id}
-              onClick={() => onSelect(song.id)}
-              className={cn(
-                "group p-3 rounded-xl border transition-all cursor-pointer",
-                song.id === activeId
-                  ? "bg-cyan-500/10 border-cyan-500/30"
-                  : "bg-white/5 border-white/5 hover:bg-cyan-500/10 hover:border-cyan-500/30",
-              )}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="text-xs font-medium text-white truncate">{song.title}</div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  {song.status === "complete" ? (
-                    <a
-                      href={songDownloadHref(song.id)}
-                      download={mp3FileName(song.id)}
-                      onClick={(event) => event.stopPropagation()}
-                      className="text-3xs font-mono text-slate-500 hover:text-cyan-300 transition-colors"
-                      title="Download MP3"
-                      aria-label={`Download MP3 for ${song.title}`}
-                    >
-                      ↓
-                    </a>
-                  ) : null}
-
-                  {confirmId === song.id ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onDelete(song.id)
-                          setConfirmId(null)
-                        }}
-                        className="text-3xs font-mono text-rose-300 hover:text-rose-200"
-                      >
-                        delete
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          setConfirmId(null)
-                        }}
-                        className="text-3xs font-mono text-slate-400 hover:text-white"
-                      >
-                        keep
-                      </button>
-                    </>
-                  ) : (
+              <div className="flex w-10 shrink-0 flex-col justify-center gap-1.5">
+                {confirming ? (
+                  <>
                     <button
                       type="button"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        setConfirmId(song.id)
+                      onClick={() => {
+                        onDelete(song.id)
+                        setConfirmId(null)
                       }}
-                      className="text-3xs font-mono text-slate-500 hover:text-rose-300 opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Delete song"
+                      className="rounded-md bg-cherry px-1 py-1 text-sm font-semibold text-ivory hover:bg-cherry-bright"
                     >
-                      ✕
+                      Toss
                     </button>
-                  )}
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmId(null)}
+                      className="rounded-md px-1 py-1 text-sm font-medium text-dim hover:text-ivory"
+                    >
+                      Keep
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {song.status === "complete" ? (
+                      <a
+                        href={songDownloadHref(song.id)}
+                        download={mp3FileName(song.id)}
+                        className="key size-10"
+                        title="Download MP3"
+                        aria-label={`Download MP3 for ${song.title}`}
+                      >
+                        <Download className="size-5" />
+                      </a>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setConfirmId(song.id)}
+                      className="key size-10 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:text-alarm"
+                      title="Delete song"
+                      aria-label={`Delete ${song.title}`}
+                    >
+                      <Trash2 className="size-5" />
+                    </button>
+                  </>
+                )}
               </div>
+            </li>
+          )
+        })}
+      </ol>
 
-              <div className="flex justify-between items-center gap-2 text-3xs font-mono text-slate-400 mt-1">
-                <span className="truncate">{song.style}</span>
-                <span className="flex items-center gap-1.5 shrink-0">
-                  <span className={statusColor(song)}>
-                    {song.status === "complete" && song.durationSeconds !== undefined
-                      ? formatDuration(song.durationSeconds)
-                      : statusLabels[song.status]}
-                  </span>
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="border-t border-white/10 pt-3 text-3xs font-mono text-slate-500 text-center">
-        SQLite WAL // Local YuE2
-        <br />
-        ffmpeg {dependencyLabel(status?.ffmpeg)} · yue2 {dependencyLabel(status?.yue2)} · sheetsage2{" "}
-        {dependencyLabel(status?.sheetsage2)} · queue {status?.queueDepth ?? 0}
-      </div>
-    </div>
+      <footer className="border-t border-cabinet-line px-6 py-4 text-sm text-dim">
+        <p>Pressed locally with YuE2.</p>
+        <p className="mt-0.5">
+          ffmpeg {dependencyLabel(status?.ffmpeg)} · yue2 {dependencyLabel(status?.yue2)} ·
+          sheetsage2 {dependencyLabel(status?.sheetsage2)} · queue {status?.queueDepth ?? 0}
+        </p>
+      </footer>
+    </aside>
   )
 }

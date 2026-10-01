@@ -9,6 +9,7 @@ import {
   Setting,
 } from "contracts/http/ai"
 import { useQueryClient } from "@tanstack/react-query"
+import { RefreshCw, X } from "lucide-react"
 import { cn } from "@/lib/cn"
 import { AiPresetIcon } from "./AiPresetIcon"
 import { useAiConfigQuery, useAiModelsQuery, useAiPresetsQuery } from "./ai.queries"
@@ -84,15 +85,13 @@ const SettingEditor: React.FC<SettingEditorProps> = ({
       : fallbackModels
 
   return (
-    <div className="hairline-glass-box rounded-2xl p-4 space-y-3">
-      <label
-        htmlFor={`ai-${scope}-model`}
-        className="block font-mono text-2xs tracking-[0.35em] uppercase text-cyan-300/80"
-      >
-        {title}
-      </label>
+    <section className="cabinet-raised space-y-4 rounded-2xl p-5" aria-label={title}>
+      <div>
+        <h3 className="text-lg font-semibold text-ivory">{title}</h3>
+        <p className="text-base text-dim">{writerBlurbs[scope]}</p>
+      </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex flex-wrap items-center gap-2">
         {presets.map((preset) => (
           <button
             key={preset.id}
@@ -107,7 +106,13 @@ const SettingEditor: React.FC<SettingEditorProps> = ({
               onBaseUrlChange(scope, preset.baseUrl)
             }}
             title={preset.baseUrl === "" ? `${preset.name} — bring your own URL` : preset.baseUrl}
-            className={cn("ai-agent-chip", setting.presetId === preset.id && "active")}
+            aria-pressed={setting.presetId === preset.id}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
+              setting.presetId === preset.id
+                ? "border-amber-soft bg-amber text-strip-ink"
+                : "border-cabinet-edge bg-cabinet text-dim hover:border-amber/60 hover:text-ivory",
+            )}
           >
             <AiPresetIcon name={preset.icon} />
             <span>{preset.name}</span>
@@ -115,18 +120,21 @@ const SettingEditor: React.FC<SettingEditorProps> = ({
         ))}
       </div>
 
-      <input
-        type="text"
-        value={draft.baseUrl ?? setting.baseUrl}
-        onChange={(event) => onBaseUrlChange(scope, event.target.value)}
-        onBlur={() => onFieldBlur(scope)}
-        placeholder="https://api.example.com/v1"
-        spellCheck={false}
-        className="ai-input w-full"
-        aria-label={`${scope} API base URL`}
-      />
+      <label className="block space-y-1.5">
+        <span className="text-sm font-medium text-dim">Endpoint</span>
+        <input
+          type="text"
+          value={draft.baseUrl ?? setting.baseUrl}
+          onChange={(event) => onBaseUrlChange(scope, event.target.value)}
+          onBlur={() => onFieldBlur(scope)}
+          placeholder="https://api.example.com/v1"
+          spellCheck={false}
+          className="field w-full px-3 py-2 font-mono text-base"
+        />
+      </label>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <label className="block space-y-1.5">
+        <span className="text-sm font-medium text-dim">API key</span>
         <input
           type="password"
           value={draft.apiKey ?? ""}
@@ -134,66 +142,74 @@ const SettingEditor: React.FC<SettingEditorProps> = ({
           onBlur={() => onFieldBlur(scope)}
           placeholder={
             setting.keyHint !== null
-              ? `stored ${setting.keyHint}`
+              ? `Stored ${setting.keyHint}`
               : activePreset?.needsKey
-                ? "API key"
-                : "API key (optional)"
+                ? "Required"
+                : "Optional"
           }
           autoComplete="off"
-          className="ai-input min-w-0 flex-1 basis-40"
-          aria-label={`${scope} API key`}
+          className="field w-full px-3 py-2 font-mono text-base"
         />
+      </label>
 
-        <div className="flex items-center gap-1.5">
+      <div className="space-y-1.5">
+        <label htmlFor={`ai-${scope}-model`} className="block text-sm font-medium text-dim">
+          Model
+        </label>
+        <div className="flex items-center gap-2">
+          <select
+            id={`ai-${scope}-model`}
+            value={setting.model}
+            onChange={(event) => onPatch(scope, { model: event.target.value })}
+            className="field min-w-0 flex-1 px-3 py-2 font-mono text-base"
+          >
+            <option value="">Pick a model…</option>
+            {options.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => onRefreshModels(scope)}
+            className="key"
+            title="Fetch the model list from the endpoint"
+            aria-label={`Refresh the ${scope} model list`}
+          >
+            <RefreshCw className="size-5" />
+          </button>
+        </div>
+        <p className="text-sm text-dim">
+          {modelsLive
+            ? `Live list · ${models.length} model${models.length === 1 ? "" : "s"}`
+            : (modelsDetail ?? "Preset guesses. Check the endpoint, then refresh.")}
+        </p>
+      </div>
+
+      <fieldset className="space-y-1.5">
+        <legend className="text-sm font-medium text-dim">Reasoning effort</legend>
+        <div className="flex flex-wrap gap-1 rounded-xl border border-cabinet-edge bg-cabinet-sunken p-1">
           {effortLevels.map((effort: EffortLevel) => (
             <button
               key={effort}
               type="button"
               onClick={() => onPatch(scope, { effort })}
-              className={cn("ai-effort-chip", setting.effort === effort && "active")}
+              aria-pressed={setting.effort === effort}
+              className={cn(
+                "flex-1 rounded-lg px-2 py-1 text-sm font-medium capitalize transition-colors",
+                setting.effort === effort
+                  ? "bg-amber text-strip-ink"
+                  : "text-dim hover:bg-cabinet-raised hover:text-ivory",
+              )}
               title={effort === "off" ? "Send no reasoning effort" : `reasoning_effort: ${effort}`}
             >
               {effort}
             </button>
           ))}
         </div>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1 min-w-0">
-          <select
-            id={`ai-${scope}-model`}
-            value={setting.model}
-            onChange={(event) => onPatch(scope, { model: event.target.value })}
-            className="ai-select w-full"
-            aria-label={`${scope} model`}
-          >
-            <option value="" className="bg-[#02050b] text-slate-100">
-              pick a model…
-            </option>
-            {options.map((model) => (
-              <option key={model} value={model} className="bg-[#02050b] text-slate-100">
-                {model}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button
-          type="button"
-          onClick={() => onRefreshModels(scope)}
-          className="ai-refresh"
-          title="Fetch the model list from the endpoint"
-        >
-          ⟳
-        </button>
-      </div>
-
-      <p className="font-mono text-3xs text-white/35 leading-relaxed">
-        {modelsLive
-          ? `live · ${models.length} model${models.length === 1 ? "" : "s"}`
-          : (modelsDetail ?? "preset guesses — check the endpoint, then refresh")}
-      </p>
-    </div>
+      </fieldset>
+    </section>
   )
 }
 
@@ -202,9 +218,15 @@ type WriterPatch = Partial<Omit<Setting, "keyHint">> & { apiKey?: string }
 const writerScopes: readonly WriterScope[] = ["style", "lyrics", "visuals"]
 
 const writerTitles: Readonly<Record<WriterScope, string>> = {
-  style: "style · writer",
-  lyrics: "lyrics · writer",
-  visuals: "visuals · writer",
+  style: "Style",
+  lyrics: "Lyrics",
+  visuals: "Visuals",
+}
+
+const writerBlurbs: Readonly<Record<WriterScope, string>> = {
+  style: "Sharpens the vibe you describe.",
+  lyrics: "Extends, reworks, or writes the words.",
+  visuals: "Writes a visualizer for each song.",
 }
 
 export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
@@ -297,24 +319,32 @@ export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
       aria-label="AI settings"
       className="fixed inset-0 z-40 flex items-center justify-center p-6"
     >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-cabinet-sunken/75 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="ai-settings-panel hairline-glass-box relative w-full max-w-6xl rounded-2xl p-6 space-y-5 max-h-[86vh] overflow-y-auto">
-        <div className="flex items-center justify-between border-b border-white/10 pb-3">
-          <span className="text-xs font-mono font-bold tracking-widest text-slate-200 uppercase">
-            machine spirits
-          </span>
+      <div className="cabinet panel-rise relative max-h-[88vh] w-full max-w-6xl space-y-6 overflow-y-auto rounded-3xl p-6 sm:p-8">
+        <header className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="font-display text-5xl leading-none font-black tracking-tight text-amber uppercase">
+              Ghostwriters
+            </h2>
+            <p className="mt-2 max-w-2xl text-base text-dim">
+              The AI that helps with style, lyrics, and visuals. Any OpenAI-compatible endpoint
+              works. Keys stay on this machine.
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-white text-xs font-mono"
+            className="key shrink-0"
+            aria-label="Close AI settings"
+            title="Close"
           >
-            ✕ Close
+            <X className="size-5" />
           </button>
-        </div>
+        </header>
 
         {config === undefined ? (
-          <p className="font-mono text-2xs text-slate-400 animate-pulse">waking the spirits…</p>
+          <p className="pending-breathe text-base text-dim">Waking the ghostwriters…</p>
         ) : (
           <>
             <button
@@ -328,13 +358,18 @@ export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
                 })
                 saveConfig.mutate({ enabled: !config.enabled })
               }}
-              className="ai-enable-toggle w-full"
+              className="cabinet-raised flex w-full items-center justify-between gap-4 rounded-2xl px-5 py-4 text-left"
             >
-              <span className="font-mono text-2xs tracking-[0.35em] uppercase text-slate-300">
-                ai enhancement
+              <span>
+                <span className="block text-lg font-semibold text-ivory">Use AI ghostwriters</span>
+                <span className="block text-base text-dim">
+                  {config.enabled
+                    ? "On. Enhance buttons, Surprise me, and Full auto are available."
+                    : "Off. You write everything yourself, like it's 1958."}
+                </span>
               </span>
-              <span className={cn("ai-switch", config.enabled && "on")}>
-                <span className="ai-switch-knob" />
+              <span className={cn("switch", config.enabled && "on")}>
+                <span className="switch-knob" />
               </span>
             </button>
 
@@ -381,9 +416,8 @@ export const AiSettings: React.FC<AiSettingsProps> = ({ onClose }) => {
                 ))}
               </div>
 
-              <p className="font-mono text-3xs text-white/30 leading-relaxed">
-                any OpenAI-compatible endpoint works · keys stay on this machine
-                {saveCount > 0 ? " · saved" : ""}
+              <p className="text-sm text-dim" aria-live="polite">
+                {saveCount > 0 ? "Changes saved." : "Changes save as you type."}
               </p>
             </div>
           </>

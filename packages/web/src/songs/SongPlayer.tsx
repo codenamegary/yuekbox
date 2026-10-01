@@ -1,9 +1,11 @@
 import * as React from "react"
+import { Pause, Play } from "lucide-react"
 import { Song } from "contracts/http/songs"
 import { cn } from "@/lib/cn"
 import { AudioEngine } from "./songs.audio.engine"
 import { seekRatio } from "./songs.player"
 import { songAudioSource } from "./songs.api"
+import { formatDuration } from "./songs.stages"
 
 type SongPlayerProps = Readonly<{
   song: Song | null
@@ -17,6 +19,7 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine }) => {
   const barRef = React.useRef<HTMLButtonElement | null>(null)
   const fillRef = React.useRef<HTMLSpanElement | null>(null)
   const thumbRef = React.useRef<HTMLSpanElement | null>(null)
+  const timeRef = React.useRef<HTMLSpanElement | null>(null)
   const [playing, setPlaying] = React.useState(false)
   const [scrubbing, setScrubbing] = React.useState(false)
 
@@ -35,6 +38,11 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine }) => {
       const percent = `${(ratio * 100).toFixed(2)}%`
       if (fillRef.current !== null) fillRef.current.style.width = percent
       if (thumbRef.current !== null) thumbRef.current.style.left = percent
+      if (timeRef.current !== null) {
+        const elapsed = formatDuration(engine.currentTime())
+        const text = total > 0 ? `${elapsed} / ${formatDuration(total)}` : elapsed
+        if (timeRef.current.textContent !== text) timeRef.current.textContent = text
+      }
       frame.handle = requestAnimationFrame(tick)
     }
     frame.handle = requestAnimationFrame(tick)
@@ -86,67 +94,80 @@ export const SongPlayer: React.FC<SongPlayerProps> = ({ song, engine }) => {
     engine.seek(engine.currentTime() + deltaSeconds)
   }
 
+  const title = song === null ? "Nothing on the turntable" : song.title
+
   return (
-    <div className="fixed top-8 left-8 z-20 flex items-center gap-4 pointer-events-auto">
+    <div className="cabinet fixed top-6 left-6 z-20 flex w-[min(24rem,calc(100vw-3rem))] items-center gap-4 rounded-2xl p-3 pr-5 pointer-events-auto">
       <button
         type="button"
         onClick={toggle}
         disabled={!complete}
+        aria-label={playing ? "Pause" : "Play"}
+        title={playing ? "Pause" : "Play"}
         className={cn(
-          "alien-sigil disabled:opacity-30 disabled:pointer-events-none",
-          playing && "active",
+          "inline-flex size-14 shrink-0 items-center justify-center rounded-full text-ivory transition-[transform,background] duration-150",
+          "bg-[radial-gradient(circle_at_35%_30%,var(--color-cherry-bright),var(--color-cherry)_60%,#8f241d)]",
+          "shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_3px_0_rgba(0,0,0,0.5)] active:translate-y-px",
+          "disabled:cursor-not-allowed disabled:opacity-40",
         )}
-        title="Play / Pause"
       >
         {playing ? (
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z"
-              clipRule="evenodd"
-            />
-          </svg>
+          <Pause className="size-6" fill="currentColor" />
         ) : (
-          <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
-          </svg>
+          <Play className="ml-0.5 size-6" fill="currentColor" />
         )}
       </button>
 
-      <button
-        ref={barRef}
-        type="button"
-        aria-label="Seek"
-        onPointerDown={beginScrub}
-        onPointerMove={moveScrub}
-        onPointerUp={endScrub}
-        onPointerCancel={endScrub}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowLeft") {
-            event.preventDefault()
-            nudge(-seekNudgeSeconds)
-          }
-          if (event.key === "ArrowRight") {
-            event.preventDefault()
-            nudge(seekNudgeSeconds)
-          }
-        }}
-        className="group relative flex h-5 w-40 cursor-pointer touch-none select-none items-center"
-      >
-        <span className="relative h-1 w-full overflow-hidden rounded-full bg-white/10 transition-colors group-hover:bg-white/20">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <p
+            className={cn(
+              "truncate text-base font-semibold",
+              song === null ? "text-dim" : "text-ivory",
+            )}
+            title={title}
+          >
+            {title}
+          </p>
+          <span ref={timeRef} className="shrink-0 font-mono text-sm text-dim tabular-nums">
+            00:00
+          </span>
+        </div>
+
+        <button
+          ref={barRef}
+          type="button"
+          aria-label="Seek"
+          onPointerDown={beginScrub}
+          onPointerMove={moveScrub}
+          onPointerUp={endScrub}
+          onPointerCancel={endScrub}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft") {
+              event.preventDefault()
+              nudge(-seekNudgeSeconds)
+            }
+            if (event.key === "ArrowRight") {
+              event.preventDefault()
+              nudge(seekNudgeSeconds)
+            }
+          }}
+          className="group relative mt-2 flex h-5 w-full cursor-pointer touch-none select-none items-center"
+        >
+          <span className="relative h-1.5 w-full overflow-hidden rounded-full bg-cabinet-sunken shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]">
+            <span ref={fillRef} className="block h-full w-0 rounded-full bg-amber" />
+          </span>
           <span
-            ref={fillRef}
-            className="block h-full w-0 rounded-full bg-gradient-to-r from-cyan-400 via-sky-300 to-white"
+            ref={thumbRef}
+            className={cn(
+              "pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-cabinet bg-amber-soft transition-opacity",
+              scrubbing
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
+            )}
           />
-        </span>
-        <span
-          ref={thumbRef}
-          className={cn(
-            "pointer-events-none absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_10px_rgba(0,240,255,0.9)] transition-opacity",
-            scrubbing ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-          )}
-        />
-      </button>
+        </button>
+      </div>
 
       <audio
         ref={audioRef}

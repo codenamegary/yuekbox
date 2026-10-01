@@ -85,7 +85,7 @@ export const LyricOverlay: React.FC<LyricOverlayProps> = ({ cues, engine, muted 
           ref={textRef}
           style={{ opacity: 0 }}
           className={cn(
-            "lyric-line max-w-5xl text-center font-black text-white leading-[1.06] tracking-[-0.02em] text-balance",
+            "lyric-line max-w-5xl text-center font-display font-extrabold uppercase text-ivory leading-[0.95] tracking-tight text-balance",
             fontClassFor(activeCue.text),
           )}
         >

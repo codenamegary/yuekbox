@@ -10,6 +10,8 @@ declare module "*.svg" {
 
 declare module "*.css" {}
 
+declare module "@fontsource-variable/*" {}
+
 declare module "*.module.css" {
   /**
    * A record of class names to their corresponding CSS module classes

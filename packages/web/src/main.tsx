@@ -1,6 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
+import "@fontsource-variable/big-shoulders-display/wght"
+import "@fontsource-variable/schibsted-grotesk/wght"
+import "@fontsource/courier-prime/400.css"
+import "@fontsource/courier-prime/700.css"
 import "./index.css"
 import { App } from "./App"
 

@@ -1,4 +1,5 @@
 import * as React from "react"
+import { X } from "lucide-react"
 import { useEscapeKey } from "@/lib/use-escape-key"
 import { useReadinessQuery } from "./models.queries"
 import { modelCatalogOrder } from "./models.catalog"
@@ -26,31 +27,35 @@ export const ModelsPanel: React.FC<ModelsPanelProps> = ({ onClose }) => {
       aria-label="models"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
     >
-      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-cabinet-sunken/75 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="ai-settings-panel hairline-glass-box relative max-h-[86vh] w-full max-w-2xl overflow-y-auto rounded-2xl p-6">
-        <div className="flex items-center justify-between border-b border-white/10 pb-3">
-          <span className="font-mono text-xs font-bold tracking-widest text-slate-200 uppercase">
-            models
-          </span>
+      <div className="cabinet panel-rise relative max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-3xl p-6 sm:p-8">
+        <header className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="font-display text-5xl leading-none font-black tracking-tight text-amber uppercase">
+              Models
+            </h2>
+            <p className="mt-2 text-base text-dim">
+              The parts inside the box. Point at a copy you already have, or let Yuekbox download
+              one.
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="font-mono text-xs text-slate-400 hover:text-white"
+            className="key shrink-0"
+            aria-label="Close models"
+            title="Close"
           >
-            ✕ Close
+            <X className="size-5" />
           </button>
-        </div>
+        </header>
 
-        <p className="mt-3 text-xs leading-relaxed text-white/45">
-          Point at a copy you already have, or let yuekbox download one.
-        </p>
-
-        <div className="mt-2">
+        <div className="mt-4">
           <ModelRows keys={allKeys} />
         </div>
 
-        <footer className="mt-2 border-t border-white/10 pt-3">
+        <footer className="mt-4 border-t border-cabinet-line pt-4">
           <SystemLine system={readiness.data?.system} />
         </footer>
       </div>

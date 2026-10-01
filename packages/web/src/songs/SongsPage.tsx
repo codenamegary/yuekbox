@@ -1,8 +1,22 @@
 import * as React from "react"
+import {
+  AudioWaveform,
+  HardDrive,
+  Infinity as InfinityIcon,
+  Library,
+  ListOrdered,
+  LucideIcon,
+  RefreshCw,
+  SlidersHorizontal,
+  Sparkles,
+  Tornado,
+  Waves,
+} from "lucide-react"
 import { EnhanceScope } from "contracts/http/ai"
 import { MissingModel } from "contracts/http/models"
 import { Song, SongStage } from "contracts/http/songs"
 import { cn } from "@/lib/cn"
+import { Button } from "@/components/ui/Button"
 import { AiSettings } from "@/ai/AiSettings"
 import { useAiConfigQuery } from "@/ai/ai.queries"
 import { useEnhanceMutation, useRandomSongMutation } from "@/ai/ai.mutations"
@@ -35,19 +49,23 @@ import { initialOverlayState, overlayCloseDelayMs, stepOverlay } from "./songs.o
 import { createVisualizationEngine, VisualizationSong } from "./songs.visualization"
 import { createWinampEngine, TripMode } from "./songs.winamp.engine"
 
-const tripModes: ReadonlyArray<{ mode: TripMode; glyph: string; title: string }> = [
-  { mode: 0, glyph: "⏣", title: "Hyperspace Vortex (Milkdrop)" },
-  { mode: 1, glyph: "∿", title: "Phosphor Oscilloscope" },
-  { mode: 2, glyph: "❂", title: "Chromatic Plasma" },
-  { mode: 3, glyph: "✧", title: "Quantum Stardust Vortex" },
+const tripModes: ReadonlyArray<{ mode: TripMode; Icon: LucideIcon; title: string }> = [
+  { mode: 0, Icon: Tornado, title: "Hyperspace vortex" },
+  { mode: 1, Icon: AudioWaveform, title: "Phosphor oscilloscope" },
+  { mode: 2, Icon: Waves, title: "Chromatic plasma" },
+  { mode: 3, Icon: Sparkles, title: "Stardust vortex" },
 ]
 
 const fullAutoStatusLabels: Readonly<Record<FullAutoPhase, string>> = {
-  idle: "waking up",
-  generating: "dreaming up the next one…",
-  playing: "on air — next one brewing",
-  starved: "the spirits are catching up…",
+  idle: "Warming up the tubes",
+  generating: "Writing the next one…",
+  playing: "On air. The next one is in the oven.",
+  starved: "The machine is catching up…",
 }
+
+const ToolbarDivider: React.FC = () => (
+  <span aria-hidden className="mx-1 h-6 w-px bg-cabinet-edge" />
+)
 
 export const SongsPage: React.FC = () => {
   const [audio] = React.useState(createAudioEngine)
@@ -375,119 +393,114 @@ export const SongsPage: React.FC = () => {
       ) : (
         <WinampCanvas engine={winamp} mode={mode} analysis={analysis} />
       )}
-      <div className="tech-vignette" />
+      <div className="cabinet-vignette" />
 
       {!fullAutoActive ? (
-        <div className="fixed top-8 right-8 z-20 flex items-center gap-2.5 pointer-events-auto">
-          <div className="relative">
+        <div className="fixed top-6 right-6 z-20 flex flex-col items-end gap-2 pointer-events-auto">
+          <nav
+            aria-label="Visuals and panels"
+            className="cabinet flex items-center gap-1.5 rounded-2xl p-2"
+          >
             <button
               type="button"
               onClick={rerollVisualizationNow}
               disabled={rerolling}
-              className={cn(
-                "alien-sigil disabled:opacity-40 disabled:pointer-events-none",
-                rerolling && "active",
-              )}
+              className={cn("key", rerolling && "key-lit")}
               title={rerollTitle}
+              aria-label={rerollTitle}
             >
-              <span
-                className={cn(
-                  "inline-block leading-none",
-                  rerolling && "animate-spin motion-reduce:animate-none",
-                )}
-              >
-                ↻
-              </span>
+              <RefreshCw
+                className={cn("size-5", rerolling && "animate-spin motion-reduce:animate-none")}
+              />
             </button>
-            {showVisualizationBadge ? (
-              <span className="absolute right-0 top-full mt-1.5 flex items-center gap-2 whitespace-nowrap">
-                <span className="font-mono text-3xs tracking-[0.25em] uppercase text-amber-200/70">
-                  visual failed
-                </span>
-                {visualizationDetail !== null ? (
-                  <span
-                    className="max-w-[14rem] truncate font-mono text-3xs text-white/30"
-                    title={visualizationDetail}
-                  >
-                    {visualizationDetail}
-                  </span>
-                ) : null}
-              </span>
-            ) : null}
-          </div>
-          <div className="w-px h-4 bg-white/10 mx-1" />
-          {tripModes.map((trip) => (
+            <ToolbarDivider />
+            {tripModes.map((trip) => (
+              <button
+                key={trip.mode}
+                type="button"
+                onClick={() => {
+                  setMode(trip.mode)
+                  winamp.pulse(0.8)
+                }}
+                className={cn("key", mode === trip.mode && "key-lit")}
+                title={trip.title}
+                aria-label={trip.title}
+                aria-pressed={mode === trip.mode}
+              >
+                <trip.Icon className="size-5" />
+              </button>
+            ))}
+            <ToolbarDivider />
             <button
-              key={trip.mode}
               type="button"
               onClick={() => {
-                setMode(trip.mode)
-                winamp.pulse(0.8)
+                if (overlayVisible) {
+                  dismissOverlay()
+                } else {
+                  setTrackedSong(overlaySong)
+                  dispatchOverlay({ type: "show" })
+                }
+                poke()
               }}
-              className={cn("alien-sigil", mode === trip.mode && "active")}
-              title={trip.title}
+              disabled={!overlayVisible && !songIsActive}
+              className={cn("key", overlayVisible && "key-lit")}
+              title={overlayVisible ? "Hide generation progress" : "Show generation progress"}
+              aria-label={overlayVisible ? "Hide generation progress" : "Show generation progress"}
             >
-              {trip.glyph}
+              <ListOrdered className="size-5" />
             </button>
-          ))}
-          <div className="w-px h-4 bg-white/10 mx-1" />
-          <button
-            type="button"
-            onClick={() => {
-              if (overlayVisible) {
-                dismissOverlay()
-              } else {
-                setTrackedSong(overlaySong)
-                dispatchOverlay({ type: "show" })
-              }
-              poke()
-            }}
-            disabled={!overlayVisible && !songIsActive}
-            className={cn(
-              "alien-sigil disabled:opacity-40 disabled:pointer-events-none",
-              overlayVisible && "active",
-            )}
-            title={overlayVisible ? "Hide the generating reel" : "Show the generating reel"}
-          >
-            ☰
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setHistoryOpen((open) => !open)
-              poke()
-            }}
-            className={cn("alien-sigil", historyOpen && "active")}
-            title="Song History (Click to pop out)"
-          >
-            ◷
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setModelsOpen(true)
-              poke()
-            }}
-            className={cn("alien-sigil", modelsOpen && "active")}
-            title="Models — point at a copy or download one"
-          >
-            ▤
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setSettingsOpen(true)
-              poke()
-            }}
-            className={cn("alien-sigil", settingsOpen && "active")}
-            title="AI Settings — pick agents, models, and effort"
-          >
-            ⚙
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                setHistoryOpen((open) => !open)
+                poke()
+              }}
+              className={cn("key", historyOpen && "key-lit")}
+              title="Song history"
+              aria-label="Song history"
+              aria-pressed={historyOpen}
+            >
+              <Library className="size-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setModelsOpen(true)
+                poke()
+              }}
+              className={cn("key", modelsOpen && "key-lit")}
+              title="Models: point at a copy or download one"
+              aria-label="Models"
+            >
+              <HardDrive className="size-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSettingsOpen(true)
+                poke()
+              }}
+              className={cn("key", settingsOpen && "key-lit")}
+              title="AI settings: pick endpoints, models, and effort"
+              aria-label="AI settings"
+            >
+              <SlidersHorizontal className="size-5" />
+            </button>
+          </nav>
+          {showVisualizationBadge ? (
+            <p className="cabinet flex max-w-sm items-center gap-2 rounded-xl px-3 py-2 text-sm">
+              <span className="shrink-0 font-semibold text-amber">The visual failed.</span>
+              {visualizationDetail !== null ? (
+                <span className="truncate text-dim" title={visualizationDetail}>
+                  {visualizationDetail}
+                </span>
+              ) : null}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
-      <main className="relative z-10 w-full h-full flex flex-col p-8 sm:p-14 md:p-16 pointer-events-none">
+      <main className="relative z-10 w-full h-full flex flex-col px-6 pt-28 pb-6 sm:px-10 sm:pb-10 pointer-events-none">
         {!fullAutoActive ? (
           <div
             className={cn(
@@ -535,21 +548,22 @@ export const SongsPage: React.FC = () => {
         )}
 
         {fullAutoActive ? (
-          <div className="shrink-0 flex items-center justify-center gap-4 pb-3 max-w-2xl mx-auto w-full pointer-events-auto">
-            <span className="font-mono text-3xs tracking-[0.3em] uppercase text-cyan-200/60">
-              ∞ full auto · {fullAutoStatusLabels[fullAutoState.phase]}
-            </span>
-            <button
+          <div className="cabinet mx-auto flex shrink-0 items-center gap-4 rounded-2xl py-2 pr-2 pl-4 pointer-events-auto">
+            <InfinityIcon className="size-6 shrink-0 text-amber" aria-hidden />
+            <p className="text-base">
+              <span className="font-semibold text-ivory">Full auto</span>
+              <span className="text-dim"> · {fullAutoStatusLabels[fullAutoState.phase]}</span>
+            </p>
+            <Button
               type="button"
+              variant="secondary"
               onClick={() => {
                 setFullAuto(false)
                 poke()
               }}
-              className="font-mono text-3xs tracking-[0.25em] uppercase text-white/35 hover:text-white transition-colors"
-              title="Leave full auto"
             >
-              exit ✕
-            </button>
+              Exit full auto
+            </Button>
           </div>
         ) : null}
 

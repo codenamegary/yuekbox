@@ -6,15 +6,15 @@ export type StateDotProps = Readonly<{
   className?: string
 }>
 
-/** A state dot: lit when the model is on disk, hollow when it is missing. */
+/** A state lamp: lit when the model is on disk, dark when it is missing. */
 export const StateDot: React.FC<StateDotProps> = ({ state, className }) => (
   <span
     aria-hidden
     className={cn(
-      "mt-1.5 inline-block size-2 shrink-0 rounded-full",
+      "mt-1.5 inline-block size-3 shrink-0 rounded-full",
       state === "ready"
-        ? "bg-cyan-400 shadow-[0_0_8px_rgba(0,240,255,0.7)]"
-        : "border border-white/25 bg-transparent",
+        ? "bg-amber shadow-[0_0_0_3px_rgba(242,169,59,0.2)]"
+        : "border-2 border-cabinet-edge bg-cabinet-sunken",
       className,
     )}
   />
@@ -26,9 +26,14 @@ export type DownloadBarProps = Readonly<{
 }>
 
 export const DownloadBar: React.FC<DownloadBarProps> = ({ value, className }) => (
-  <div className={cn("h-1 w-full overflow-hidden rounded-full bg-white/10", className)}>
+  <div
+    className={cn(
+      "h-2 w-full overflow-hidden rounded-full bg-cabinet-sunken shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]",
+      className,
+    )}
+  >
     <div
-      className="h-full rounded-full bg-cyan-400 shadow-[0_0_10px_rgba(0,240,255,0.6)] transition-[width] duration-200 motion-reduce:transition-none"
+      className="h-full rounded-full bg-amber transition-[width] duration-200 motion-reduce:transition-none"
       style={{ width: `${Math.round(value)}%` }}
     />
   </div>
@@ -38,7 +43,7 @@ export type ActionButtonProps = React.ComponentProps<"button"> & {
   tone?: "primary" | "secondary" | "ghost"
 }
 
-/** The row's small action, in the settings panel's mono micro-label voice. */
+/** A model row's action button. */
 export const ActionButton: React.FC<ActionButtonProps> = ({
   tone = "secondary",
   className,
@@ -48,11 +53,11 @@ export const ActionButton: React.FC<ActionButtonProps> = ({
   <button
     type={type}
     className={cn(
-      "rounded-md border px-2.5 py-1.5 font-mono text-3xs uppercase tracking-[0.15em] transition-colors disabled:opacity-40",
-      tone === "primary" && "border-cyan-400/60 bg-cyan-400/15 text-cyan-50 hover:bg-cyan-400/25",
+      "rounded-lg border px-3 py-1.5 text-base font-semibold whitespace-nowrap transition-colors disabled:opacity-40",
+      tone === "primary" && "border-amber-soft bg-amber text-strip-ink hover:bg-amber-soft",
       tone === "secondary" &&
-        "border-white/10 bg-white/[0.03] text-white/60 hover:border-white/30 hover:text-white",
-      tone === "ghost" && "border-transparent text-white/35 hover:text-white",
+        "border-cabinet-edge bg-cabinet-raised text-ivory hover:border-amber/60",
+      tone === "ghost" && "border-transparent text-dim hover:text-ivory",
       className,
     )}
     {...props}
