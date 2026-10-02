@@ -4,13 +4,26 @@
 
 ### Because apparently GPUs are musicians now.
 
-A local, single-user web app that turns **a style + some lyrics** into a **full song** with [YuE2](https://github.com/multimodal-art-projection/YuE) running on your machine. Just you, a graphics card, and increasingly questionable lyrics.
-
-![Yuekbox playing](docs/playing.png)
+Just you, a graphics card, and increasingly questionable lyrics.
 
 </div>
 
----
+![Yuekbox playing](docs/playing.png)
+
+### 👇 Install for Linux & Mac
+
+
+```bash
+curl -fsSL https://github.com/codenamegary/yuekbox/releases/latest/download/install.sh | sh
+```
+
+Or if you want to read the script before running it, download it and
+run it:
+
+```bash
+curl -fsSL https://github.com/codenamegary/yuekbox/releases/latest/download/install.sh -o install.sh
+sh install.sh
+```
 
 ## ✨ WTF
 
@@ -20,51 +33,35 @@ half way around the world with your fire hazard of a lava lamp casting a dangero
 across your room, winamp blasting with some sick new visualizer on your CRT monitor
 and Kazaa ripping viruses and REAL_NEW_EMINEM_FREE_NOT_FAKE.mp3 straight on to your
 5400 RPM 10GB harddrive. So anyway I made this UI for Yue2, you type a vibe and some
-words, hit the sparkle button, and watch the trip modes while a GPU in your house
+words, hit the sparkle button, and watch the visualizer while a GPU in your house
 lights on fire.
 
-It is a **real app**, not a mockup. Under the AI skullduggery it's a Fastify server, a SQLite
-queue, a worker, and the real YuE2 runtime. The visuals are just here to make the wait fun.
+## 🎛️ What it does
 
-## 🎛️ What it does (v1)
-
-- 🪞 **Two glass boxes.** One for style, one for lyrics, side by side.
-- ✦ **Generate.** One click queues a Song and fires the worker.
-- 🚦 **A queue, not a stampede.** Click generate ten times if you want. The GPU still runs one Song at a time.
-- 📶 **Real progress.** Six stage pips, plus a hairline bar under them for the stages YuE2 actually counts (synthesize + decode). No fake bars for stages nobody can measure.
-- 🔊 **Plays the MP3** when the Song lands, with a real spectrum fed by an `AnalyserNode`. The backdrop dances to it. Yes, really.
-- ✍️ **Lyrics in the void.** While a Song plays, its lines fade in and out at the center of the page, timed to the notes actually sung in the rendered audio. Each line starts on its first note and stretches across held notes. Without a detection it falls back to the stored score. Each line settles in 0.4 s. The writer fades away until you pause.
-- 🗂️ **History drawer.** Newest first. Click to play. Click to delete. Loading a song offers to replace the editor text before it stomps your draft.
-- 🧪 **Keeps the score.** Every successful Song stores the ABC lead sheet for future features. v1 doesn't show it. Yet.
-- ⌁ **Reference covers.** Attach a song file and SheetSage2 transcribes its melody first, then YuE2 sings your lyrics over that tune. Optional. Without it you get the usual freeform generation.
-- 📦 **A models panel.** The five model folders with their state and size. Download a model or point at a copy you already have. Downloads over 128 MiB ask first, and a missing ffmpeg or NVIDIA driver shows its install line in the same panel.
-- 🌈 **Four trip modes** for the background visualizer. More on that below.
-- 🎨 **AI-authored backdrops.** With AI on, every new Song gets its own generated Canvas 2D visualization built from its style, its lyrics, and a randomly sampled visual direction, while the GPU is still working. It takes the backdrop over from the trip modes and owns the lyric display. Reroll any Song whenever you like.
-- 🧠 **Optional AI** that talks to any OpenAI-compatible endpoint: enhance, random, visualizations, full auto. Off by default. More below.
+- 📻 **Music** You or the AI provide the lyrics and style, Yue2 generates the music. Never touches the cloud.
+- ⌁ **Reference covers.** Attach a song file and SheetSage2 transcribes its melody first, then YuE2 takes some liberties and generates a variation. Optional. Without it you get the usual freeform generation.
+- 🎨 **AI-authored visualizer.** With AI enabled, every new Song gets its own generated Canvas 2D visualization built from its style, its lyrics, and a randomly sampled visual direction. Reroll a new visualizer for any Song whenever you like.
+- 😌 **Bliss Mode** that talks to any OpenAI-compatible endpoint: random songs, visualizations, full auto, will play until your GPU burns your house down.
 
 ## 🖼️ Gallery
 
-**Live progress**: the stage wheel spins through the pipeline while the pips light up per stage and the bar tracks real step counts from YuE2's stderr.
+**Live progress**: the stage wheel spins through the pipeline.
 
 ![Generating](docs/generating.png)
 
-**AI visualizations**: with AI on, every new Song gets its own backdrop, built from its style and lyrics while the GPU works.
+**AI visualizations**: with AI on, every new Song gets its own reactive visualizer, built from its style and lyrics.
 
 ![AI visualization](docs/hero.png)
 
-**Models**: download the five model files, or point yuekbox at copies you already have. The same panel reports ffmpeg and the NVIDIA driver when something is missing.
+**Models**: download the five model files, or point yuekbox at copies you already have.
 
 ![Models](docs/models.png)
 
-**History**: every song, its status, its duration, one click away.
+**History**: every song, one click away.
 
 ![History](docs/history.png)
 
-**A considerate robot**: loading a song over a dirty editor asks first.
-
-![Overwrite prompt](docs/overwrite-prompt.png)
-
-**Reference covers**: attach a song file and SheetSage2 transcribes its melody before YuE2 sings your lyrics over it.
+**Reference covers**: attach a song file and SheetSage2 transcribes its melody so YuE2 can cover it.
 
 ![Reference](docs/reference.png)
 
@@ -72,7 +69,7 @@ queue, a worker, and the real YuE2 runtime. The visuals are just here to make th
 
 You need:
 
-- 🐧 **Linux x86_64 or WSL2** with an **NVIDIA GPU** (16 GB VRAM works with the default budget. 24 GB is YuE2's stated recommendation) and an NVIDIA driver new enough for CUDA 12 (`525.60.13` or newer), **or** 🍎 a **Mac with Apple Silicon** (M1 or newer, macOS 14.2+, 16 GB unified memory minimum — 32 GB is comfortable). On the Mac, generation runs on the GPU through the MLX port of the same YuE2 stack; no NVIDIA anything required.
+- 🐧 **Linux or Mac** with an **NVIDIA GPU** (16 GB VRAM works with the default budget. 24 GB is YuE2's stated recommendation) and an NVIDIA driver new enough for CUDA 12 (`525.60.13` or newer), **or** 🍎 a **Mac with Apple Silicon** (M1 or newer, macOS 14.2+, 16 GB unified memory minimum — 32 GB is comfortable). On the Mac, generation runs on the GPU through the MLX port of the same YuE2 stack, no NVIDIA anything required.
 - 🎧 **ffmpeg** with `libmp3lame`. yuekbox checks for it at boot and tells you how to install it. It never installs it for you.
 - 🧠 **The five model directories**: YuE2-3B, YuE2-Vae, SheetSage2, MERT-v2-FullSong, and Whisper large-v3-turbo. Download them from the app's models panel, or point yuekbox at copies you already have with `~/.yuekbox/config.yaml` or a CLI flag. Defaults live under `~/.yuekbox/models/<name>`. The platform picks the right pinned revisions automatically (the Mac downloads the pre-converted MLX weights).
 - 🌐 **Network access** for `--provision` and any model downloads.
@@ -81,16 +78,13 @@ You need:
 Python is not on that list on purpose. `yuekbox --provision` builds the Python
 runtime it needs under `~/.yuekbox`. You never install or name one.
 
-### 📥 Install a release (no Bun, no checkout)
-
-Every release attaches the `yuekbox-linux-x64` binary, its `.sha256` checksum,
-and this installer. One line, on Linux or WSL2:
+### 📥 Install a release
 
 ```bash
 curl -fsSL https://github.com/codenamegary/yuekbox/releases/latest/download/install.sh | sh
 ```
 
-On WSL2, or if you want to read the script before running it, download it and
+Or if you want to read the script before running it, download it and
 run it:
 
 ```bash
@@ -111,9 +105,7 @@ yuekbox               # starts the app in the background and returns to the prom
 The binary bundles the UI, the API, the SQLite schema, and the Python helper
 scripts. It does **not** bundle CUDA, PyTorch, Python, ffmpeg, or the model
 weights. `--provision` builds the Python runtime under `~/.yuekbox`, and the
-models come from the app's downloader or from copies you already have. It is
-idempotent: if it stops on a missing driver or a dropped connection, fix that
-and run it again, and the pieces already built are skipped.
+models come from the app's downloader or from copies you already have.
 
 ### 🧰 Run from source
 
@@ -125,8 +117,7 @@ bun packages/server/src/server.ts --provision   # one time: builds the runtime u
 bun run dev
 ```
 
-Open <http://127.0.0.1:3000> and go make something weird. The API hums along on
-<http://127.0.0.1:8787>. Check its vitals with:
+Open <http://127.0.0.1:3000> and go make something weird. Check API vitals with:
 
 ```bash
 curl -s http://127.0.0.1:3000/v1/status
@@ -136,7 +127,7 @@ curl -s http://127.0.0.1:3000/v1/status
 The exact response, defaults, and required fields are the `StatusSchema` in
 [`packages/contracts/src/http/status.ts`](packages/contracts/src/http/status.ts).
 
-### 📦 Single binary (no Bun or source tree at runtime)
+### 📦 Single binary
 
 The released `yuekbox-linux-x64` is this executable. CI builds it, smoke-tests
 it, and attaches it to each GitHub release with its `.sha256` checksum. To build
@@ -147,8 +138,8 @@ bun run build:binary
 ./yuekbox start
 ```
 
-It serves the UI and the API on one port: <http://127.0.0.1:3000> (`WEB_PORT`
-moves it). `start` detaches: the command returns to the prompt and the daemon
+It serves the UI and the API on one port: <http://127.0.0.1:3000> (or set `WEB_PORT`
+yourself). `start` detaches: the command returns to the prompt and the daemon
 keeps running (see [Managing yuekbox](#-managing-yuekbox-start-stop-status-uninstall)).
 The first start extracts the Python helpers into `~/.yuekbox/scripts`.
 `--home`, `--config`, `--yue2-model` and the other config flags behave exactly
@@ -170,10 +161,10 @@ macOS arm64 runner. `sh scripts/install.test.sh`
 exercises the release installer against a local HTTP server, and
 [`docs/releasing.md`](docs/releasing.md) covers the release workflow and the
 clean-machine install test. The Apple Silicon acceptance bench
-(`darwin-verify.yml`) provisions and generates one Song end to end in CI; run
+(`darwin-verify.yml`) provisions and generates one Song end to end in CI. Run
 it before publishing a release that touched the macOS paths or a runtime pin.
 
-Yuekbox keeps everything it manages in `~/.yuekbox` (`--home` moves it): the Python
+Yuekbox keeps everything it manages in `~/.yuekbox` (or `--home` if you want to put it elsewhere): the Python
 runtime under `tools/`, model defaults under `models/`, the Python environment under
 `venvs/`, our scripts under `scripts/`, and the SQLite file plus Song media under `data/`.
 The only thing you configure is where the five model files live:
@@ -186,9 +177,7 @@ models:
 ```
 
 Keys you leave out fall back to `~/.yuekbox/models/<name>`. A CLI flag beats the file:
-`yuekbox --yue2-model /mnt/audio/YuE2-3B` (or `bun packages/server/src/server.ts
---yue2-model /mnt/audio/YuE2-3B` from a checkout). `YUE2_KIT` is gone. yuekbox never
-asks about a checkout.
+`yuekbox --yue2-model /mnt/audio/YuE2-3B` (or `bun packages/server/src/server.ts --yue2-model /mnt/audio/YuE2-3B` from a checkout). yuekbox never asks about a checkout.
 
 ### 🕹️ Managing yuekbox (start, stop, status, uninstall)
 
@@ -258,7 +247,7 @@ Source contributors: each tool has setup notes in its own folder
 [`packages/server/tools/lyric-align/README.md`](packages/server/tools/lyric-align/README.md)),
 and `spec.md` is the source of truth. The installed scripts live flat in
 `~/.yuekbox/scripts/`. The SheetSage2 copy is vendored from YuE at the revision pinned in
-`packages/server/src/runtime/runtime.pins.ts` (Apache-2.0). Uploads are capped at 25 MB
+`packages/server/src/runtime/runtime.pins.ts`. Uploads are capped at 25 MB
 (`REFERENCE_MAX_BYTES`).
 
 ## 🤖 The "just make it work" prompt
@@ -273,7 +262,7 @@ app that generates songs on the local GPU. Work through the steps in order and v
 each before moving on. Ask before downloading model weights (several GB).
 
 Assumptions
-- Linux or WSL2 with an NVIDIA GPU visible to `nvidia-smi`, driver 525.60.13 or newer.
+- Linux or WSL2 with an NVIDIA GPU visible to `nvidia-smi`, driver 525.60.13 or newer, or a Mac with Apple silicon.
 - `curl` and `ffmpeg` are installed. ffmpeg must include libmp3lame. Check with
   `ffmpeg -hide_banner -encoders | grep mp3`.
 - Network access for the installer, `--provision`, and the model downloads.
@@ -333,17 +322,17 @@ Notes
 - The binary manages itself: `yuekbox status`, `yuekbox stop`,
   `yuekbox uninstall --purge` when you want it gone. Its log is
   ~/.yuekbox/logs/yuekbox.log.
-- Model locations come from ~/.yuekbox/config.yaml or CLI flags. There is no YUE2_KIT.
+- Model locations come from ~/.yuekbox/config.yaml or CLI flags.
 - Do not commit anything. Report the /v1/status output, the song id, its duration, and
   any errors with stderr tails.
 ```
 
-## 🧠 How it works
+## 🧠 Internals
 
 ```text
 packages/web        Bun.serve SPA + /v1 proxy, React 19, TanStack Query, Tailwind 4
 packages/server     Fastify 5, Drizzle ORM, bun:sqlite, a single worker loop
-packages/contracts  Zod wire schemas, paths, RFC 7807 problems
+packages/contracts  Zod wire schemas, paths
 ```
 
 One worker claims the oldest `queued` Song, marks it `running`, and runs our
@@ -365,7 +354,7 @@ start at `plan`. The web app polls, whoever is active updates fastest.
 
 ## 🧠 Bring your own model (optional)
 
-AI is **off by default**, and the app behaves exactly as it always has until you
+AI for lyrics, style and visualization is **off by default**, and the app behaves exactly as it always has until you
 flip the switch in the settings sigil (⚙). Turn it on and Yuekbox talks to any
 **OpenAI-compatible endpoint**: OpenAI, Anthropic, Gemini, OpenRouter, Groq,
 Mistral, DeepSeek, Together, or whatever local thing you have running (Ollama,
@@ -390,8 +379,7 @@ The **visuals writer** authors one JavaScript canvas factory per Song, in parall
 with GPU generation. When it's configured, a selected Song with a visualization
 hands the backdrop to it: the generated code gets the live audio spectrum and the
 active lyric line and draw to a full-screen canvas. Reroll it from the player at
-any time. If authoring fails or the generated code throws, the trip mode
-returns and a small badge offers a reroll. Playback is never blocked.
+any time.
 
 ## 🌌 The psychedelic bit
 
@@ -403,19 +391,19 @@ deliberately, unapologetically **a screensaver that happens to make music**:
 - ❂ **Chromatic Plasma**: sixteen bands of hue-shifting interference
 - ✧ **Quantum Stardust Vortex**: ninety particles orbiting a point that isn't there
 
-**Contributions to this layer are extremely welcome.** Adding a fifth trip mode is
+**Contributions to this layer are extremely welcome.** Adding a visualizer is
 basically a one-function PR. See below. With AI on and the visuals writer
 configured, a Song's own generated visualization takes the screen instead. The
-trip modes are always the fallback.
+built-in visualizers are always the fallback.
 
 ## 🛠️ Contributing
 
 Yuekbox is a fun project and contributions are **very** welcome. No contribution is
-too small. A typo fix, a new trip mode, a bug report with a good screenshot, all of it counts.
+too small. A typo fix, a new visualizer, a bug report with a good screenshot, all of it counts.
 
 ### Ways to help
 
-- 🌈 **Add a trip mode.** The background engine (`packages/web/src/songs/songs.winamp.engine.ts`) has one draw function per mode. Write a new one, add a sigil, done.
+- 🌈 **Add a visualizer.** The background engine (`packages/web/src/songs/songs.winamp.engine.ts`) has one draw function per visualizer. Write a new one, add a sigil, done.
 - 🎨 **Own the vibe.** Better typography, themes, a reduced-motion mode that keeps the soul but calms the visuals.
 - 🐛 **Fix bugs.** Check the issues, or open one with the `/v1/status` output and a screenshot.
 - 📝 **Write docs.** Especially real-world examples of styles/lyrics that work well.
@@ -428,7 +416,7 @@ too small. A typo fix, a new trip mode, a bug report with a good screenshot, all
 3. ⚙️ `bun packages/server/src/server.ts --provision` once, to build the Python side under `~/.yuekbox`
 4. ✍️ Make the change
 5. ✅ `bun run check`: lint, import boundaries, typecheck, tests. Keep it green.
-6. 🚀 Open a PR. **Visual changes need visuals**: a screenshot or short clip. (The `docs/` stills were captured with a CDP-driven headed Chrome, if you want the same for yours.)
+6. 🚀 Open a PR. **Visual changes need visuals**: a screenshot or short clip.
 
 ### House rules
 
@@ -444,8 +432,7 @@ Include:
 
 - the output of `curl -s http://127.0.0.1:3000/v1/status`
 - what you expected vs. what happened
-- if a generation failed: the Song id and its `errorDetail`
-- if it's visual: a screenshot, and which trip mode you were in
+- if a generation failed: the Song id and its `errorDetail`, plus whatever logs you have in `~/.yuekbox`
 
 ### Etiquette
 
