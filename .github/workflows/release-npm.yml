@@ -1,10 +1,10 @@
 name: Release npm
 
 # Builds the npm package for a GitHub release and publishes it via trusted
-# publishing (#99). Called by the Release Please workflow right after it
-# creates the release as a draft (wiring lands with the binary-channel
-# removal), and dispatchable by hand for verification runs. The npm side
-# trusts this exact workflow filename — see docs.npmjs.com/trusted-publishers.
+# publishing (#99). Called by the Release Please workflow whenever a release
+# is created (so merging the release PR is what publishes), and dispatchable
+# by hand for verification runs. The npm side trusts this exact workflow
+# filename — see docs.npmjs.com/trusted-publishers.
 #
 # Trusted publishing needs no NPM_TOKEN secret: the publish job exchanges the
 # workflow's OIDC token for short-lived credentials, and npm attaches the
