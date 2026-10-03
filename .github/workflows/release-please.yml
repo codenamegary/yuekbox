@@ -43,3 +43,17 @@ jobs:
     uses: ./.github/workflows/release-binaries.yml
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
+
+  # Same trigger, npm channel (#99). Trusted publishing validates the OIDC
+  # claims against the package's trusted publishers, and a workflow_call
+  # caller may need its own name registered too, so the caller carries
+  # id-token: write alongside the called workflow.
+  npm:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/release-npm.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
