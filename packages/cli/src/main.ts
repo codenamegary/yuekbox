@@ -11,6 +11,7 @@
 //
 // Build: `bun run build:binary` -> scripts/build-binary.ts.
 import { homedir } from "node:os"
+import { join } from "node:path"
 // Build-time SPA: the compiler bundles the HTML entry and every asset it
 // references (Tailwind CSS included) into the executable.
 import index from "../../web/src/index.html"
@@ -37,7 +38,12 @@ import {
 } from "./lifecycle/lifecycle.adapters"
 import { logRotateBytes } from "./lifecycle/lifecycle.models"
 import { parseInvocation, ParsedInvocation } from "./lifecycle/lifecycle.parse"
-import { logFilePath, runLockPath, runStatePath } from "./lifecycle/lifecycle.paths"
+import {
+  entryExecutablePath,
+  logFilePath,
+  runLockPath,
+  runStatePath,
+} from "./lifecycle/lifecycle.paths"
 import { makeStart } from "./lifecycle/lifecycle.start.usecase"
 import { makeStatus } from "./lifecycle/lifecycle.status.usecase"
 import { makeStop, StopInput } from "./lifecycle/lifecycle.stop.usecase"
@@ -98,12 +104,27 @@ const runDaemon = async (invocation: ParsedInvocation): Promise<void> => {
     // One proxy hop to the API, shared with packages/web/src/serve.ts so
     // streaming and error responses behave the same in dev and in the binary.
     const proxyToApi = makeApiProxy(`http://${api.host}:${api.port}`)
+    // The npm bundle ships the SPA shell and hashed chunks next to this
+    // entry, but Bun's html manifest resolves chunk requests against the
+    // process cwd, which under npx is the user's directory. Serve them from
+    // the package dir instead, with the shell as the SPA fallback, the same
+    // shape as web/serve.ts's serveDist. Dev resolves chunks from source and
+    // the compiled binary from its embedded copy, so both keep the manifest.
+    const bundledPackage = process.env.YUEKBOX_BUNDLED === "1" && !Bun.isStandaloneExecutable
+    const servePackaged = async (req: Request): Promise<Response> => {
+      const { pathname } = new URL(req.url)
+      if (/^\/chunk-[A-Za-z0-9]+\.(js|css)$/.test(pathname)) {
+        const file = Bun.file(join(import.meta.dir, pathname.slice(1)))
+        if (await file.exists()) return new Response(file)
+      }
+      return new Response(Bun.file(join(import.meta.dir, "server.html")))
+    }
     const web = Bun.serve({
       hostname: process.env.WEB_HOST ?? "127.0.0.1",
       port: Number(process.env.WEB_PORT ?? 3000),
       routes: {
         "/v1/*": proxyToApi,
-        "/*": index,
+        "/*": bundledPackage ? servePackaged : index,
       },
     })
     await writeRunState(runStatePath(home), {
@@ -230,8 +251,10 @@ const dispatch = async (invocation: ParsedInvocation, tokens: readonly string[])
           home,
           lockPath: runLockPath(home),
           statePath: runStatePath(home),
-          execPath: process.execPath,
-          standalone: Bun.isStandaloneExecutable,
+          execPath: entryExecutablePath(Bun.isStandaloneExecutable, process.argv, process.execPath),
+          // The npm bundle is an installed artifact like the compiled binary:
+          // it may remove its own bin symlink. A dev runtime never may.
+          standalone: Bun.isStandaloneExecutable || process.env.YUEKBOX_BUNDLED === "1",
           purge: invocation.purge,
         }),
       )

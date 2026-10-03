@@ -14,6 +14,22 @@ export const runLockPath = (home: string): string => join(home, "run", lockFileN
 export const logFilePath = (home: string): string => join(home, "logs", logFileName)
 
 /**
+ * The yuekbox executable as launched. A compiled binary is its own
+ * interpreter, so `process.execPath` is the executable. An npm install runs
+ * `bun <bin/yuekbox>`, so the entry is `argv[1]` and `process.execPath` is
+ * the bun runtime, which uninstall must never remove.
+ */
+export const entryExecutablePath = (
+  standalone: boolean,
+  argv: readonly string[] | undefined,
+  execPath: string,
+): string => {
+  if (standalone) return execPath
+  const entry = argv?.[1]
+  return typeof entry === "string" && entry.length > 0 ? entry : execPath
+}
+
+/**
  * The home buckets `uninstall` may remove, models included so callers can
  * treat it separately: app data removes every bucket except models.
  */

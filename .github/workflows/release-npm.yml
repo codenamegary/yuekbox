@@ -1,0 +1,140 @@
+name: Release npm
+
+# Builds the npm package for a GitHub release and publishes it via trusted
+# publishing (#99). Called by the Release Please workflow right after it
+# creates the release as a draft (wiring lands with the binary-channel
+# removal), and dispatchable by hand for verification runs. The npm side
+# trusts this exact workflow filename — see docs.npmjs.com/trusted-publishers.
+#
+# Trusted publishing needs no NPM_TOKEN secret: the publish job exchanges the
+# workflow's OIDC token for short-lived credentials, and npm attaches the
+# provenance attestation automatically. Publishing waits for both smoke
+# targets, so a broken tarball can never reach the registry.
+#
+# Careful with manual dispatch: the tag's version is what ships. Dispatching
+# v0.5.0 publishes yuekbox@0.5.0 for real.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to build and publish (for example v0.5.0)
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and publish (for example v0.5.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-npm-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build the npm package
+        run: bun run build:package
+
+      - name: Pack the tarball
+        run: (cd dist/yuekbox && npm pack)
+
+      - name: Upload the tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: yuekbox-tarball
+          path: dist/yuekbox/yuekbox-*.tgz
+          if-no-files-found: error
+
+  smoke-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: package
+    steps:
+      - name: Checkout the smoke script
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+          sparse-checkout: scripts
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Download the tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: yuekbox-tarball
+          path: dist/yuekbox
+
+      - name: Smoke-test the packed tarball
+        run: ./scripts/smoke-package.sh
+
+  smoke-darwin:
+    # The Apple Silicon target smokes the real tarball on a native arm64
+    # runner, same as the binary channel did.
+    runs-on: macos-14
+    timeout-minutes: 20
+    needs: package
+    steps:
+      - name: Checkout the smoke script
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+          sparse-checkout: scripts
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Download the tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: yuekbox-tarball
+          path: dist/yuekbox
+
+      - name: Smoke-test the packed tarball
+        run: ./scripts/smoke-package.sh
+
+  publish:
+    # Trusted publishing: the id-token exchange is the whole credential. The
+    # workflow filename registered on npmjs.com must match this file.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [smoke-linux, smoke-darwin]
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download the tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: yuekbox-tarball
+          path: dist
+
+      - name: Setup Node for the npm CLI
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - name: Publish
+        run: npm publish dist/yuekbox-*.tgz

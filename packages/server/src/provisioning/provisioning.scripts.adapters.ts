@@ -19,14 +19,17 @@ export const scriptManifest = Object.freeze([
 ] as const)
 
 /**
- * `packages/server/tools`. In a compiled binary the tools tree is embedded at
- * `/$bunfs/root/tools` (`--asset=packages/server/tools` in scripts/build-binary.ts)
- * and `import.meta.dir` is `/$bunfs/root`, so the standalone branch lands on the
- * embedded copy. `bun run` keeps the real package directory.
+ * `packages/server/tools`. The tools tree travels with the code in three
+ * layouts: `bun run` keeps the real package directory (`../../tools/` next to
+ * this source file), the compiled binary embeds it at `/$bunfs/root/tools`,
+ * and the npm bundle ships it as `tools/` next to the bundled entry, marked
+ * by `process.env.YUEKBOX_BUNDLED` from scripts/build-package.ts.
  */
+const toolsRootRelative = (bundled: boolean): string => (bundled ? "./tools/" : "../../tools/")
+
 export const toolsRoot = Bun.isStandaloneExecutable
   ? join(import.meta.dir, "tools")
-  : fileURLToPath(new URL("../../tools/", import.meta.url))
+  : fileURLToPath(new URL(toolsRootRelative(process.env.YUEKBOX_BUNDLED === "1"), import.meta.url))
 
 export const makeInstallScripts = (sourceRoot: string): InstallScripts => {
   return async (scriptsDir) => {
