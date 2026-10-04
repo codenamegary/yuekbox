@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/codenamegary/yuekbox/compare/v0.6.0...v0.6.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* **ci:** publish the tarball with a file spec npm can resolve ([#104](https://github.com/codenamegary/yuekbox/issues/104)) ([aec7ab9](https://github.com/codenamegary/yuekbox/commit/aec7ab989e6433add0896564110dc1312cef80ad))
+
 ## [0.6.0](https://github.com/codenamegary/yuekbox/compare/v0.5.0...v0.6.0) (2026-10-04)
 
 
