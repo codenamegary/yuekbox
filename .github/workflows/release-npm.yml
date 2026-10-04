@@ -144,8 +144,17 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
 
+      # The ./ prefix is load-bearing: npm parses bare `owner/repo`-shaped
+      # paths as GitHub shortcuts and tries to git-fetch the tarball.
       - name: Publish
-        run: npm publish dist/yuekbox-*.tgz
+        run: |
+          tgz="$(ls ./dist/yuekbox-*.tgz ./dist/yuekbox/yuekbox-*.tgz 2>/dev/null | head -1)"
+          if [ -z "$tgz" ]; then
+            echo "no tarball found under dist" >&2
+            ls -laR dist >&2
+            exit 1
+          fi
+          npm publish "$tgz"
 
       - name: Append the packaging note to the release
         env:
