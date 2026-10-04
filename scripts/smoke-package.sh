@@ -10,7 +10,7 @@
 # The tarball installs globally into a scratch prefix, which proves the
 # published artifact is self-contained: no source tree, no node_modules, and
 # the `yuekbox` bin runs under bun via its shebang, exactly as `npx yuekbox`
-# would. Checks mirror smoke-binary.sh: detached `start`, /v1/status,
+# would. Checks: detached `start`, /v1/status,
 # /v1/config precedence, one extracted Python helper, `status`/`stop`, and
 # `uninstall --purge` removing the home and the bin symlink — never the bun
 # runtime itself.

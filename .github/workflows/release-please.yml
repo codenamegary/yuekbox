@@ -31,19 +31,6 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  # Immutable releases only accept assets while they are drafts, and a draft
-  # fires no `release` event, so the build is called directly instead of
-  # triggered. release-binaries.yml attaches the assets and publishes the
-  # draft; a failure leaves the draft for a retry.
-  binaries:
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
-    permissions:
-      contents: write
-    uses: ./.github/workflows/release-binaries.yml
-    with:
-      tag: ${{ needs.release-please.outputs.tag_name }}
-
   # Same trigger, npm channel (#99). Trusted publishing validates the OIDC
   # claims against the package's trusted publishers, and a workflow_call
   # caller may need its own name registered too, so the caller carries

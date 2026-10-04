@@ -12,17 +12,16 @@ Just you, a graphics card, and increasingly questionable lyrics.
 
 ### 👇 Install for Linux & Mac
 
+Requires [Bun](https://bun.sh) 1.4.2 or newer on your `PATH`, then:
 
 ```bash
-curl -fsSL https://github.com/codenamegary/yuekbox/releases/latest/download/install.sh | sh
+npm i -g yuekbox
 ```
 
-Or if you want to read the script before running it, download it and
-run it:
+Or take it for one spin without installing:
 
 ```bash
-curl -fsSL https://github.com/codenamegary/yuekbox/releases/latest/download/install.sh -o install.sh
-sh install.sh
+npx yuekbox
 ```
 
 ## ✨ WTF
@@ -73,7 +72,7 @@ You need:
 - 🎧 **ffmpeg** with `libmp3lame`. yuekbox checks for it at boot and tells you how to install it. It never installs it for you.
 - 🧠 **The five model directories**: YuE2-3B, YuE2-Vae, SheetSage2, MERT-v2-FullSong, and Whisper large-v3-turbo. Download them from the app's models panel, or point yuekbox at copies you already have with `~/.yuekbox/config.yaml` or a CLI flag. Defaults live under `~/.yuekbox/models/<name>`. The platform picks the right pinned revisions automatically (the Mac downloads the pre-converted MLX weights).
 - 🌐 **Network access** for `--provision` and any model downloads.
-- 🥟 **[Bun](https://bun.sh) 1.4+** only to run from source. The released binary needs no Bun and no checkout.
+- 🥟 **[Bun](https://bun.sh) 1.4.2 or newer**, on your `PATH`. The package runs on Bun; there is no separate binary anymore.
 
 Python is not on that list on purpose. `yuekbox --provision` builds the Python
 runtime it needs under `~/.yuekbox`. You never install or name one.
@@ -81,31 +80,17 @@ runtime it needs under `~/.yuekbox`. You never install or name one.
 ### 📥 Install a release
 
 ```bash
-curl -fsSL https://github.com/codenamegary/yuekbox/releases/latest/download/install.sh | sh
-```
-
-Or if you want to read the script before running it, download it and
-run it:
-
-```bash
-curl -fsSL https://github.com/codenamegary/yuekbox/releases/latest/download/install.sh -o install.sh
-sh install.sh
-```
-
-The installer checks the platform, downloads the binary and its checksum,
-verifies SHA-256, and puts `yuekbox` in `~/.local/bin` (it prints the `PATH`
-line when that directory is not on it). `YUEKBOX_INSTALL_DIR` moves the target
-and `YUEKBOX_VERSION=v0.3.0` pins a release. Then:
-
-```bash
+npm i -g yuekbox      # or: npx yuekbox to try it without installing
 yuekbox --provision   # one time: builds the Python runtime under ~/.yuekbox
 yuekbox               # starts the app in the background and returns to the prompt
 ```
 
-The binary bundles the UI, the API, the SQLite schema, and the Python helper
-scripts. It does **not** bundle CUDA, PyTorch, Python, ffmpeg, or the model
-weights. `--provision` builds the Python runtime under `~/.yuekbox`, and the
-models come from the app's downloader or from copies you already have.
+Every release is also the npm package `yuekbox`, published from CI with
+provenance you can verify on npmjs.com. The package bundles the UI, the API,
+the SQLite schema, and the Python helper scripts. It does **not** bundle CUDA,
+PyTorch, Python, ffmpeg, or the model weights. `--provision` builds the Python
+runtime under `~/.yuekbox`, and the models come from the app's downloader or
+from copies you already have.
 
 ### 🧰 Run from source
 
@@ -127,15 +112,16 @@ curl -s http://127.0.0.1:3000/v1/status
 The exact response, defaults, and required fields are the `StatusSchema` in
 [`packages/contracts/src/http/status.ts`](packages/contracts/src/http/status.ts).
 
-### 📦 Single binary
+### 📦 The npm package
 
-The released `yuekbox-linux-x64` is this executable. CI builds it, smoke-tests
-it, and attaches it to each GitHub release with its `.sha256` checksum. To build
-the same file yourself:
+The released package is the same thing `npm i -g yuekbox` installs. CI builds
+it, packs it, smoke-tests the packed tarball on Linux and on a macOS arm64
+runner, then publishes it with provenance (the npmjs page shows the workflow
+and commit behind every version). To build the same tarball yourself:
 
 ```bash
-bun run build:binary
-./yuekbox start
+bun run build:package
+(cd dist/yuekbox && npm pack)
 ```
 
 It serves the UI and the API on one port: <http://127.0.0.1:3000> (or set `WEB_PORT`
@@ -145,19 +131,11 @@ The first start extracts the Python helpers into `~/.yuekbox/scripts`.
 `--home`, `--config`, `--yue2-model` and the other config flags behave exactly
 as they do in dev. `--provision` is still the full setup step (the Python
 environment and the helper scripts), runs attached, and exits when done. The
-binary needs no `node_modules`, no source tree, and no Bun.
+package needs no `node_modules` and no source tree — just Bun.
 
-Cross-compile with `--target` and a local runtime:
-
-```bash
-bun run build:binary yuekbox-musl \
-  --target bun-linux-x64-musl \
-  --executable ~/.bun/install/cache/@oven/bun-linux-x64-musl@1.4.2@@@1/bin/bun
-```
-
-linux-x64 and darwin-arm64 are the ship targets. `scripts/smoke-binary.sh ./yuekbox` runs the compiled
-acceptance smoke test locally. CI runs it on every PR, on ubuntu-latest and on a
-macOS arm64 runner. `sh scripts/install.test.sh`
+`scripts/smoke-package.sh` runs the packed-tarball acceptance smoke test
+locally. CI runs it on every PR, and the release workflow runs it on
+ubuntu-latest and a macOS arm64 runner before publishing.
 exercises the release installer against a local HTTP server, and
 [`docs/releasing.md`](docs/releasing.md) covers the release workflow and the
 clean-machine install test. The Apple Silicon acceptance bench
@@ -253,7 +231,7 @@ and `spec.md` is the source of truth. The installed scripts live flat in
 ## 🤖 The "just make it work" prompt
 
 Don't feel like reading setup docs? Paste this into Claude Code, Cursor, or any agent
-with shell access to the GPU machine. The default path installs the release binary and
+with shell access to the GPU machine. The default path installs the npm package and
 lets `--provision` build the Python side. A source checkout is included for contributors.
 
 ```text
@@ -263,15 +241,15 @@ each before moving on. Ask before downloading model weights (several GB).
 
 Assumptions
 - Linux or WSL2 with an NVIDIA GPU visible to `nvidia-smi`, driver 525.60.13 or newer, or a Mac with Apple silicon.
-- `curl` and `ffmpeg` are installed. ffmpeg must include libmp3lame. Check with
-  `ffmpeg -hide_banner -encoders | grep mp3`.
-- Network access for the installer, `--provision`, and the model downloads.
+- [Bun](https://bun.sh) 1.4.2+ and `ffmpeg` are installed. ffmpeg must include
+  libmp3lame. Check with `ffmpeg -hide_banner -encoders | grep mp3`.
+- Network access for `--provision` and the model downloads.
 - Python is not needed. `--provision` installs its own runtime under ~/.yuekbox.
 
-1) Install the release binary (default path)
-     curl -fsSL https://github.com/codenamegary/yuekbox/releases/latest/download/install.sh | sh
-   Verify: `command -v yuekbox` prints a path. If the installer says the directory is
-   not on PATH, run the export line it prints first.
+1) Install the package (default path)
+     npm i -g yuekbox
+   Verify: `command -v yuekbox` prints a path. If it prints nothing, Bun is
+   missing or not on PATH: install it from bun.sh first.
 
 2) Build the runtime (one time)
      yuekbox --provision
@@ -513,8 +491,8 @@ In the packaged binary the API binds an OS-assigned loopback port, so `HOST` and
 | `bun run dev` | Fastify (:8787) and the web app (:3000) in parallel |
 | `bun run check` | Lint, import boundaries, typecheck, and tests across all packages |
 | `bun run test` | `bun test` per package |
-| `bun run build:binary` | Compile the single `./yuekbox` executable |
-| `sh scripts/install.test.sh` | Installer test against a throwaway HTTP server |
+| `bun run build:package` | Build the publishable npm package into `dist/yuekbox` |
+| `./scripts/smoke-package.sh` | Packed-tarball smoke test against a scratch global install |
 | `bash scripts/release-notes.test.sh` | Release-note append test with a `gh` shim |
 | `bun run db:generate <name>` | Drizzle migration from the schema |
 | `bun run format` / `format:check` | oxfmt |

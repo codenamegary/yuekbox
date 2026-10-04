@@ -81,7 +81,7 @@ GH_RELEASE_BODY="$body" PATH="$shim:$PATH" bash "$script" v0.3.0 >"$work/first.l
   fail "the first append failed: $(cat "$work/first.log")"
 
 grep -q "a change worth releasing" "$body" || fail "the original body was lost"
-grep -q "^## Prebuilt binary$" "$body" || fail "the packaging heading is missing"
+grep -q "^## Install$" "$body" || fail "the packaging heading is missing"
 grep -q "does not bundle" "$body" || fail "the bundle statement is missing"
 marker_count="$(grep -cF '<!-- yuekbox-packaging -->' "$body")"
 [[ "$marker_count" -eq 1 ]] || fail "the marker appears $marker_count times"

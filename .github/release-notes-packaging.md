@@ -1,31 +1,27 @@
 <!-- yuekbox-packaging -->
-## Prebuilt binaries
-
-Every release ships `yuekbox-linux-x64` for **Linux x86_64 and WSL2** with an
-NVIDIA GPU, and `yuekbox-darwin-arm64` for **macOS on Apple Silicon** (M1 or
-newer, macOS 14.2+, 16 GB unified memory minimum), each with its
-`.sha256` checksum. The installer verifies the checksum, picks the right
-asset for the machine, and installs before anything lands:
+## Install
 
 ```sh
-curl -fsSL https://github.com/codenamegary/yuekbox/releases/latest/download/install.sh | sh
-yuekbox --provision
+npm i -g yuekbox
 yuekbox
 ```
 
-`YUEKBOX_VERSION=vX.Y.Z` pins a release and `YUEKBOX_INSTALL_DIR` moves the
-install location (default `~/.local/bin`). An Intel Mac is not supported: the
-Apple Silicon runtime needs an M1 or newer.
+Or take it for one spin without installing:
 
-**Each binary bundles** the web UI, the Fastify API, the SQLite schema and
-migrations, and the Python helper scripts. It replaces a source checkout and a
-`node_modules` tree.
+```sh
+npx yuekbox
+```
 
-**The binaries do not bundle** CUDA, PyTorch, Python, ffmpeg, or model weights.
-Those stay a machine prerequisite and a runtime download:
+**Each package bundles** the web UI, the Fastify API, the SQLite schema and
+migrations, and the Python helper scripts. It runs on [Bun](https://bun.sh)
+1.4.2+ and replaces a source checkout and a `node_modules` tree.
 
-- Linux: an NVIDIA GPU with a driver at or above 525.60.13; macOS: Apple
-  Silicon with macOS 14.2+ and 16 GB of unified memory
+**The package does not bundle** CUDA, PyTorch, Python, ffmpeg, or model
+weights. Those stay a machine prerequisite and a runtime download:
+
+- Linux or WSL2: an NVIDIA GPU with a driver at or above 525.60.13; macOS:
+  Apple Silicon with macOS 14.2+ and 16 GB of unified memory
+- [Bun](https://bun.sh) 1.4.2 or newer on your `PATH`
 - `ffmpeg` (with `libmp3lame`; `brew install ffmpeg` on macOS)
 - `yuekbox --provision` builds the pinned Python runtime under `~/.yuekbox`
   (network access and a few GB of disk). macOS builds two environments: the
