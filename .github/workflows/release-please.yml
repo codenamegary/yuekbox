@@ -39,7 +39,10 @@ jobs:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
     permissions:
-      contents: read
+      # write: the called publish job appends the packaging note to the
+      # release. A caller job's permissions cap everything the callee may
+      # use, so this must not be narrower than the callee's own jobs.
+      contents: write
       id-token: write
     uses: ./.github/workflows/release-npm.yml
     with:
