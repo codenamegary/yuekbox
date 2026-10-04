@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/codenamegary/yuekbox/compare/v0.5.0...v0.6.0) (2026-10-04)
+
+
+### Features
+
+* **npm:** make the npm package the only install channel ([#101](https://github.com/codenamegary/yuekbox/issues/101)) ([c331b3b](https://github.com/codenamegary/yuekbox/commit/c331b3b5aeb8cb0971dc3bb19f4b7ced624b4199))
+
+
+### Bug Fixes
+
+* **ci:** let the npm release job write to the release ([#102](https://github.com/codenamegary/yuekbox/issues/102)) ([633fa09](https://github.com/codenamegary/yuekbox/commit/633fa090d5170f3943c1f4f3a5c2c02f58f8bc7c))
+
 ## [0.5.0](https://github.com/codenamegary/yuekbox/compare/v0.4.0...v0.5.0) (2026-10-01)
 
 
