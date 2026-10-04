@@ -1,5 +1,9 @@
 # Single-binary spike findings (#51)
 
+> **Superseded.** The single-binary channel was replaced by the npm package in
+> #99; releases now ship `yuekbox` on npm, built by `scripts/build-package.ts`
+> (see `docs/releasing.md`). This document stays as the record of the spike.
+
 Status: spike complete. Prototype lives in `spikes/single-binary/` and is
 throwaway. Bun version: **1.4.2** (`packageManager` is `bun@1.4.2`, no
 divergence).
