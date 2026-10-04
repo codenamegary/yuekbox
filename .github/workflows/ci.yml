@@ -30,10 +30,17 @@ jobs:
         run: bun run --filter web build
 
   # The npm package tarball gets the same treatment the binary had: build it,
-  # pack it, and smoke the packed artifact so a packaging regression can never
-  # land. The release path (release-npm.yml) additionally smokes darwin.
+  # pack it, and smoke the packed artifact on both ship targets so a packaging
+  # regression can never land. The release path (release-npm.yml) repeats
+  # these smokes against the release tag before publishing. Contract tests for
+  # the package dir run inside `bun run check`.
   smoke-package:
-    runs-on: ubuntu-latest
+    strategy:
+      # One platform failing must not cancel the other's result.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -51,6 +58,3 @@ jobs:
 
       - name: Smoke-test the packed tarball
         run: ./scripts/smoke-package.sh
-
-      - name: Run the package contract tests
-        run: bun test scripts/
