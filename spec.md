@@ -86,10 +86,9 @@ ui/
 ├── package.json              # workspace root, catalog, scripts
 ├── spec.md
 ├── scripts/
-│   ├── build-binary.ts       # compiles the single yuekbox executable
-│   ├── smoke-binary.sh       # compiled-artifact smoke test (CI)
-│   ├── install.sh            # curl | sh installer: detect, download, verify, install
-│   ├── install.test.sh       # installer test over a throwaway HTTP server
+│   ├── build-package.ts      # builds the publishable npm package into dist/
+│   ├── build-package.test.ts # package-dir contract tests (publishability)
+│   ├── smoke-package.sh      # packed-tarball smoke test (CI)
 │   ├── release-notes-append.sh # idempotent packaging section for a release body
 │   └── release-notes.test.sh # gh-shim test for the append script
 ├── .oxlintrc.json
@@ -116,8 +115,8 @@ typecheck      bun run --filter '*' typecheck
 test           bun run --filter '*' test
 format         oxfmt
 format:check   oxfmt --check
-check          lint && typecheck && test
-build:binary   bun scripts/build-binary.ts
+check          lint && typecheck && test (plus bun test scripts)
+build:package  bun scripts/build-package.ts
 db:generate    bun run --filter server db:generate
 ```
 
@@ -1008,22 +1007,33 @@ Fixture helpers in `songs/songs.fixtures.ts` build song rows, a capabilities stu
 
 No GPU in unit tests. No real ffmpeg in unit tests.
 
-## Packaging (single binary)
+## Packaging (npm package)
 
-`bun run build:binary` (`scripts/build-binary.ts`) compiles one `yuekbox`
-executable. It uses the `Bun.build` API plus `compile` because the CLI cannot
-run plugins and the SPA entry is an HTML import that needs
-`bun-plugin-tailwind`. Two asset trees are embedded, basename-rooted under
-`/$bunfs/root`:
+`bun run build:package` (`scripts/build-package.ts`) builds one publishable
+package directory, `dist/yuekbox`. It uses the `Bun.build` API with
+`target: "bun"` because the SPA entry is an HTML import that needs
+`bun-plugin-tailwind`, and the bundle carries the web UI, the Fastify API, the
+SQLite migrations, and the Python helpers as real files:
 
-- `packages/server/src/db/migrations` → `/$bunfs/root/migrations`, which is
-  exactly what `db/client.ts` already asks for via `import.meta.dir`.
-- `packages/server/tools` → `/$bunfs/root/tools`, the Python helpers.
+- `migrations/` next to the entry, which is exactly what `db/client.ts` asks
+  for via `import.meta.dir`.
+- `tools/` next to the entry; provisioning resolves it through the baked
+  `YUEKBOX_BUNDLED` marker instead of the source-relative path.
 
-The web bundle is compiled from `packages/web/src/index.html` at the same time,
-so the packaged binary does not use `packages/web/dist` and ships no sidecar
-sourcemaps (`minify: true`, `sourcemap: "none"`). Dotenv files are not read
-(`compile.autoloadDotenv: false`); configuration lives in the home.
+The web bundle is compiled from `packages/web/src/index.html` at the same time
+(the HTML-import manifest survives non-compiled builds to disk as
+`server.html` plus hashed `chunk-*` files), so the package does not use
+`packages/web/dist` and ships no sidecar sourcemaps (`minify: true`,
+`sourcemap: "none"`). The emitted bin carries the `#!/usr/bin/env bun`
+shebang, so `npx yuekbox`, `bunx yuekbox`, and a global install all run it
+under Bun. Because Bun's html manifest resolves chunk requests against the
+process cwd (under npx, the user's directory), the bundled server serves its
+hashed chunks from its own directory via a `serveDist`-style route.
+
+`verifyPackageDir` in the same script pins the publishability contract —
+name, version, `bin` with the shebang, no lifecycle scripts, no dependencies,
+`engines`, exact `repository.url`, `os` — and the script refuses to leave a
+failing directory behind. `build-package.test.ts` is that contract as tests.
 
 The packaged process root is `packages/cli/src/main.ts`. In one pid it:
 
@@ -1046,60 +1056,51 @@ helper install. Extra helper installs are idempotent and overwrite only the
 five files the manifest owns.
 
 `bun run dev` is unchanged: `packages/server` on 8787 and
-`packages/web/src/serve.ts` on 3000, two processes. Cross-compile with
-`bun run build:binary <outfile> --target <bun-target> --executable
-<local-bun-runtime>`; `--target` alone downloads the runtime from npm.
-The ship targets are linux-x64 (NVIDIA/CUDA) and darwin-arm64 (Apple
-Silicon, where generation runs through the pinned MLX runtime).
-`scripts/smoke-binary.sh` is the compiled-artifact
-proof: it runs a copy of the binary from an empty directory against a scratch
-home, starts it detached, checks `status --json`, an idempotent second start,
-`/`, `/v1/status`, `/v1/config` precedence, runs an extracted helper with
-`--help`, stops it, and removes it again with `uninstall --purge`. CI runs it
-on ubuntu-latest and on a macOS arm64 runner.
+`packages/web/src/serve.ts` on 3000, two processes. The ship targets are
+Linux x86_64 (NVIDIA/CUDA) and macOS arm64 (Apple Silicon, where generation
+runs through the pinned MLX runtime); the package declares both via `os`.
+`scripts/smoke-package.sh` is the artifact proof: it installs the packed
+tarball into a scratch global prefix and runs a copy-driven acceptance pass —
+detached start, `status --json`, an idempotent second start, `/`, the hashed
+chunks, `/v1/status`, `/v1/config` precedence, an extracted helper with
+`--help`, stop, and `uninstall --purge`, which removes the installed entry
+and never the bun runtime. CI runs it on every PR on ubuntu-latest; the
+release workflow runs it on ubuntu-latest and a macOS arm64 runner before
+publishing.
 
 ### Release packaging
 
-Merging the release-please PR tags `vX.Y.Z` and creates the GitHub release as
-a draft (`draft` plus `force-tag-creation` in `release-please-config.json`),
-because immutable releases only accept assets before publication. The Release
-Please workflow then calls `.github/workflows/release-binaries.yml` directly
-when a release is created: drafts fire no `release` event. The workflow has
-`contents: write` and never runs on pull requests. It checks out the tag, runs
-`bun install --frozen-lockfile`, builds `yuekbox-linux-x64`, smoke-tests it,
-writes `yuekbox-linux-x64.sha256`, and uploads the binary, the checksum, and
-`scripts/install.sh` to the draft with `gh release upload --clobber`. Then it
-runs `scripts/release-notes-append.sh <tag>`, which appends
-`.github/release-notes-packaging.md` to the release body unless the
+Merging the release-please PR tags `vX.Y.Z` and publishes the GitHub release
+(`force-tag-creation` in `release-please-config.json`; there are no assets to
+protect, so no draft step). The Release Please workflow then calls
+`.github/workflows/release-npm.yml` when a release is created. The workflow
+never runs on pull requests. It checks out the tag, runs
+`bun install --frozen-lockfile`, builds the package, packs it with
+`npm pack`, and smokes the packed tarball on ubuntu-latest and on a native
+macOS arm64 runner. The `publish` job waits for both smokes, then publishes
+via trusted publishing: `npm publish` under OIDC (`id-token: write`), no
+`NPM_TOKEN` secret, and npm attaches the provenance attestation
+automatically. The npmjs package lists this workflow (and the release-please
+caller) as trusted publishers; the exact workflow filename is part of the
+trust check. Finally it runs `scripts/release-notes-append.sh <tag>`, which
+appends `.github/release-notes-packaging.md` to the release body unless the
 `<!-- yuekbox-packaging -->` marker is already present, so a rerun never
-duplicates the section. The last step publishes the draft
-(`gh release edit --draft=false`), so the tag and assets lock together with
-everything present; a failure leaves the draft for a retry.
+duplicates the section. A failed publish is retried with
+`gh workflow run release-npm.yml -f tag=vX.Y.Z`; npm versions are immutable,
+so a version that already reached the registry can only be superseded by a
+new release.
 
-`scripts/install.sh` is the one-line installer:
+The published artifact is the npm package `yuekbox`. `npm i -g yuekbox`
+installs it; `npx yuekbox` runs it without installing. The package bundles
+the SPA, the API, the SQLite schema, and the Python helpers. It does not
+bundle CUDA, PyTorch, Python, ffmpeg, or model weights: `--provision` builds
+the runtime under the home and the model slice downloads the weights. The
+release notes carry the same statement.
 
-```sh
-curl -fsSL https://github.com/codenamegary/yuekbox/releases/latest/download/install.sh | sh
-```
-
-It refuses anything but x86_64 Linux (macOS gets a short message; the app needs
-a local NVIDIA GPU), resolves `YUEKBOX_VERSION` (default latest; `0.3.0` and
-`v0.3.0` both work), downloads the binary and its checksum into a temp
-directory, verifies SHA-256, and moves the executable to
-`${YUEKBOX_INSTALL_DIR:-$HOME/.local/bin}`. `YUEKBOX_BASE_URL` overrides the
-download base for tests and mirrors. The release artifact bundles the SPA, the
-API, the SQLite schema, and the Python helpers. It does not bundle CUDA,
-PyTorch, Python, ffmpeg, or model weights: `--provision` builds the runtime
-under the home and the model slice downloads the weights. The release notes
-carry the same statement.
-
-`scripts/install.test.sh` proves the installer without GitHub: a throwaway HTTP
-server serves a fake binary and checksum, and the test drives the happy path, a
-checksum mismatch, a missing asset, platform refusal, and the pinned and latest
-URLs.
 `scripts/release-notes.test.sh` proves the append is a no-op on a rerun with a
-`gh` shim. `docs/releasing.md` is the operator guide: the asset table, the
-rebuild command, the local tests, and the clean-machine install checklist.
+`gh` shim. `docs/releasing.md` is the operator guide: the trusted-publisher
+prerequisites, the retry command, the local tests, and the clean-machine
+install checklist.
 
 ## Web
 

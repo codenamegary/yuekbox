@@ -115,14 +115,22 @@ jobs:
 
   publish:
     # Trusted publishing: the id-token exchange is the whole credential. The
-    # workflow filename registered on npmjs.com must match this file.
+    # workflow filename registered on npmjs.com must match this file. The
+    # release itself is already published (the release-please config no
+    # longer drafts); this job adds the packaging note once the package is
+    # actually on the registry.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [smoke-linux, smoke-darwin]
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
       - name: Download the tarball
         uses: actions/download-artifact@v4
         with:
@@ -138,3 +146,8 @@ jobs:
 
       - name: Publish
         run: npm publish dist/yuekbox-*.tgz
+
+      - name: Append the packaging note to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/release-notes-append.sh "${{ inputs.tag }}"

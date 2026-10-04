@@ -47,14 +47,20 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build the darwin-arm64 binary
-        run: bun run build:binary ./yuekbox
+      # The bench drives the real shipped artifact: the npm tarball, installed
+      # globally under a prefix so every later step runs the bin as users do.
+      - name: Build and pack the npm package
+        run: |
+          bun run build:package
+          (cd dist/yuekbox && npm pack)
 
-      - name: Ad-hoc codesign the binary
-        run: codesign --sign - --force ./yuekbox
+      - name: Smoke-test the packed tarball
+        run: ./scripts/smoke-package.sh
 
-      - name: Smoke-test the compiled binary
-        run: ./scripts/smoke-binary.sh ./yuekbox
+      - name: Install the tarball
+        run: |
+          npm install -g --prefix "$HOME/.yuekbox-bin" dist/yuekbox/yuekbox-*.tgz
+          echo "$HOME/.yuekbox-bin/bin" >> "$GITHUB_PATH"
 
       # Generation post-processes audio through ffmpeg with libmp3lame; the
       # runner image ships without it, and the app only reports the absence.
@@ -67,7 +73,7 @@ jobs:
         run: |
           set -euo pipefail
           set -x
-          ./yuekbox --provision 2>&1 | tee provision.log
+          yuekbox --provision 2>&1 | tee provision.log
 
       - name: Report what provisioning built
         run: |
@@ -84,7 +90,7 @@ jobs:
 
       - name: Start the server
         run: |
-          ./yuekbox --home ~/.yuekbox start
+          yuekbox --home ~/.yuekbox start
           sleep 2
           curl -fsS http://127.0.0.1:3000/v1/status | tee status.json
           curl -fsS http://127.0.0.1:3000/v1/readiness | tee readiness.json
@@ -218,7 +224,7 @@ jobs:
 
       - name: Stop the server
         if: always()
-        run: ./yuekbox --home ~/.yuekbox stop || true
+        run: yuekbox --home ~/.yuekbox stop || true
 
       - name: Upload the artifacts and diagnostics
         if: always()

@@ -29,24 +29,6 @@ jobs:
       - name: Build web
         run: bun run --filter web build
 
-  smoke-binary:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build the yuekbox binary
-        run: bun run build:binary
-
-      - name: Smoke test the compiled binary
-        run: ./scripts/smoke-binary.sh ./yuekbox
-
   # The npm package tarball gets the same treatment the binary had: build it,
   # pack it, and smoke the packed artifact so a packaging regression can never
   # land. The release path (release-npm.yml) additionally smokes darwin.
@@ -72,27 +54,3 @@ jobs:
 
       - name: Run the package contract tests
         run: bun test scripts/
-
-  # The Apple Silicon target builds on a native arm64 runner, so the smoke
-  # test runs the real darwin artifact and the binary carries a fresh ad-hoc
-  # signature (every arm64 binary needs one to execute at all).
-  smoke-binary-darwin:
-    runs-on: macos-14
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build the yuekbox binary
-        run: bun run build:binary
-
-      - name: Ad-hoc codesign the binary
-        run: codesign --sign - --force ./yuekbox
-
-      - name: Smoke test the compiled binary
-        run: ./scripts/smoke-binary.sh ./yuekbox

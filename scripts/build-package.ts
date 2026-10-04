@@ -1,7 +1,6 @@
 // Builds the npm package that replaces the compiled binary (#99).
 //
-// Same shape as build-binary.ts but the output is a publishable directory
-// instead of an executable: `Bun.build` with `target: "bun"` and an `outdir`
+// The output is a publishable package directory, not an executable: `Bun.build` with `target: "bun"` and an `outdir`
 // writes real files, so the SPA manifest, migrations, and Python tools ship
 // as package contents rather than embedded bytes. The packed tarball is what
 // release-npm.yml publishes via trusted publishing.

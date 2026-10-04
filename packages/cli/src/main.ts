@@ -9,7 +9,7 @@
 // (packages/web/src/serve.ts on :3000 proxying packages/server/src/server.ts
 // on :8787); only the compiled executable runs the daemon from here.
 //
-// Build: `bun run build:binary` -> scripts/build-binary.ts.
+// Builds: `bun run build:package` (npm, scripts/build-package.ts).
 import { homedir } from "node:os"
 import { join } from "node:path"
 // Build-time SPA: the compiler bundles the HTML entry and every asset it
