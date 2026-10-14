@@ -13,8 +13,17 @@ Usage:
                 [--backend {torch,mlx}] [--precision PRECISION]
 
 `request.json` carries the yue2 `SongRequest` fields yuekbox sets: `id`,
-`style`, `lyrics`, `cot`, `seed`, `cfg_scale`, and optional `abc`. Artifacts
-land in `<output>/<id>/`: `audio.flac`, `result.json`, and `score.abc`.
+`style`, `lyrics`, `cot`, `seed`, `cfg_scale`, optional `abc`, and optional
+`instrumental`. Artifacts land in `<output>/<id>/`: `audio.flac`, `result.json`,
+and `score.abc`.
+
+An instrumental request runs two passes on the pinned runtime. Without a
+reference it plans a score at default guidance with section-skeleton lyrics,
+then moves every sounding Vocal note to Ins with the vendored converter
+(`Vocal` keeps rests and chord symbols) and renders the converted score at the
+user's `cfg_scale`. With a reference `abc` it skips planning and transfers the
+provided score, dropping its chords so the render is a melody cover. A plan
+failure (empty or truncated) fails the Song; the user regenerates.
 
 This calls the runtime library directly instead of forwarding to a CLI, so the
 flag names, the request surface, and the output layout stay ours. A runtime
@@ -33,7 +42,9 @@ Backends:
 
 Bench mode: with YUEKBOX_BENCH=1 in the environment this script skips every
 runtime import and renders the same artifact layout from a synthesized tone —
-a CI bench on small hosted hardware verifies the plumbing, not the model.
+a CI bench on small hosted hardware verifies the plumbing, not the model. An
+instrumental request still runs the vendored converter over a native bench
+score, so bench artifacts carry the same two-pass shape.
 """
 
 from __future__ import annotations
@@ -44,7 +55,17 @@ import os
 import sys
 from pathlib import Path
 
-REQUEST_FIELDS = frozenset({"id", "style", "lyrics", "cot", "seed", "cfg_scale", "abc"})
+REQUEST_FIELDS = frozenset(
+    {"id", "style", "lyrics", "cot", "seed", "cfg_scale", "abc", "instrumental"}
+)
+
+INSTRUMENTAL_PLAN_LYRICS = "[Intro]\n\n[Verse]\n\n[Chorus]\n\n[Outro]\n"
+
+
+def lyric_tags(text: str) -> str:
+    """The section tags of a native score, as the lyrics of an instrumental render."""
+    labels = [line[2:] for line in text.splitlines() if line.startswith("% ")]
+    return "\n\n".join("[" + label.title() + "]" for label in labels) + ("\n" if labels else "")
 
 
 def parse_args() -> argparse.Namespace:
@@ -100,6 +121,26 @@ K:C
 "C"CDEF "G"G2zz | "Am"A2B2 "F"c2zz |
 """
 
+BENCH_NATIVE_ABC = """X:1
+T:
+M:4/4
+L:1/32
+Q:1/4=100
+V: Vocal clef=treble name="Vocal Melody" snm="Vocal"
+V: Ins clef=treble name="Ins Melody" snm="Inst."
+K:C
+% intro
+V: Vocal
+"C"C8D8E8F8|
+V: Ins
+Z|
+% verse
+V: Vocal
+"Am"A8B8c8d8|
+V: Ins
+Z|
+"""
+
 BENCH_STAGES = (
     ("Planning score", 1),
     ("Generating song", 2),
@@ -144,6 +185,12 @@ def bench_run(args: argparse.Namespace) -> int:
         raise FileExistsError(f"output directory is not empty: {directory}")
     directory.mkdir(parents=True, exist_ok=True)
 
+    score_abc = BENCH_ABC
+    if request.get("instrumental"):
+        from instrumentalize import convert_score
+
+        score_abc, _transfer = convert_score(BENCH_NATIVE_ABC)
+
     for label, index in BENCH_STAGES:
         percent = int(index / len(BENCH_STAGES) * 100)
         print(f"{label} {index}/{len(BENCH_STAGES)} steps ({percent}%)", flush=True)
@@ -161,7 +208,7 @@ def bench_run(args: argparse.Namespace) -> int:
         )
     finally:
         wav_path.unlink(missing_ok=True)
-    (directory / "score.abc").write_text(BENCH_ABC, encoding="utf-8")
+    (directory / "score.abc").write_text(score_abc, encoding="utf-8")
     result = {
         "status": "complete",
         "audio_seconds": BENCH_SECONDS,
@@ -182,6 +229,46 @@ def bench_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def instrumental_result(pipe, request, directory):
+    """Plan or take a score, move the vocal voice to Ins, render at the user's guidance.
+
+    Without a reference `abc` the runtime plans at default guidance with a
+    section skeleton; with one, the provided score is the plan. The converter
+    leaves `Vocal` with rests and chords only, so nothing is written to be sung.
+    """
+    from instrumentalize import convert_score
+    from yue2.protocol import SongRequest
+
+    if request.abc is None:
+        plan = pipe.plan(
+            request=SongRequest(
+                style=request.style,
+                lyrics=INSTRUMENTAL_PLAN_LYRICS,
+                cot="full",
+                seed=request.seed,
+                id=request.id,
+            )
+        )
+        if plan.truncated or not plan.abc:
+            raise ValueError("the model plan is empty or truncated; generate the Song again")
+        directory_plan = directory / "planning"
+        plan.save(directory_plan)
+        source, keep_chords = plan.abc, True
+    else:
+        source, keep_chords = request.abc, False
+    converted, _transfer = convert_score(source, overlap="vocal", keep_chords=keep_chords)
+    render = SongRequest(
+        style=request.style,
+        lyrics=lyric_tags(converted),
+        cot="full" if keep_chords else "melody",
+        seed=request.seed,
+        abc=converted,
+        cfg_scale=request.cfg_scale,
+        id=request.id,
+    )
+    return pipe(**render.to_dict())
+
+
 def run(args: argparse.Namespace) -> int:
     if bench_enabled():
         return bench_run(args)
@@ -190,7 +277,9 @@ def run(args: argparse.Namespace) -> int:
 
     YuE2Pipeline = load_pipeline(args.backend)
 
-    request = SongRequest(**read_request(args.request))
+    data = read_request(args.request)
+    instrumental = bool(data.pop("instrumental", False))
+    request = SongRequest(**data)
     directory = Path(args.output) / request.id
     if directory.exists() and any(directory.iterdir()):
         raise FileExistsError(f"output directory is not empty: {directory}")
@@ -214,7 +303,10 @@ def run(args: argparse.Namespace) -> int:
                 local_files_only=args.offline,
             )
         with pipeline as pipe:
-            result = pipe(**request.to_dict())
+            if instrumental:
+                result = instrumental_result(pipe, request, directory)
+            else:
+                result = pipe(**request.to_dict())
         receipt = result.save_artifacts(directory)
     except BaseException as error:
         write_failure(directory, error)

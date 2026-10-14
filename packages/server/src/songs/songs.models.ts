@@ -20,6 +20,7 @@ export type Song = Readonly<{
   seed: number
   cfgScale: number
   cot: string
+  instrumental: boolean
   reference: SongReference | null
   scoreAbc: string | null
   calibration: Calibration | null
@@ -40,6 +41,7 @@ export type NewSong = Readonly<{
   seed: number
   cfgScale: number
   cot: SongCot
+  instrumental: boolean
   createdAt: string
   updatedAt: string
 }>

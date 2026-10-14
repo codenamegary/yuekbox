@@ -26,6 +26,34 @@ export const songTitleFromLyrics = (lyrics: string): string => {
   return line === null ? "untitled" : line.slice(0, 120).trim()
 }
 
+/** A style token worth titling with: it carries at least a letter or a digit. */
+const isStyleWord = (word: string): boolean => /[\p{L}\p{N}]/u.test(word)
+
+/** The instrumental song's title: the style's first eight words, commas ignored. */
+export const songTitleFromStyle = (style: string): string => {
+  const title = style
+    .replace(/,/g, "")
+    .split(/\s+/)
+    .filter(isStyleWord)
+    .slice(0, 8)
+    .join(" ")
+    .slice(0, 120)
+    .trim()
+  return title === "" ? "instrumental" : title
+}
+
+/** The title's source text: the style for an instrumental, the lyrics otherwise. */
+export const songTitleFor = (instrumental: boolean, lyrics: string, style: string): string =>
+  instrumental ? songTitleFromStyle(style) : songTitleFromLyrics(lyrics)
+
+/** The Song folder key: the title's source text, slugged, plus the song id. */
+export const songFolderKeyFor = (
+  instrumental: boolean,
+  lyrics: string,
+  style: string,
+  songId: string,
+): string => songFolderName(songFolderSlug(songTitleFor(instrumental, lyrics, style)), songId)
+
 /** The title as a filesystem-safe folder stem: lowercased and hyphenated. */
 export const songFolderSlug = (title: string): string => {
   const slug = title

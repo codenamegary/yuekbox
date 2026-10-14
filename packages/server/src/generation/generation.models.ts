@@ -20,6 +20,7 @@ export type RunYue2GenerateInput = Readonly<{
   cfgScale: number
   cot: SongCot
   abc: string | null
+  instrumental: boolean
   outputDir: string
   onStage: (stage: SongStage) => void
   onProgress: (progress: StageProgressUpdate) => void

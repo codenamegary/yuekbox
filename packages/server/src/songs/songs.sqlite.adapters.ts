@@ -33,6 +33,7 @@ const toSong = (row: SongRow): Song =>
     seed: row.seed,
     cfgScale: row.cfgScale,
     cot: row.cot,
+    instrumental: row.instrumental,
     reference: null,
     scoreAbc: null,
     calibration: null,
@@ -58,6 +59,7 @@ export const makeInsertSong =
       seed: song.seed,
       cfgScale: song.cfgScale,
       cot: song.cot,
+      instrumental: song.instrumental,
       createdAt: song.createdAt,
       updatedAt: song.updatedAt,
     }

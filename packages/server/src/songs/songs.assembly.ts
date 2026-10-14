@@ -18,9 +18,8 @@ import {
   referenceFileKey,
   referenceFilesPattern,
   scoreKey,
-  songFolderName,
+  songFolderKeyFor,
   songFolderPattern,
-  songTitleFromLyrics,
   transcriptDirectoryKey,
   visualizationKey,
 } from "./songs.files"
@@ -131,7 +130,7 @@ export const assembleSongsSlice = (deps: SongsSliceDeps): SongsSlice => {
 
   const resolveSongFolder = async (song: Song): Promise<string> => {
     const existing = await findSongFolder(song.id)
-    return existing ?? songFolderName(songTitleFromLyrics(song.lyrics), song.id)
+    return existing ?? songFolderKeyFor(song.instrumental, song.lyrics, song.style, song.id)
   }
 
   const findReferenceFileName = async (folderKey: string): Promise<string | null> => {

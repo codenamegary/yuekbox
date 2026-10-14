@@ -31,18 +31,39 @@ export const CalibrationSchema = z.strictObject({
 /** The runtime's guidance value at its 1.0 default: no classifier-free guidance. */
 export const defaultCfgScale = 1
 
-export const CreateSongBodySchema = z.strictObject({
-  lyrics: z.string().trim().min(1).max(20000),
-  style: z.string().trim().min(1).max(2000),
-  referenceId: UlidSchema.optional(),
-  seed: z
-    .number()
-    .int()
-    .min(0)
-    .max(2 ** 31 - 1)
-    .optional(),
-  cfgScale: z.number().min(0).max(20).optional(),
-})
+export const CreateSongBodySchema = z
+  .strictObject({
+    lyrics: z.string().trim().max(20000).optional(),
+    style: z.string().trim().min(1).max(2000),
+    instrumental: z.boolean().optional(),
+    referenceId: UlidSchema.optional(),
+    seed: z
+      .number()
+      .int()
+      .min(0)
+      .max(2 ** 31 - 1)
+      .optional(),
+    cfgScale: z.number().min(0).max(20).optional(),
+  })
+  .superRefine((body, ctx) => {
+    if (body.instrumental === true) {
+      if (body.lyrics !== undefined && body.lyrics.length > 0) {
+        ctx.addIssue({
+          code: "custom",
+          message: "lyrics must be absent or empty on an instrumental song",
+          path: ["lyrics"],
+        })
+      }
+      return
+    }
+    if (body.lyrics === undefined || body.lyrics.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "lyrics are required on a vocal song",
+        path: ["lyrics"],
+      })
+    }
+  })
 
 export const TruncatedSchema = z.strictObject({
   abc: z.boolean(),
@@ -65,6 +86,7 @@ export const SongSchema = z
     title: z.string().min(1),
     seed: z.number().int(),
     cfgScale: z.number().min(0).max(20),
+    instrumental: z.boolean(),
     reference: ReferenceSummarySchema.optional(),
     durationSeconds: z.number().nonnegative().optional(),
     truncated: TruncatedSchema.optional(),

@@ -50,7 +50,9 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
   try {
     const transcribedPaths: string[] = []
     const alignedPaths: string[] = []
-    const generatedCalls: Array<Readonly<{ cot: string; abc: string | null }>> = []
+    const generatedCalls: Array<
+      Readonly<{ cot: string; abc: string | null; instrumental: boolean }>
+    > = []
 
     const modelPaths = defaultModelPaths(configHome)
     await mkdir(modelPaths.yue2, { recursive: true })
@@ -67,7 +69,7 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
         flags: {},
       },
       runYue2Generate: async (input) => {
-        generatedCalls.push({ cot: input.cot, abc: input.abc })
+        generatedCalls.push({ cot: input.cot, abc: input.abc, instrumental: input.instrumental })
         return ok({
           flacPath: "/tmp/yuekbox-compose-test/audio.flac",
           scoreAbc: "X:1\nK:C\nC D E F|",
@@ -186,7 +188,9 @@ test("the wired app drives upload, create, complete, stream, and delete", async 
     expect(existsSync(join(mediaDir, folderKey, analysisFileName))).toBe(false)
     expect(transcribedPaths).toEqual([referencePath])
     expect(alignedPaths).toEqual(["/tmp/yuekbox-compose-test/audio.flac"])
-    expect(generatedCalls).toEqual([{ cot: "melody", abc: "X:1\nK:C\nC D E|" }])
+    expect(generatedCalls).toEqual([
+      { cot: "melody", abc: "X:1\nK:C\nC D E|", instrumental: false },
+    ])
 
     const fetched = await app.inject({ method: "GET", url: `/v1/songs/${queued.id}` })
     expect(fetched.statusCode).toBe(200)

@@ -140,6 +140,7 @@ export const makeRunYue2Generate =
           cot: input.cot,
           seed: input.seed,
           cfg_scale: input.cfgScale,
+          ...(input.instrumental ? { instrumental: true } : {}),
           ...(input.abc !== null ? { abc: input.abc } : {}),
         },
         null,

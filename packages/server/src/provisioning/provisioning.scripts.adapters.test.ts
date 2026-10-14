@@ -35,7 +35,15 @@ test("installs every tool into the scripts dir, flattened", async () => {
     if (!result.ok) return
     expect(result.value).toEqual({
       scriptsDir,
-      files: ["align.py", "transcribe.py", "abc_tools.py", "common.py", "generate.py"],
+      files: [
+        "align.py",
+        "transcribe.py",
+        "abc_tools.py",
+        "common.py",
+        "generate.py",
+        "instrumentalize.py",
+        "compile_score.py",
+      ],
     })
     for (const entry of scriptManifest) {
       expect(await readFile(join(scriptsDir, entry.name), "utf8")).toBe(`# ${entry.source}\n`)
@@ -65,7 +73,9 @@ test("rerunning overwrites its own files and leaves unrelated files alone", asyn
         "abc_tools.py",
         "align.py",
         "common.py",
+        "compile_score.py",
         "generate.py",
+        "instrumentalize.py",
         "notes.txt",
         "transcribe.py",
       ].toSorted(),
@@ -99,9 +109,16 @@ test("every manifest source exists in the repo tools root", () => {
   }
 })
 
-test("vendored sheetsage2 tools keep their origin and license header", async () => {
-  for (const name of ["transcribe.py", "abc_tools.py", "common.py"]) {
-    const header = (await readFile(join(toolsRoot, "sheetsage2", name), "utf8")).slice(0, 600)
+test("vendored tools keep their origin and license header", async () => {
+  const vendored = [
+    ["sheetsage2", "transcribe.py"],
+    ["sheetsage2", "abc_tools.py"],
+    ["sheetsage2", "common.py"],
+    ["yue2", "instrumentalize.py"],
+    ["yue2", "compile_score.py"],
+  ] as const
+  for (const [directory, name] of vendored) {
+    const header = (await readFile(join(toolsRoot, directory, name), "utf8")).slice(0, 600)
 
     expect(header).toContain("Vendored from YuE")
     expect(header).toContain("Apache-2.0")

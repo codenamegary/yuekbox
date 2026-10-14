@@ -24,6 +24,7 @@ const completeSong: Song = {
   style: "warm piano pop",
   seed: 831001,
   cfgScale: 1,
+  instrumental: false,
   durationSeconds: 194.2,
   truncated: { abc: false, semantic: false },
   createdAt,
@@ -96,8 +97,34 @@ test("the cfg scale default matches the runtime's no-guidance value", () => {
   expect(defaultCfgScale).toBe(1)
 })
 
+test("create body accepts an instrumental song with no lyrics", () => {
+  expect(CreateSongBodySchema.parse({ style: "pop", instrumental: true })).toEqual({
+    style: "pop",
+    instrumental: true,
+  })
+  expect(
+    CreateSongBodySchema.safeParse({ lyrics: "", style: "pop", instrumental: true }).success,
+  ).toBe(true)
+})
+
+test("create body rejects lyrics on an instrumental song", () => {
+  expect(
+    CreateSongBodySchema.safeParse({ lyrics: "hi", style: "pop", instrumental: true }).success,
+  ).toBe(false)
+})
+
+test("create body requires lyrics for a vocal song", () => {
+  expect(CreateSongBodySchema.safeParse({ style: "pop" }).success).toBe(false)
+  expect(CreateSongBodySchema.safeParse({ style: "pop", instrumental: false }).success).toBe(false)
+})
+
 test("parses a complete song fixture", () => {
   expect(SongSchema.parse(completeSong)).toEqual(completeSong)
+})
+
+test("parses an instrumental song with empty lyrics", () => {
+  const instrumental: Song = { ...completeSong, instrumental: true, lyrics: "" }
+  expect(SongSchema.parse(instrumental)).toEqual(instrumental)
 })
 
 test("a song requires a non-empty title", () => {
@@ -121,6 +148,7 @@ test("rejects a score on a song that is not complete", () => {
     style: "pop",
     seed: 1,
     cfgScale: 1,
+    instrumental: false,
     createdAt,
     updatedAt: createdAt,
   }
@@ -175,6 +203,7 @@ test("rejects a calibration on a song that is not complete", () => {
     style: "pop",
     seed: 1,
     cfgScale: 1,
+    instrumental: false,
     createdAt,
     updatedAt: createdAt,
   }
@@ -198,6 +227,7 @@ test("parses a running song fixture with a stage", () => {
     style: "pop",
     seed: 1,
     cfgScale: 1,
+    instrumental: false,
     createdAt,
     updatedAt: createdAt,
   }
@@ -214,6 +244,7 @@ test("sync is a song stage", () => {
     style: "pop",
     seed: 1,
     cfgScale: 1,
+    instrumental: false,
     createdAt,
     updatedAt: createdAt,
   }
@@ -231,6 +262,7 @@ test("parses a running song fixture with stage progress", () => {
     style: "pop",
     seed: 1,
     cfgScale: 1,
+    instrumental: false,
     createdAt,
     updatedAt: createdAt,
   }
@@ -256,6 +288,7 @@ test("rejects stage progress that exceeds its total", () => {
     style: "pop",
     seed: 1,
     cfgScale: 1,
+    instrumental: false,
     createdAt,
     updatedAt: createdAt,
   })
@@ -271,6 +304,7 @@ test("parses a queued song fixture without a stage", () => {
     style: "pop",
     seed: 1,
     cfgScale: 1,
+    instrumental: false,
     createdAt,
     updatedAt: createdAt,
   }
@@ -286,6 +320,7 @@ test("parses a failed song fixture with an error detail", () => {
     style: "pop",
     seed: 1,
     cfgScale: 1,
+    instrumental: false,
     errorDetail: "encode: ffmpeg exited 1",
     createdAt,
     updatedAt: createdAt,
@@ -361,6 +396,7 @@ test("a cover song carries its reference summary and a transcribe stage", () => 
     style: "jazz",
     seed: 1,
     cfgScale: 1,
+    instrumental: false,
     createdAt,
     updatedAt: createdAt,
   }

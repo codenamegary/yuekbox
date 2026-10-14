@@ -28,6 +28,7 @@ type SongFormProps = Readonly<{
   style: string
   lyrics: string
   cfgScale: number
+  instrumental: boolean
   aiEnabled: boolean
   enhancing: readonly EnhanceScope[]
   enhanceError: string | null
@@ -35,6 +36,7 @@ type SongFormProps = Readonly<{
   onStyleChange: (value: string) => void
   onLyricsChange: (value: string) => void
   onCfgScaleChange: (value: number) => void
+  onInstrumentalChange: (value: boolean) => void
   onCreated: (song: Song) => void
   onBlocked: (models: readonly MissingModel[]) => void
   onEnhance: (kind: EnhanceScope) => void
@@ -141,6 +143,7 @@ export const SongForm: React.FC<SongFormProps> = ({
   style,
   lyrics,
   cfgScale,
+  instrumental,
   aiEnabled,
   enhancing,
   enhanceError,
@@ -148,6 +151,7 @@ export const SongForm: React.FC<SongFormProps> = ({
   onStyleChange,
   onLyricsChange,
   onCfgScaleChange,
+  onInstrumentalChange,
   onCreated,
   onBlocked,
   onEnhance,
@@ -162,7 +166,7 @@ export const SongForm: React.FC<SongFormProps> = ({
 
   const canGenerate =
     style.trim().length > 0 &&
-    lyrics.trim().length > 0 &&
+    (instrumental || lyrics.trim().length > 0) &&
     !createSong.isPending &&
     !uploadReference.isPending
 
@@ -201,8 +205,8 @@ export const SongForm: React.FC<SongFormProps> = ({
     createSong.mutate(
       {
         style: style.trim(),
-        lyrics: lyrics.trim(),
         cfgScale,
+        ...(instrumental ? { instrumental: true } : { lyrics: lyrics.trim() }),
         ...(reference !== null ? { referenceId: reference.id } : {}),
       },
       {
@@ -250,27 +254,52 @@ export const SongForm: React.FC<SongFormProps> = ({
       <div className="grid gap-6 p-6 sm:p-8 md:grid-cols-2">
         <div className="space-y-2">
           <div className="flex min-h-9 items-center justify-between">
-            <Label htmlFor="lyrics-input" className="text-base font-semibold text-snow">
+            <Label
+              htmlFor={instrumental ? undefined : "lyrics-input"}
+              className="text-base font-semibold text-snow"
+            >
               Lyrics
             </Label>
-            {aiEnabled ? (
-              <EnhanceButton
-                kind="lyrics"
-                pending={enhancing.includes("lyrics")}
-                disabled={enhancing.includes("lyrics")}
-                onEnhance={onEnhance}
-              />
-            ) : null}
+            <div className="flex items-center gap-3">
+              {aiEnabled && !instrumental ? (
+                <EnhanceButton
+                  kind="lyrics"
+                  pending={enhancing.includes("lyrics")}
+                  disabled={enhancing.includes("lyrics")}
+                  onEnhance={onEnhance}
+                />
+              ) : null}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={instrumental}
+                aria-label="Instrumental"
+                title="Generate with no sung words"
+                onClick={() => onInstrumentalChange(!instrumental)}
+                className="flex items-center gap-3 rounded-xl px-2 py-1 text-base font-medium text-dim transition-colors hover:bg-panel-raised hover:text-snow"
+              >
+                Instrumental
+                <span className={cn("switch", instrumental && "on")}>
+                  <span className="switch-knob" />
+                </span>
+              </button>
+            </div>
           </div>
           <div className="field px-4 py-3">
-            <Textarea
-              id="lyrics-input"
-              rows={12}
-              value={lyrics}
-              onChange={(event) => onLyricsChange(event.target.value)}
-              placeholder={"[Verse]\nWrite the words here\n\n[Chorus]\n…"}
-              className="h-[12lh] w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 font-mono text-base leading-relaxed text-snow shadow-none outline-none placeholder:text-faint focus-visible:border-0 focus-visible:ring-0"
-            />
+            {instrumental ? (
+              <p className="flex h-[12lh] w-full items-center justify-center text-base leading-relaxed text-dim">
+                Instrumental
+              </p>
+            ) : (
+              <Textarea
+                id="lyrics-input"
+                rows={12}
+                value={lyrics}
+                onChange={(event) => onLyricsChange(event.target.value)}
+                placeholder={"[Verse]\nWrite the words here\n\n[Chorus]\n…"}
+                className="h-[12lh] w-full resize-none overflow-y-auto rounded-none border-0 bg-transparent p-0 font-mono text-base leading-relaxed text-snow shadow-none outline-none placeholder:text-faint focus-visible:border-0 focus-visible:ring-0"
+              />
+            )}
           </div>
         </div>
 
@@ -402,7 +431,13 @@ export const SongForm: React.FC<SongFormProps> = ({
             type="button"
             onClick={submit}
             disabled={!canGenerate}
-            title={canGenerate ? "Generate this song" : "Fill in lyrics and style first"}
+            title={
+              canGenerate
+                ? "Generate this song"
+                : instrumental
+                  ? "Fill in a style first"
+                  : "Fill in lyrics and style first"
+            }
             className="btn-orange"
           >
             <Disc3 aria-hidden className={cn(createSong.isPending && "animate-spin")} />

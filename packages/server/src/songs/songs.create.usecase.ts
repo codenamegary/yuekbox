@@ -4,9 +4,8 @@ import { err, ok, Result } from "../shared/result"
 import {
   parseReferenceFileName,
   referenceFileKey,
-  songFolderName,
-  songFolderSlug,
-  songTitleFromLyrics,
+  songFolderKeyFor,
+  songTitleFor,
   uploadPattern,
 } from "./songs.files"
 import { CreateSongError, referenceUnavailableCode, Song, SongReference } from "./songs.models"
@@ -78,16 +77,19 @@ export const makeCreateSong =
 
     const now = deps.now()
     const songId = deps.generateId()
-    const title = songTitleFromLyrics(parsed.data.lyrics)
-    const folderKey = songFolderName(songFolderSlug(title), songId)
+    const instrumental = parsed.data.instrumental === true
+    const lyrics = instrumental ? "" : (parsed.data.lyrics ?? "")
+    const title = songTitleFor(instrumental, lyrics, parsed.data.style)
+    const folderKey = songFolderKeyFor(instrumental, lyrics, parsed.data.style, songId)
     const song = await deps.insertSong({
       id: songId,
-      lyrics: parsed.data.lyrics,
+      lyrics,
       title,
       style: parsed.data.style,
       seed: parsed.data.seed ?? deps.randomSeed(),
       cfgScale: parsed.data.cfgScale ?? defaultCfgScale,
       cot: referenceId === null ? "full" : "melody",
+      instrumental,
       createdAt: now,
       updatedAt: now,
     })

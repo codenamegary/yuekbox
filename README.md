@@ -206,6 +206,10 @@ MERT-v2-FullSong base model. Attach a song file and SheetSage2 transcribes its m
 first. Then YuE2 sings your lyrics over that tune. Attach a reference with either model
 missing and the blocked-generation dialog asks for both (`sheetsage2` and
 `sheetsage2Base`) before the Song starts. Without a reference, neither is needed.
+Flip the Instrumental switch and there are no sung words: the melody moves to the
+instrument voice — from the planned score, or from the transcribed reference as a
+melody cover — and the render follows it. Instrumentals skip the lyric aligner, so
+they complete without a calibration.
 
 **Lyric timing** comes from `packages/server/tools/lyric-align/align.py`: Demucs pulls
 the vocal stem out of the rendered track, then Whisper writes word timestamps using the
@@ -499,7 +503,7 @@ In the packaged binary the API binds an OS-assigned loopback port, so `HOST` and
 
 ## 🔌 API sketch
 
-- `POST /v1/songs`: body `{ lyrics, style, referenceId?, seed? }`, `201` and the Song. `409 model-required` names any missing models first.
+- `POST /v1/songs`: body `{ lyrics?, style, instrumental?, referenceId?, seed? }`, `201` and the Song. `409 model-required` names any missing models first. An instrumental Song sends no lyrics: it plans from the style alone, or transfers a reference melody, and never sings.
 - `GET /v1/songs`: newest first, keyset cursor, optional repeated `status`.
 - `GET /v1/songs/:songId`: one Song. Carries `scoreAbc` and `calibration` when complete.
 - `GET /v1/songs/:songId/audio`: `audio/mpeg` with Range support. `409` before completion.

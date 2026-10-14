@@ -19,6 +19,7 @@ const queuedSong: Song = {
   title: "la la la",
   seed: 1,
   cfgScale: 1,
+  instrumental: false,
   createdAt: "2026-09-23T04:00:00.000Z",
   updatedAt: "2026-09-23T04:00:00.000Z",
 }

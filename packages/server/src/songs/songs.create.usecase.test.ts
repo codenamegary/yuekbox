@@ -15,6 +15,7 @@ const toQueuedSong = (song: NewSong): Song =>
     seed: song.seed,
     cfgScale: song.cfgScale,
     cot: song.cot,
+    instrumental: song.instrumental,
     createdAt: song.createdAt,
     updatedAt: song.updatedAt,
   })
@@ -268,4 +269,60 @@ test("create stays quiet when validation fails", async () => {
 
   expect(result.ok).toBe(false)
   expect(queued).toEqual([])
+})
+
+test("create stores an instrumental song with empty lyrics and a style-derived title", async () => {
+  const harness = makeHarness()
+  const createSong = makeCreateSong(harness.deps)
+
+  const result = await createSong({
+    style: "warm piano pop, dreamy, nostalgic evening",
+    instrumental: true,
+  })
+
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.value.instrumental).toBe(true)
+  expect(result.value.lyrics).toBe("")
+  expect(result.value.title).toBe("warm piano pop dreamy nostalgic evening")
+  expect(harness.inserted[0]?.instrumental).toBe(true)
+  expect(harness.inserted[0]?.lyrics).toBe("")
+  expect(harness.calls).toEqual([`mkdir:warm-piano-pop-dreamy-nostalgic-evening_${fixedSongId}`])
+})
+
+test("create rejects lyrics on an instrumental song", async () => {
+  const harness = makeHarness()
+  const createSong = makeCreateSong(harness.deps)
+
+  const result = await createSong({ lyrics: "hello", style: "pop", instrumental: true })
+
+  expect(result.ok).toBe(false)
+  if (result.ok) return
+  expect(result.error.pointer).toBe("/lyrics")
+  expect(harness.inserted).toHaveLength(0)
+})
+
+test("create keeps a vocal song non-instrumental", async () => {
+  const harness = makeHarness()
+  const createSong = makeCreateSong(harness.deps)
+
+  const result = await createSong({ lyrics: "hello", style: "pop" })
+
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.value.instrumental).toBe(false)
+  expect(harness.inserted[0]?.instrumental).toBe(false)
+})
+
+test("create keeps the melody cot for an instrumental cover", async () => {
+  const harness = makeHarness({ uploads: [`temp/demo_${referenceId}.mp3`] })
+  const createSong = makeCreateSong(harness.deps)
+
+  const result = await createSong({ style: "jazz", instrumental: true, referenceId })
+
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.value.instrumental).toBe(true)
+  expect(result.value.cot).toBe("melody")
+  expect(result.value.lyrics).toBe("")
 })
