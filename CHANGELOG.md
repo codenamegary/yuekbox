@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/codenamegary/yuekbox/compare/v0.6.1...v0.7.0) (2026-10-14)
+
+
+### Features
+
+* **songs:** add an instrumental toggle for songs with no sung lyrics ([#110](https://github.com/codenamegary/yuekbox/issues/110)) ([accba87](https://github.com/codenamegary/yuekbox/commit/accba8748535fcd39dadae7bd3e625d7bf3a775d))
+
 ## [0.6.1](https://github.com/codenamegary/yuekbox/compare/v0.6.0...v0.6.1) (2026-10-04)
 
 
