@@ -10,11 +10,13 @@ import {
   referenceScoreKey,
   referenceStemFromUpload,
   scoreKey,
+  songFolderKeyFor,
   songFolderName,
   songFolderPattern,
   songFolderSlug,
   songIdFromFolderName,
   songTitleFromLyrics,
+  songTitleFromStyle,
   uploadPattern,
   visualizationKey,
 } from "./songs.files"
@@ -52,6 +54,32 @@ test("songTitleFromLyrics keeps lines that only look like labels", () => {
 test("songTitleFromLyrics caps the title length", () => {
   const title = songTitleFromLyrics(`${"word ".repeat(40)}end`)
   expect(title.length).toBeLessThanOrEqual(120)
+})
+
+test("songTitleFromStyle takes the first eight words with commas ignored", () => {
+  expect(songTitleFromStyle("warm piano pop, dreamy vocals, 120 bpm")).toBe(
+    "warm piano pop dreamy vocals 120 bpm",
+  )
+  expect(songTitleFromStyle("one two three four five six seven eight nine ten")).toBe(
+    "one two three four five six seven eight",
+  )
+})
+
+test("songTitleFromStyle falls back to instrumental and caps the length", () => {
+  expect(songTitleFromStyle("!!! ???")).toBe("instrumental")
+  expect(songTitleFromStyle(", ,")).toBe("instrumental")
+  const title = songTitleFromStyle("abcdefghijabcdefghij ".repeat(8))
+  expect(title.length).toBeLessThanOrEqual(120)
+})
+
+test("the song folder key reproduces from the same text in both use cases", () => {
+  expect(songFolderKeyFor(true, "", "warm piano pop, dreamy", id)).toBe(
+    `warm-piano-pop-dreamy_${id}`,
+  )
+  expect(songFolderKeyFor(true, "", "!!! ???", id)).toBe(`instrumental_${id}`)
+  expect(songFolderKeyFor(false, "[Verse]\nAmazing Awesome Song\nNext line", "pop", id)).toBe(
+    `amazing-awesome-song_${id}`,
+  )
 })
 
 test("songFolderSlug lowercases and hyphenates the title", () => {

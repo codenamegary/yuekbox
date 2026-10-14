@@ -12,6 +12,7 @@ export const songsTable = sqliteTable("songs", {
   seed: integer("seed").notNull(),
   cfgScale: real("cfg_scale").notNull().default(1),
   cot: text("cot").notNull().default("full"),
+  instrumental: integer("instrumental", { mode: "boolean" }).notNull().default(false),
   durationSeconds: real("duration_seconds"),
   truncatedAbc: integer("truncated_abc", { mode: "boolean" }),
   truncatedSemantic: integer("truncated_semantic", { mode: "boolean" }),

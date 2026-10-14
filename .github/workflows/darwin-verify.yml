@@ -5,7 +5,8 @@ name: Darwin Verify
 # macOS model set, and drives one freeform Song end to end — generation on
 # the MLX runtime, the vocal transcript on the MLX transcriber, and the
 # lyric alignment through demucs plus mlx-whisper — then transcribes one
-# uploaded reference cover. Run it before publishing any release draft that
+# uploaded reference cover and renders one instrumental Song from the style
+# alone. Run it before publishing any release draft that
 # touched the darwin paths or a runtime pin; a release is not supported
 # macOS until this is green.
 #
@@ -222,6 +223,48 @@ jobs:
             exit 1
           }
 
+      - name: Generate one instrumental Song
+        run: |
+          cat > instrumental-request.json <<JSON
+          {
+            "style": "cinematic post-rock, tremolo guitars, slow build",
+            "instrumental": true,
+            "seed": 81
+          }
+          JSON
+          instrumental="$(curl -fsS -X POST http://127.0.0.1:3000/v1/songs \
+            -H 'content-type: application/json' \
+            --data @instrumental-request.json)"
+          echo "$instrumental" | tee instrumental.json
+          instrumental_id="$(echo "$instrumental" | python3 -c 'import json, sys; print(json.load(sys.stdin)["id"])')"
+          echo "INSTRUMENTAL_ID=$instrumental_id" >> "$GITHUB_ENV"
+
+      - name: Wait for the instrumental Song to finish
+        run: |
+          for i in $(seq 1 120); do
+            sleep 15
+            state="$(curl -fsS "http://127.0.0.1:3000/v1/songs/$INSTRUMENTAL_ID" | python3 -c 'import json, sys; print(json.load(sys.stdin)["status"])')"
+            echo "poll $i: $state"
+            case "$state" in
+              complete|failed) break ;;
+            esac
+          done
+          curl -fsS "http://127.0.0.1:3000/v1/songs/$INSTRUMENTAL_ID" | tee instrumental-final.json
+          python3 -c '
+            import json
+            song = json.load(open("instrumental-final.json"))
+            assert song["status"] == "complete", song.get("errorDetail")
+            assert song["instrumental"] is True, song["instrumental"]
+            assert song["lyrics"] == "", song["lyrics"]
+            assert song.get("calibration") is None, song.get("calibration")
+            assert song.get("durationSeconds", 0) > 0, "no duration"
+            print("instrumental", song["id"], song.get("durationSeconds", 0), "s: no lyrics, no calibration")
+          ' || {
+            echo "== worker diagnostics =="
+            tail -150 ~/.yuekbox/logs/yuekbox.log || true
+            exit 1
+          }
+
       - name: Stop the server
         if: always()
         run: yuekbox --home ~/.yuekbox stop || true
@@ -240,5 +283,7 @@ jobs:
             song.mp3
             cover.json
             cover-final.json
+            instrumental.json
+            instrumental-final.json
             ~/.yuekbox/logs/yuekbox.log
           if-no-files-found: warn

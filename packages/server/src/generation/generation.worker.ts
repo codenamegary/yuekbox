@@ -171,6 +171,7 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
         cfgScale: song.cfgScale,
         cot,
         abc,
+        instrumental: song.instrumental,
         outputDir: tempDir,
         onStage: noteStage,
         onProgress: noteProgress,
@@ -190,7 +191,9 @@ export const makeSongWorker = (deps: SongWorkerDeps): SongWorker => {
       }
 
       await deps.markSongStage(song.id, "sync")
-      const calibration = await alignCalibration(deps, generated.value.flacPath, tempDir)
+      const calibration = song.instrumental
+        ? null
+        : await alignCalibration(deps, generated.value.flacPath, tempDir)
       const analysis = await transcriptAnalysis(
         deps,
         song.id,

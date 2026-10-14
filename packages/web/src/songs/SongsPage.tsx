@@ -84,6 +84,7 @@ export const SongsPage: React.FC = () => {
     style: "",
     lyrics: "",
     cfgScale: defaultCfgScale,
+    instrumental: false,
   })
   const [loadCandidate, setLoadCandidate] = React.useState<Song | null>(null)
   const [fullAuto, setFullAuto] = React.useState(false)
@@ -195,6 +196,7 @@ export const SongsPage: React.FC = () => {
         style: loadCandidate.style,
         lyrics: loadCandidate.lyrics,
         cfgScale: loadCandidate.cfgScale,
+        instrumental: loadCandidate.instrumental,
       })
     }
     setLoadCandidate(null)
@@ -275,6 +277,7 @@ export const SongsPage: React.FC = () => {
           style: selected.style,
           lyrics: selected.lyrics,
           cfgScale: selected.cfgScale,
+          instrumental: selected.instrumental,
         })
       }
     }
@@ -529,6 +532,7 @@ export const SongsPage: React.FC = () => {
                 style={draft.style}
                 lyrics={draft.lyrics}
                 cfgScale={draft.cfgScale}
+                instrumental={draft.instrumental}
                 aiEnabled={aiEnabled}
                 enhancing={[
                   enhanceLyrics.isPending ? "lyrics" : null,
@@ -550,6 +554,10 @@ export const SongsPage: React.FC = () => {
                 }}
                 onCfgScaleChange={(value) => {
                   applyDraft({ ...draft, cfgScale: value })
+                }}
+                onInstrumentalChange={(value) => {
+                  applyDraft({ ...draft, instrumental: value })
+                  poke()
                 }}
                 onCreated={handleCreated}
                 onBlocked={handleBlocked}

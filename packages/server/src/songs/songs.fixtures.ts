@@ -18,6 +18,7 @@ export const songFixture = (overrides: Partial<Song> = {}): Song =>
     seed: 1,
     cfgScale: 1,
     cot: "full",
+    instrumental: false,
     reference: null,
     scoreAbc: null,
     calibration: null,

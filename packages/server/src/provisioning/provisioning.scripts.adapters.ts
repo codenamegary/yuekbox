@@ -16,6 +16,8 @@ export const scriptManifest = Object.freeze([
   { source: "sheetsage2/abc_tools.py", name: "abc_tools.py" },
   { source: "sheetsage2/common.py", name: "common.py" },
   { source: "yue2/generate.py", name: "generate.py" },
+  { source: "yue2/instrumentalize.py", name: "instrumentalize.py" },
+  { source: "yue2/compile_score.py", name: "compile_score.py" },
 ] as const)
 
 /**

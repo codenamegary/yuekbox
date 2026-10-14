@@ -17,6 +17,7 @@ type Artifacts = {
   completedTruncated: Readonly<{ abc: boolean; semantic: boolean }> | null
   referenceScore: string | null
   cfgScale: number | null
+  instrumental: boolean | null
 }
 
 const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
@@ -30,6 +31,7 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
     completedTruncated: null,
     referenceScore: null,
     cfgScale: null,
+    instrumental: null,
   }
   const queue: Song[] = [queuedSong]
 
@@ -64,6 +66,7 @@ const makeHarness = (overrides: Partial<SongWorkerDeps> = {}) => {
     runYue2Generate: async (input) => {
       calls.push(`generate:${input.cot}:${input.abc === null ? "no-abc" : "abc"}`)
       artifacts.cfgScale = input.cfgScale
+      artifacts.instrumental = input.instrumental
       input.onStage("plan")
       input.onStage("semantic")
       return ok({
@@ -164,6 +167,33 @@ test("generation receives the song's cfg scale", async () => {
   await harness.run()
 
   expect(harness.artifacts.cfgScale).toBe(1.4)
+  expect(harness.artifacts.instrumental).toBe(false)
+})
+
+test("an instrumental song skips the lyric aligner and keeps the transcript", async () => {
+  const queue = [songFixture({ instrumental: true, lyrics: "" })]
+  const harness = makeHarness({
+    claimNextQueuedSong: async () => queue.shift() ?? null,
+  })
+
+  await harness.run()
+
+  expect(harness.artifacts.instrumental).toBe(true)
+  expect(harness.calls).toEqual([
+    "running",
+    "generate:full:no-abc",
+    "stage:plan",
+    "stage:semantic",
+    "stage:encode",
+    "encode",
+    "stage:sync",
+    "vocal-transcript",
+    `save-transcript-raw:${queuedSong.id}:/tmp/yuekbox-test/transcript`,
+    "complete",
+    "cleanup",
+  ])
+  expect(harness.artifacts.completedCalibration).toBeNull()
+  expect(harness.artifacts.completedAnalysis).not.toBeNull()
 })
 
 test("a failed transcript leaves the Song complete with no analysis", async () => {

@@ -7,7 +7,8 @@ This is v1 plus reference covers. Later score editing and agent edits stay out o
 ## Language
 
 **Song**:
-One generate request and its result. Has lyrics, style, title, status, and optional MP3 audio.
+One generate request and its result. Has lyrics, style, title, status, an
+instrumental flag, and optional MP3 audio.
 _Avoid_: Track, generation, job, run, render (in the UI and on the wire)
 
 **Request**:
@@ -46,6 +47,13 @@ _Avoid_: Sample, source track, input audio
 **Cover**:
 A Song generated from a Reference instead of the symbolic planner.
 _Avoid_: Remix, transfer
+
+**Instrumental**:
+A Song with no sung words. Without a Reference it plans a score from the style
+alone; with one it transfers the transcribed score. Every sounding Vocal note
+moves to the Ins voice, chords stay or drop by kind, and the lyrics are the
+score's section tags only.
+_Avoid_: Karaoke, backing track, no-vocal mode
 
 Status values: `queued`, `running`, `complete`, `failed`.
 
@@ -228,12 +236,13 @@ Schemas (Zod 4, `z.strictObject`, `z.infer` for types):
 **POST /v1/songs** body:
 
 ```text
-lyrics   string, trim, min 1, max 20000
-style    string, trim, min 1, max 2000
-seed     optional integer, 0 <= seed < 2^31
+lyrics        string, trim, max 20000; required for a vocal Song, rejected when non-empty with instrumental true
+style         string, trim, min 1, max 2000
+instrumental  optional boolean, default false
+seed          optional integer, 0 <= seed < 2^31
 ```
 
-Server fills `cot: "full"` and a random `seed` when omitted. Those fields are not in the create body.
+Server fills `cot: "full"` and a random `seed` when omitted. Those fields are not in the create body. An instrumental Song stores `lyrics: ""` and titles itself from the style: first eight whitespace-separated words, commas ignored, 120 chars, `instrumental` fallback.
 
 **Song** (JSON):
 
@@ -245,6 +254,7 @@ lyrics            string
 style             string
 title             string
 seed              number
+instrumental      boolean
 durationSeconds   number | omitted until complete
 truncated         { abc: boolean, semantic: boolean } | omitted until complete
 scoreAbc          string | omitted unless complete; only sent by GET one Song
@@ -500,7 +510,7 @@ CreateTempDir
 RemoveTempDir
 ```
 
-`RunYue2Generate` takes `{ lyrics, style, seed, cfgScale, cot, abc, outputDir, onStage, onProgress }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter runs our `generate.py` at `<home>/scripts/generate.py` (source: `packages/server/tools/yue2/generate.py`) with the shared environment's Python. It does not import Python.
+`RunYue2Generate` takes `{ lyrics, style, seed, cfgScale, cot, abc, instrumental, outputDir, onStage, onProgress }` and returns `{ flacPath, scoreAbc, durationSeconds, truncated, stages }` or a Result error. The adapter runs our `generate.py` at `<home>/scripts/generate.py` (source: `packages/server/tools/yue2/generate.py`) with the shared environment's Python. It does not import Python.
 
 `RunLyricAlign` takes `{ audioPath, outputDir }` and returns the calibration, or a Result error. The adapter runs the lyric-align script at `<home>/scripts/align.py` (source: `packages/server/tools/lyric-align/align.py`; Demucs vocal stem, Whisper word timings, silence gate, display-line grouping) and reads back the `calibration.json` it writes under the output dir.
 
@@ -518,6 +528,8 @@ Every Python entrypoint is ours, under `packages/server/tools/`:
 tools/
 ├── yue2/
 │   ├── generate.py           # generation, calls the pinned runtime library
+│   ├── instrumentalize.py    # moves the vocal melody to Ins (vendored)
+│   ├── compile_score.py      # serializes the converted events (vendored)
 │   └── README.md
 ├── sheetsage2/
 │   ├── transcribe.py         # reference and analysis transcription (vendored)
@@ -535,8 +547,9 @@ entrypoint it invokes; no adapter path points into a YuE checkout.
 
 The installer port is `InstallScripts`; the adapter
 (`provisioning.scripts.adapters.ts`) copies the tools flat into
-`<home>/scripts/`: `generate.py`, `transcribe.py`, `abc_tools.py`, `common.py`,
-and `align.py` sit side by side so the sibling imports resolve. It is
+`<home>/scripts/`: `generate.py`, `instrumentalize.py`, `compile_score.py`,
+`transcribe.py`, `abc_tools.py`, `common.py`, and `align.py` sit side by side so
+the sibling imports resolve. It is
 idempotent, overwrites only its own files, and never deletes anything else.
 Provisioning calls it after it builds the environment, so a run that fails
 earlier never leaves entrypoints pointing at an unfinished home.
@@ -583,6 +596,7 @@ style              text not null
 title              text not null
 seed               integer not null
 cot                text not null default 'full'
+instrumental       integer not null default 0
 duration_seconds   real null
 truncated_abc      integer null
 truncated_semantic integer null
@@ -592,7 +606,7 @@ updated_at         text not null
 completed_at       text null
 ```
 
-`ai_config` is unchanged. There is no `song_audio` table, no `references` table, and no `score_abc` column. Visualizations store no row at all: the file is the durable state, and pending/failed live in process memory. Schema history is a fresh `0000_init` plus `0001_song_title`, which recreates `songs` to add the column and backfills rows that predate it as `untitled`. There is no other legacy read path.
+`ai_config` is unchanged. There is no `song_audio` table, no `references` table, and no `score_abc` column. Visualizations store no row at all: the file is the durable state, and pending/failed live in process memory. Schema history is a fresh `0000_init` plus `0001_song_title`, which recreates `songs` to add the column and backfills rows that predate it as `untitled`, then `0002_cfg_scale` and `0003_instrumental`. There is no other legacy read path.
 
 ### Disk layout
 
@@ -609,7 +623,7 @@ completed_at       text null
 <MEDIA_DIR>/temp/<uploaded>_<ulid>.<ext>
 ```
 
-- `TITLE` is the Song's stored title: the first sung lyric line with section tags, markdown decoration, and label-only lines skipped, 120 chars max, `untitled` when nothing is left. The folder uses its slug: lowercased, hyphenated, 60 chars max.
+- `TITLE` is the Song's stored title: the first sung lyric line with section tags, markdown decoration, and label-only lines skipped, 120 chars max, `untitled` when nothing is left. An instrumental Song titles itself from the style's first eight whitespace-separated words, commas ignored, 120 chars max, `instrumental` when nothing is left. The folder uses its slug: lowercased, hyphenated, 60 chars max.
 - A Song folder is found by scanning for `*_<song_id>`. No path is stored anywhere.
 - The folder is created at create time, so even a freeform Song owns one from birth.
 - Uploads land in `temp/`. Creating a Song with a `referenceId` moves the file into the Song's `references/` directory. Nothing is renamed after that.
@@ -637,7 +651,7 @@ Each Song may own one AI-authored canvas visualization.
 
 ### Generate path
 
-1. `POST /v1/songs` validates body, derives the title from the first sung lyric line, inserts `queued`, creates the Song folder, returns `201` and the Song JSON.
+1. `POST /v1/songs` validates body, derives the title from the first sung lyric line (from the style for an instrumental), inserts `queued`, creates the Song folder, returns `201` and the Song JSON.
 2. Route calls `wake()`.
 3. Worker claims the oldest queued Song, sets `running` and `stage = plan`.
 4. Adapter writes a temp request JSON and runs:
@@ -659,9 +673,17 @@ pinned runtime as a library. `<models.yue2>` and `<models.yue2Vae>` are the
 resolved config values (CLI flag > `config.yaml` > `<home>/models/<name>`),
 never a checkout path.
 
+An instrumental Song without a Reference stays inside `generate.py` for two
+passes: plan a score at default guidance with section-skeleton lyrics, then
+move every sounding Vocal note to Ins with the vendored converter (chords
+kept, lyrics are the score's section tags only), then render the converted
+score at the request's `cfgScale`. The plan stays under
+`<tmp>/out/<song id>/planning/`. A truncated or empty plan fails the Song. A
+vocal Song's request is unchanged, byte for byte.
+
 5. Worker updates `stage` when stderr progress names a known stage. If parsing fails, leave the stage until done. Status stays `running`.
-6. If the Song has a Reference, transcribe it before generation. Run `<home>/venvs/python/bin/python <home>/scripts/transcribe.py <MEDIA_DIR>/<TITLE>_<SONG_ID>/references/<name>_<ulid>.<ext> --output <tmp>/transcribe --task melody-full --device cuda --model <models.sheetsage2> --base-model <models.sheetsage2Base> [--offline]`, read `score.abc`, write it to `reference_score.abc` in the Song folder, then generate with `cot = melody` and the ABC in the request JSON. A missing Reference file fails the Song before the script spawns; any other failure fails the Song.
-7. On success, read `audio.flac`. Encode MP3. Run the lyric aligner with `<home>/venvs/python/bin/python <home>/scripts/align.py --audio <FLAC> --out <tmp>/lyric-align --calibration-out <tmp>/lyric-align/calibration.json --whisper-model <models.whisper> --device <LYRIC_ALIGN_DEVICE>`, read the `calibration.json` it writes, and pass the cues to `CompleteSong`, which writes `calibration.json` in the Song folder. The overlay shows the transcript as sung.
+6. If the Song has a Reference, transcribe it before generation. Run `<home>/venvs/python/bin/python <home>/scripts/transcribe.py <MEDIA_DIR>/<TITLE>_<SONG_ID>/references/<name>_<ulid>.<ext> --output <tmp>/transcribe --task melody-full --device cuda --model <models.sheetsage2> --base-model <models.sheetsage2Base> [--offline]`, read `score.abc`, write it to `reference_score.abc` in the Song folder, then generate with `cot = melody` and the ABC in the request JSON. An instrumental cover transfers the transcribed score instead — chords dropped, the melody moved to Ins — and renders `cot = melody` from it. A missing Reference file fails the Song before the script spawns; any other failure fails the Song.
+7. On success, read `audio.flac`. Encode MP3. Run the lyric aligner with `<home>/venvs/python/bin/python <home>/scripts/align.py --audio <FLAC> --out <tmp>/lyric-align --calibration-out <tmp>/lyric-align/calibration.json --whisper-model <models.whisper> --device <LYRIC_ALIGN_DEVICE>`, read the `calibration.json` it writes, and pass the cues to `CompleteSong`, which writes `calibration.json` in the Song folder. The overlay shows the transcript as sung. An instrumental Song skips the aligner: `calibration` stays null.
 8. Still inside `sync`, run the transcript pass on the rendered FLAC with `<home>/venvs/python/bin/python <home>/scripts/transcribe.py <FLAC> --output <tmp>/transcript --task melody-vocal --device <SHEETSAGE2_DEVICE> --model <models.sheetsage2> --base-model <models.sheetsage2Base> [--offline]`. Parse `melody_vocal.lab`, `beat.lab`, and `structure.lab` into notes, beats, and sections, copy the raw `<tmp>/transcript` tree into `analysis/sheetsage2/`, and pass the derived analysis to `CompleteSong`, which writes `analysis.json`. A failed run, a missing SheetSage2, or a failed copy logs and leaves the Song without an analysis; the Song still completes. `CompleteSong` writes `generated_<SONG_ID>.mp3` and `score.abc` into the Song folder and marks the row `complete` with `durationSeconds` and the truncation flags. Delete the temp dir (FLAC does not stay on disk).
 9. On failure, mark `failed`, store a short `errorDetail`, delete the temp dir.
 9. Claim the next queued Song.
@@ -948,12 +970,15 @@ Cover at least:
 - Create writes the Song folder, moves an upload into `references/`, and rolls back the row and folder when the move fails.
 - Create rejects a missing upload with `reference_unavailable` on `/referenceId`.
 - Create rejects empty lyrics and empty style.
+- Create stores an instrumental Song as `lyrics: ""` with a style-derived title, and the create body rejects non-empty lyrics under the instrumental flag.
 - Get missing id is not-found; Get fills `scoreAbc`, the calibration, and the reference summary from disk.
 - `analysis.json` round-trips through the songs slice; malformed JSON and a missing file both read null; the raw tree copies under `analysis/sheetsage2/`.
 - List does not include media or per-item disk reads.
 - Complete path with stub `RunYue2Generate` + stub `EncodeFlacToMp3` writes `generated_<ID>.mp3`, `score.abc`, `calibration.json` when cues arrive, and `analysis.json` when the transcript returns slices, then marks `complete`.
 - A failed row update after completion removes the files it just wrote.
 - A failed lyric alignment logs, completes the Song, and writes no calibration.
+- An instrumental Song skips the lyric aligner entirely, still runs the vocal transcript, and completes with a null calibration; `RunYue2Generate` receives the flag and the request JSON carries `instrumental: true`, omitted for vocal Songs.
+- The vendored converter moves every sounding Vocal note to Ins, empties Vocal, and keeps the section tags (`generation.yue2.local-code.test.ts` runs it through `python3`).
 - A failed transcript logs, completes the Song, and writes no analysis; a failed raw copy keeps the parsed analysis.
 - Transcript parsing drops malformed lab rows, clamps to the duration, and sorts by time.
 - Encode failure marks `failed` and writes nothing.
@@ -1149,7 +1174,9 @@ Local form fields: `useState` in `SongForm`. No Jotai unless a second distant tr
 One page.
 
 - Style and lyrics fields (textareas) side by side. Placeholders name genre, voice, instruments,
-  tempo, and `[Verse]` / `[Chorus]` lines.
+  tempo, and `[Verse]` / `[Chorus]` lines. The lyrics header row carries the Instrumental switch;
+  while it is on, the textarea becomes a panel reading Instrumental and the lyrics Enhance button
+  hides. Loading a Song restores the switch from `song.instrumental`.
 - Generate button. Submits `POST /v1/songs`. Stays enabled so the user can queue another Song. Show queue depth from `/v1/status`.
 - Active Song card: status, stage label, error text.
 - Generating reel: while a Song is queued or running, the form hides and a full-screen centered
@@ -1198,7 +1225,7 @@ sync         Syncing lyrics
 
 If `truncated.abc` or `truncated.semantic` is true, show a warning. The file may still play.
 
-Empty lyrics or style: disable Generate. Do not POST.
+Empty style, or empty lyrics with the Instrumental switch off: disable Generate. Do not POST.
 
 ### Design
 
@@ -1218,7 +1245,10 @@ v1 always sends:
 }
 ```
 
-That is `examples/song.json` with the user's words. No `abc` field.
+That is `examples/song.json` with the user's words. A reference cover adds `abc`
+(the transcribed score) and sets `cot` to `melody`. An instrumental Song adds
+`"instrumental": true` and sends `lyrics` as `""`; an instrumental cover adds
+`abc` too. Vocal requests stay byte-identical.
 
 ## AI (optional, OpenAI-compatible)
 

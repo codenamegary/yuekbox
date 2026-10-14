@@ -21,10 +21,20 @@ it from the pinned git commit into the shared environment at `<home>/venvs/pytho
 ```
 
 `request.json` carries the `SongRequest` fields yuekbox sets: `id`, `style`,
-`lyrics`, `cot`, `seed`, `cfg_scale`, and optional `abc`. Artifacts land in
-`<output>/<id>/`: `audio.flac`, `result.json`, and `score.abc`. The server reads
-`audio.flac`, `score.abc`, and `result.json` (`audio_seconds` and the
-truncation flags).
+`lyrics`, `cot`, `seed`, `cfg_scale`, optional `abc`, and optional
+`instrumental`. Artifacts land in `<output>/<id>/`: `audio.flac`, `result.json`,
+and `score.abc`. The server reads `audio.flac`, `score.abc`, and `result.json`
+(`audio_seconds` and the truncation flags).
+
+An instrumental request runs two passes. Without `abc` it first plans a score at
+default guidance with section-skeleton lyrics, then moves every sounding Vocal
+note to Ins with the vendored `instrumentalize.py` / `compile_score.py` (this
+directory; installed flat beside `abc_tools.py` and `common.py`) — chords kept,
+lyrics are the score's section tags only — and renders the converted score at
+the request's `cfg_scale`, keeping the plan under `<output>/<id>/planning/`.
+With `abc` it skips planning, transfers the provided score with chords dropped,
+and renders `cot = melody` from it. A truncated or empty plan fails the Song.
+Vocal requests are unchanged, byte for byte.
 
 ## Why not `python -m yue2 generate`
 

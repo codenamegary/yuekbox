@@ -24,6 +24,7 @@ const newSong = (songId: string, createdAt: string): NewSong => ({
   seed: 1,
   cfgScale: 1,
   cot: "full",
+  instrumental: false,
   createdAt,
   updatedAt: createdAt,
 })
@@ -40,6 +41,7 @@ test("the fresh schema keeps songs and ai_config only, without media columns", (
 
     const columns = handle.sqlite.query<{ name: string }, []>("PRAGMA table_info(songs)").all()
     expect(columns.map((column) => column.name)).toContain("title")
+    expect(columns.map((column) => column.name)).toContain("instrumental")
     expect(columns.map((column) => column.name)).not.toContain("score_abc")
   } finally {
     handle.close()
@@ -62,6 +64,30 @@ test("insert and find round-trip the lifecycle fields", async () => {
     expect(found?.title).toBe("hello")
     expect(found?.style).toBe("pop")
     expect(found?.cfgScale).toBe(1)
+    expect(found?.instrumental).toBe(false)
+  } finally {
+    handle.close()
+  }
+})
+
+test("insert and find round-trip the instrumental flag", async () => {
+  const handle = openDatabase({ path: ":memory:" })
+  try {
+    const insertSong = makeInsertSong(handle.db)
+    const findSongById = makeFindSongById(handle.db)
+
+    const inserted = await insertSong({
+      ...newSong(id("R9"), "2026-09-17T04:00:00.000Z"),
+      lyrics: "",
+      title: "instrumental",
+      instrumental: true,
+    })
+    expect(inserted.instrumental).toBe(true)
+    expect(inserted.lyrics).toBe("")
+
+    const found = await findSongById(id("R9"))
+    expect(found?.instrumental).toBe(true)
+    expect(found?.lyrics).toBe("")
   } finally {
     handle.close()
   }
